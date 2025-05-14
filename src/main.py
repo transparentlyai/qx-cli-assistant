@@ -1,10 +1,9 @@
 import os
 import asyncio
 from dotenv import load_dotenv
-# Removed: from pydantic_ai import Agent
 from rich.console import Console
 from src.cli.qprompt import get_user_input
-from src.core.llm import initialize_llm_agent, query_llm # Added import
+from src.core.llm import initialize_llm_agent, query_llm
 
 # Load environment variables from .env file
 load_dotenv()
