@@ -3,7 +3,8 @@ import asyncio
 from dotenv import load_dotenv
 from pydantic_ai import Agent
 from rich.console import Console
-from rich.prompt import Prompt
+# Removed: from rich.prompt import Prompt
+from src.cli.qprompt import get_user_input # Added import
 
 # Load environment variables from .env file
 load_dotenv()
@@ -48,7 +49,8 @@ async def main():
 
     while True:
         try:
-            user_input = Prompt.ask("[bold cyan]Q>[/bold cyan]", console=console)
+            # Modified to use the new function
+            user_input = await get_user_input(console)
 
             if user_input.lower() in ["exit", "quit"]:
                 console.print("[yellow]Exiting QX. Goodbye![/yellow]")
@@ -67,6 +69,9 @@ async def main():
 
         except KeyboardInterrupt:
             console.print("\n[yellow]Interrupted. Exiting QX. Goodbye![/yellow]")
+            break
+        except EOFError: # Added to handle Ctrl+D gracefully during prompt
+            console.print("\n[yellow]Exiting QX (EOF). Goodbye![/yellow]")
             break
         except Exception as e:
             console.print(f"[bold red]An unexpected error occurred: {e}[/bold red]")
