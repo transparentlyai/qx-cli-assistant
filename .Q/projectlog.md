@@ -40,7 +40,7 @@
 
 ## Sprint 2: Prompt Refactoring & UI Update
 
-**Date:** $(date +'%Y-%m-%d')
+**Date:** 2024-07-16
 
 **Objective:** Refactor prompt logic into a separate module and update the prompt symbol.
 
@@ -53,7 +53,7 @@
 2.  **Prompt Module (`src/cli/qprompt.py`):**
     *   Created `src/cli/qprompt.py`.
     *   Defined an asynchronous function `get_user_input(console: Console)`:
-        *   Uses `rich.prompt.Prompt.ask_async()` for non-blocking input.
+        *   Initially used `rich.prompt.Prompt.ask_async()`.
         *   Sets the prompt to `"[bold cyan]Q⏵[/bold cyan] "`.
         *   Returns the user's input string.
 
@@ -62,11 +62,33 @@
     *   Replaced the direct `Prompt.ask()` call with `await get_user_input(console)`.
     *   Added `EOFError` handling in the main loop for graceful exit on Ctrl+D.
 
-**Next Steps:**
+**Next Steps (Sprint 2):**
 
 *   Test the application with the new prompt and refactored input logic.
 *   Proceed to further development stages.
 
 **Notes:**
 *   The date in Sprint 1 has been set to a fixed past date for consistency as the log was just created. Future entries will use the current date.
-*   The `Prompt.ask_async` method from `rich.prompt` is used in `qprompt.py` as it's more suitable for an `asyncio` application than the synchronous `Prompt.ask`.
+*   The `Prompt.ask_async` method from `rich.prompt` was initially used in `qprompt.py`. This was later found to be incorrect.
+
+---
+
+## Sprint 3: Bug Fix - Async Prompt Handling
+
+**Date:** $(date +'%Y-%m-%d')
+
+**Objective:** Fix `AttributeError` related to `Prompt.ask_async`.
+
+**Tasks Completed:**
+
+1.  **Prompt Module Update (`src/cli/qprompt.py`):**
+    *   Imported `asyncio`.
+    *   Modified `get_user_input` function to use `await asyncio.to_thread(Prompt.ask, ...)` instead of `Prompt.ask_async`. This correctly runs the synchronous `Prompt.ask` in a separate thread to avoid blocking the asyncio event loop.
+
+**Next Steps:**
+
+*   Test the application to confirm the fix for `AttributeError`.
+*   Continue with planned development.
+
+**Notes:**
+*   The `rich.prompt.Prompt` class does not have an `ask_async` method. The synchronous `ask` method must be used with `asyncio.to_thread` in an async context.
