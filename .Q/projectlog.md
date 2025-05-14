@@ -2,7 +2,7 @@
 
 ## Sprint 1: Initial Setup & Stage 1 Implementation
 
-**Date:** $(date +'%Y-%m-%d')
+**Date:** 2024-07-16
 
 **Objective:** Complete Stage 1: Basic CLI loop with PydanticAI and Vertex AI.
 
@@ -30,13 +30,43 @@
     *   Confirmed `pyproject.toml` already included `pydantic-ai[vertexai]>=0.2.3` and `python-dotenv>=1.1.0`. No changes were needed.
     *   Ran `uv sync` to ensure dependencies are correctly installed and `uv.lock` is up-to-date.
 
-**Next Steps:**
+**Next Steps (Initial):**
 
 *   User to update `.env` with actual `QX_VERTEX_PROJECT_ID` and `QX_VERTEX_LOCATION`.
 *   User to set `GOOGLE_APPLICATION_CREDENTIALS` if not already configured in their environment.
 *   Test the application by running `python src/main.py`.
-*   Proceed to Stage 2 as per `.Q/project-stages.md`.
+
+---
+
+## Sprint 2: Prompt Refactoring & UI Update
+
+**Date:** $(date +'%Y-%m-%d')
+
+**Objective:** Refactor prompt logic into a separate module and update the prompt symbol.
+
+**Tasks Completed:**
+
+1.  **Directory Structure:**
+    *   Created `src/cli/` directory.
+    *   Created `src/cli/__init__.py` to make `src/cli` a Python package.
+
+2.  **Prompt Module (`src/cli/qprompt.py`):**
+    *   Created `src/cli/qprompt.py`.
+    *   Defined an asynchronous function `get_user_input(console: Console)`:
+        *   Uses `rich.prompt.Prompt.ask_async()` for non-blocking input.
+        *   Sets the prompt to `"[bold cyan]Q⏵[/bold cyan] "`.
+        *   Returns the user's input string.
+
+3.  **Main Application Update (`src/main.py`):**
+    *   Modified `src/main.py` to import `get_user_input` from `src.cli.qprompt`.
+    *   Replaced the direct `Prompt.ask()` call with `await get_user_input(console)`.
+    *   Added `EOFError` handling in the main loop for graceful exit on Ctrl+D.
+
+**Next Steps:**
+
+*   Test the application with the new prompt and refactored input logic.
+*   Proceed to further development stages.
 
 **Notes:**
-
-*   The PydanticAI agent initialization relies on the Google Cloud client libraries to automatically pick up project ID and location if `GOOGLE_APPLICATION_CREDENTIALS` is correctly set. The `QX_VERTEX_PROJECT_ID` and `QX_VERTEX_LOCATION` environment variables are loaded in `main.py` primarily for informational display and explicit error checking before agent initialization.
+*   The date in Sprint 1 has been set to a fixed past date for consistency as the log was just created. Future entries will use the current date.
+*   The `Prompt.ask_async` method from `rich.prompt` is used in `qprompt.py` as it's more suitable for an `asyncio` application than the synchronous `Prompt.ask`.
