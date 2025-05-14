@@ -97,7 +97,7 @@
 
 ## Sprint 4: Switch to prompt_toolkit for Input
 
-**Date:** $(date +'%Y-%m-%d')
+**Date:** 2024-07-16
 
 **Objective:** Replace `rich.prompt` with `prompt_toolkit.shortcuts.prompt` for user input.
 
@@ -116,8 +116,44 @@
         *   Continues to use `await asyncio.to_thread` for the synchronous `prompt_toolkit.shortcuts.prompt`.
         *   The `console: Console` argument is kept in the function signature for potential future use, though `prompt_toolkit.shortcuts.prompt` doesn't use it directly for basic prompting.
 
-**Next Steps:**
+**Next Steps (Sprint 4):**
 
 *   Test the application with `prompt_toolkit` for input.
 *   Review the `pydantic-ai[vertexai]` dependency warning.
+*   Continue with planned development.
+
+---
+
+## Sprint 5: Refactor LLM Logic to Core Module
+
+**Date:** $(date +'%Y-%m-%d')
+
+**Objective:** Modularize LLM (PydanticAI) interaction into `src/core/llm.py`.
+
+**Tasks Completed:**
+
+1.  **Directory Structure:**
+    *   Created `src/core/` directory.
+    *   Created `src/core/__init__.py` to make `src/core` a Python package.
+
+2.  **LLM Module (`src/core/llm.py`):**
+    *   Created `src/core/llm.py`.
+    *   Defined `initialize_llm_agent()`:
+        *   Retrieves `QX_MODEL_NAME` from `os.getenv`.
+        *   Initializes and returns a PydanticAI `Agent` instance.
+        *   Includes basic error handling and console logging for initialization status.
+    *   Defined `async def query_llm(agent: Agent, user_input: str)`:
+        *   Takes an `Agent` instance and user input.
+        *   Calls `await agent.run(user_input)`.
+        *   Returns the `result.output` or an error message string.
+
+3.  **Main Application Update (`src/main.py`):**
+    *   Modified `src/main.py` to import `initialize_llm_agent` and `query_llm` from `src.core.llm`.
+    *   Agent initialization is now done by calling `initialize_llm_agent()`.
+    *   LLM queries are now done by calling `await query_llm(agent, user_input)`.
+    *   Adjusted main loop to handle the direct output or error string from `query_llm`.
+
+**Next Steps:**
+
+*   Test the application with the refactored LLM logic.
 *   Continue with planned development.
