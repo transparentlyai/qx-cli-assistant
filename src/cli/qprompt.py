@@ -1,6 +1,6 @@
 import asyncio
 from prompt_toolkit.shortcuts import prompt
-from prompt_toolkit.formatted_text import HTML # For styled prompt
+from prompt_toolkit.formatted_text import HTML
 from rich.console import Console # Kept in signature for potential future use in this module
 
 async def get_user_input(console: Console) -> str:
@@ -8,7 +8,9 @@ async def get_user_input(console: Console) -> str:
     Asynchronously gets user input from the QX prompt using prompt_toolkit.
 
     Args:
-        console: The Rich Console object (currently unused by prompt_toolkit.prompt).
+        console: The Rich Console object (currently unused by prompt_toolkit.prompt,
+                 but kept for potential future use in this module e.g. for printing
+                 messages directly from here).
 
     Returns:
         The string entered by the user.

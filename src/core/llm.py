@@ -1,8 +1,8 @@
 import os
 from pydantic_ai import Agent
-from rich.console import Console # For potential logging within this module
+from rich.console import Console
 
-console = Console() # Local console for this module if needed
+console = Console()
 
 def initialize_llm_agent():
     """
@@ -14,8 +14,8 @@ def initialize_llm_agent():
         An initialized Agent instance or None if initialization fails.
     """
     model_name = os.getenv("QX_MODEL_NAME")
-    vertex_project_id = os.getenv("QX_VERTEX_PROJECT_ID") # For logging/checking
-    vertex_location = os.getenv("QX_VERTEX_LOCATION") # For logging/checking
+    vertex_project_id = os.getenv("QX_VERTEX_PROJECT_ID")
+    vertex_location = os.getenv("QX_VERTEX_LOCATION")
 
     if not model_name:
         console.print("[bold red]LLM Error: QX_MODEL_NAME environment variable not set.[/bold red]")
@@ -29,7 +29,6 @@ def initialize_llm_agent():
 
     try:
         agent = Agent(model_name)
-        # console.print(f"[green]LLM Agent initialized successfully with model: {model_name}[/green]")
         return agent
     except Exception as e:
         console.print(f"[bold red]LLM Error initializing PydanticAI Agent: {e}[/bold red]")

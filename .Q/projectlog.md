@@ -126,7 +126,7 @@
 
 ## Sprint 5: Refactor LLM Logic to Core Module
 
-**Date:** $(date +'%Y-%m-%d')
+**Date:** 2024-07-16
 
 **Objective:** Modularize LLM (PydanticAI) interaction into `src/core/llm.py`.
 
@@ -153,7 +153,35 @@
     *   LLM queries are now done by calling `await query_llm(agent, user_input)`.
     *   Adjusted main loop to handle the direct output or error string from `query_llm`.
 
-**Next Steps:**
+**Next Steps (Sprint 5):**
 
 *   Test the application with the refactored LLM logic.
+*   Continue with planned development.
+
+---
+
+## Sprint 6: Code Cleanup - Remove Development Artifacts
+
+**Date:** $(date +'%Y-%m-%d')
+
+**Objective:** Remove unnecessary comments that were artifacts of previous development steps.
+
+**Tasks Completed:**
+
+1.  **`src/main.py` Cleanup:**
+    *   Removed comments like `# Removed: ...` and `# Added import` that were related to previous refactoring steps.
+
+2.  **`src/cli/qprompt.py` Cleanup:**
+    *   Removed a redundant comment `# For styled prompt` from an import line.
+    *   Retained comments explaining the translation from Rich markup to `prompt_toolkit` HTML and the use of `asyncio.to_thread`, as they provide useful context.
+    *   Clarified the docstring comment regarding the `console` argument.
+
+3.  **`src/core/llm.py` Cleanup:**
+    *   Removed comments like `# For potential logging...`, `# Local console...`, and `# For logging/checking`.
+    *   Removed a commented-out `console.print` line.
+    *   Retained a comment explaining why environment variables are checked in this module despite being checked in `main.py`.
+
+**Next Steps:**
+
+*   Review code for any further cleanup opportunities.
 *   Continue with planned development.

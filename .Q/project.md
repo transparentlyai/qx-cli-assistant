@@ -1,5 +1,6 @@
 # Prject QX Directives
 
+-project shhould be modulear and extensible. no module should be more than 650 lines of code. if a module is more than 650 lines of code, break it down into smaller modules.
 - QX is a coding cli agent built by Transparently.AI
 - QX is writen in python using the PydaticAI framework as it core
 - prioritize using packages over writing custom code 
