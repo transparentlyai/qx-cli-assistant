@@ -75,20 +75,49 @@
 
 ## Sprint 3: Bug Fix - Async Prompt Handling
 
-**Date:** $(date +'%Y-%m-%d')
+**Date:** 2024-07-16
 
-**Objective:** Fix `AttributeError` related to `Prompt.ask_async`.
+**Objective:** Fix `AttributeError` related to `rich.prompt.Prompt.ask_async`.
 
 **Tasks Completed:**
 
 1.  **Prompt Module Update (`src/cli/qprompt.py`):**
     *   Imported `asyncio`.
-    *   Modified `get_user_input` function to use `await asyncio.to_thread(Prompt.ask, ...)` instead of `Prompt.ask_async`. This correctly runs the synchronous `Prompt.ask` in a separate thread to avoid blocking the asyncio event loop.
+    *   Modified `get_user_input` function to use `await asyncio.to_thread(rich.prompt.Prompt.ask, ...)` instead of `Prompt.ask_async`. This correctly runs the synchronous `Prompt.ask` in a separate thread to avoid blocking the asyncio event loop.
 
-**Next Steps:**
+**Next Steps (Sprint 3):**
 
 *   Test the application to confirm the fix for `AttributeError`.
 *   Continue with planned development.
 
 **Notes:**
 *   The `rich.prompt.Prompt` class does not have an `ask_async` method. The synchronous `ask` method must be used with `asyncio.to_thread` in an async context.
+
+---
+
+## Sprint 4: Switch to prompt_toolkit for Input
+
+**Date:** $(date +'%Y-%m-%d')
+
+**Objective:** Replace `rich.prompt` with `prompt_toolkit.shortcuts.prompt` for user input.
+
+**Tasks Completed:**
+
+1.  **Dependency Management (`pyproject.toml` & `uv`):**
+    *   Added `prompt-toolkit>=3.0.0` to `pyproject.toml`.
+    *   Ran `uv sync` to install the new dependency and update `uv.lock`.
+    *   Noted a warning: `The package pydantic-ai==0.2.3 does not have an extra named vertexai`. This will be reviewed later if necessary.
+
+2.  **Prompt Module Update (`src/cli/qprompt.py`):**
+    *   Imported `prompt` from `prompt_toolkit.shortcuts` and `HTML` from `prompt_toolkit.formatted_text`.
+    *   Modified `get_user_input` function:
+        *   Replaced `rich.prompt.Prompt.ask` with `prompt_toolkit.shortcuts.prompt`.
+        *   The prompt string `"[bold cyan]Q⏵[/bold cyan] "` is now created using `HTML('<style fg="ansicyan" bold="true">Q⏵ </style>')` for `prompt_toolkit`.
+        *   Continues to use `await asyncio.to_thread` for the synchronous `prompt_toolkit.shortcuts.prompt`.
+        *   The `console: Console` argument is kept in the function signature for potential future use, though `prompt_toolkit.shortcuts.prompt` doesn't use it directly for basic prompting.
+
+**Next Steps:**
+
+*   Test the application with `prompt_toolkit` for input.
+*   Review the `pydantic-ai[vertexai]` dependency warning.
+*   Continue with planned development.
