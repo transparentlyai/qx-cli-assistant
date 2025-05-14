@@ -755,12 +755,14 @@ name = "qx"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "prompt-toolkit" },
     { name = "pydantic-ai" },
     { name = "python-dotenv" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "prompt-toolkit", specifier = ">=3.0.0" },
     { name = "pydantic-ai", extras = ["vertexai"], specifier = ">=0.2.3" },
     { name = "python-dotenv", specifier = ">=1.1.0" },
 ]
