@@ -1,44 +1,60 @@
 # Project QX Log
 
-## Session 2024-07-19 (Ongoing)
+## Session 2024-07-20 (Ongoing)
+**Goal:** Implement fzf-based command history for the input prompt.
+
+**Activities:**
+
+1.  **Define History File Path:**
+    *   Modified `src/qx/core/paths.py`.
+    *   Added `Q_CONFIG_DIR = USER_HOME_DIR / ".config" / "q"`.
+    *   Added `Q_HISTORY_FILE = Q_CONFIG_DIR / "history"`.
+2.  **Ensure Config Directory Exists:**
+    *   Modified `src/qx/core/config_manager.py` (`load_runtime_configurations`).
+    *   Added logic to create `Q_CONFIG_DIR` using `os.makedirs(Q_CONFIG_DIR, exist_ok=True)` if it doesn't already exist. This ensures the directory is available for `FileHistory`.
+3.  **Implement `fzf` History Search in `qprompt.py`:**
+    *   Modified `src/qx/cli/qprompt.py` (`get_user_input` function).
+    *   Imported `Q_HISTORY_FILE`, `PromptSession`, `FileHistory`, `KeyBindings`, and necessary modules (`shutil`, `subprocess`, `os`, `Path`).
+    *   Ensured history file's parent directory is created.
+    *   Initialized `PromptSession` with `FileHistory(str(Q_HISTORY_FILE))` to handle standard history.
+    *   Created `KeyBindings` and added a handler for `Ctrl-R`.
+    *   The `Ctrl-R` handler:
+        *   Checks if `fzf` is installed using `shutil.which('fzf')`.
+        *   If available and history file exists and is not empty, it reads the history file content and pipes it to an `fzf` subprocess (`fzf --height 40% --reverse --tac`).
+        *   If a command is selected from `fzf`, it populates the current prompt buffer.
+        *   Prints a warning via the passed `console` if `fzf` is not found.
+    *   Used `session.prompt` (run in `asyncio.to_thread`) with the history and key bindings.
+
+**Next Steps:**
+
+*   Commit changes.
+*   Thoroughly test history persistence, `fzf` invocation (`Ctrl-R`), and behavior when `fzf` is not installed.
+
+---
+## Previous Sessions
+
+<details>
+<summary>Session 2024-07-19</summary>
 **Goal:** Implement selectable Rich CLI themes and fix related style errors.
 
 **Activities:**
 
-1.  **Add `DEFAULT_CLI_THEME` Constant:**
-    *   Added `DEFAULT_CLI_THEME = "dark"` to `src/qx/core/constants.py`.
-2.  **Implement Theme Loading in `main.py`:**
-    *   Modified `src/qx/main.py` to load `CLI_THEME` env var, select theme, and initialize `q_console` with it.
-    *   Passed themed `q_console` to `initialize_llm_agent` and `query_llm`.
-3.  **Adapt `llm.py` for Themed Console:**
-    *   Modified `src/qx/core/llm.py` to accept and use the passed-in themed console.
-4.  **Adapt `qprompt.py` for Themed Console:**
-    *   Modified `src/qx/cli/qprompt.py` to correctly type-hint the passed console.
-5.  **Adapt `approvals.py` for Themed Console:**
-    *   Modified `src/qx/core/approvals.py` to use the themed console and semantic styles.
-6.  **Commit Initial Theming Implementation:**
-    *   Committed changes with hash `f53ac68`.
-7.  **Identify and Diagnose `MissingStyle` Error:**
-    *   User ran `CLI_THEME=light qx` and encountered `rich.errors.MissingStyle: Failed to get style 'prompt.border'`.
-    *   Diagnosed that style keys like `prompt.border` were used in `approvals.py` but not defined in `CLI_THEMES` in `constants.py`.
-8.  **Add Missing Prompt Styles to Themes:**
-    *   Added `prompt.border`, `prompt.choices.key`, and `prompt.invalid` style definitions to both "dark" and "light" themes in `src/qx/core/constants.py`.
-9.  **Commit Missing Styles Fix:**
-    *   Committed changes with hash `3c82128`.
-10. **Identify and Fix Literal Style Tags in Approval Prompt:**
-    *   User observed that style tags like `[prompt.choices.key]` were appearing as literal text in the approval prompt.
-    *   Diagnosed that the `Text` object for the prompt was not being constructed in a way that Rich would parse the embedded markup within the choices string.
-11. **Refactor Approval Prompt Construction:**
-    *   Modified `_ask_confirmation` in `src/qx/core/approvals.py`.
-    *   The `full_prompt_text` (a `Text` object) is now built by appending styled segments for each part of the choice display (e.g., `display_text`, `[KEY]`, `/`), ensuring Rich correctly applies the `prompt.choices.key` style to the key letters.
+1.  **Add `DEFAULT_CLI_THEME` Constant.**
+2.  **Implement Theme Loading in `main.py`.**
+3.  **Adapt `llm.py` for Themed Console.**
+4.  **Adapt `qprompt.py` for Themed Console.**
+5.  **Adapt `approvals.py` for Themed Console.**
+6.  **Commit Initial Theming Implementation (hash `f53ac68`).**
+7.  **Identify and Diagnose `MissingStyle` Error for `prompt.border`.**
+8.  **Add Missing Prompt Styles to Themes in `constants.py`.**
+9.  **Commit Missing Styles Fix (hash `3c82128`).**
+10. **Identify and Fix Literal Style Tags in Approval Prompt.**
+11. **Refactor Approval Prompt Construction in `approvals.py`.**
+12. **Commit Approval Prompt Fix (hash `59291a6`).**
 
 **Next Steps:**
-
-*   Commit the fix for the approval prompt display.
-*   Thoroughly test theme switching and ensure all outputs, especially approval prompts, are styled correctly.
-
----
-## Previous Sessions
+*   Implement fzf history.
+</details>
 
 <details>
 <summary>Session 2024-07-16</summary>

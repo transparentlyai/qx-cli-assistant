@@ -5,25 +5,37 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from qx.core.constants import DEFAULT_TREE_IGNORE_PATTERNS
-from qx.core.paths import USER_HOME_DIR, _find_project_root # Updated import
+from qx.core.paths import USER_HOME_DIR, _find_project_root, Q_CONFIG_DIR # Import Q_CONFIG_DIR
 
 
 def load_runtime_configurations():
     """
     Loads various configurations into environment variables.
+    - Ensures ~/.config/q directory exists.
     - User-specific .env: ~/.config/q/q.conf
     - Project-specific .env: project_root/.env
     - User context: ~/.config/q/user.md -> QX_USER_CONTEXT
     - Project context: project_root/.Q/project.md -> QX_PROJECT_CONTEXT
     - Project files tree: project_root tree -> QX_PROJECT_FILES
     """
+    # 0. Ensure QX config directory exists
+    try:
+        os.makedirs(Q_CONFIG_DIR, exist_ok=True)
+    except OSError as e:
+        # This might happen if ~/.config is a file, or due to permissions.
+        # It's a critical setup step, so print a warning.
+        print(f"Warning: Could not create QX config directory {Q_CONFIG_DIR}: {e}")
+        # Proceeding, but history and user.md might fail.
+
     # 1. Load User-Specific Dotenv Configuration
-    user_conf_path = USER_HOME_DIR / ".config" / "q" / "q.conf"
+    # user_conf_path = USER_HOME_DIR / ".config" / "q" / "q.conf" # Replaced by Q_CONFIG_DIR
+    user_conf_path = Q_CONFIG_DIR / "q.conf"
     if user_conf_path.is_file():
         load_dotenv(dotenv_path=user_conf_path, override=True)
 
     # 2. Load User Context
-    user_context_path = USER_HOME_DIR / ".config" / "q" / "user.md"
+    # user_context_path = USER_HOME_DIR / ".config" / "q" / "user.md" # Replaced by Q_CONFIG_DIR
+    user_context_path = Q_CONFIG_DIR / "user.md"
     qx_user_context = ""
     if user_context_path.is_file():
         try:
@@ -133,12 +145,27 @@ if __name__ == "__main__":
     # Example usage for testing
     print(f"Current PWD: {Path.cwd()}")
     print(f"User Home: {USER_HOME_DIR}")
+    print(f"QX Config Dir (from paths.py): {Q_CONFIG_DIR}")
+
 
     # Create dummy files for testing if they don't exist
-    dummy_q_conf = USER_HOME_DIR / ".config" / "q" / "q.conf"
-    dummy_user_md = USER_HOME_DIR / ".config" / "q" / "user.md"
+    # dummy_q_conf = USER_HOME_DIR / ".config" / "q" / "q.conf" # Replaced by Q_CONFIG_DIR
+    # dummy_user_md = USER_HOME_DIR / ".config" / "q" / "user.md" # Replaced by Q_CONFIG_DIR
+    dummy_q_conf = Q_CONFIG_DIR / "q.conf"
+    dummy_user_md = Q_CONFIG_DIR / "user.md"
 
-    dummy_q_conf.parent.mkdir(parents=True, exist_ok=True)
+
+    # Q_CONFIG_DIR is now created by load_runtime_configurations if it doesn't exist
+    # but for the test setup, we might want to ensure it before calling load_runtime_configurations
+    # if we are writing files to it.
+    # However, load_runtime_configurations itself handles its creation.
+    # For this test, let's call it first, then check.
+    
+    print(f"Attempting to load runtime configurations (will create {Q_CONFIG_DIR} if needed)...")
+    load_runtime_configurations() # This will create Q_CONFIG_DIR
+    print(f"Ensured QX Config directory exists: {Q_CONFIG_DIR.exists()}")
+
+
     if not dummy_q_conf.exists():
         dummy_q_conf.write_text("TEST_Q_CONF_VAR=hello_from_q_conf\n")
         print(f"Created dummy {dummy_q_conf}")
@@ -148,9 +175,6 @@ if __name__ == "__main__":
         print(f"Created dummy {dummy_user_md}")
 
     # Simulate a project .env for testing
-    # In a real scenario, this would be in the project root.
-    # For this test, we'll create one in the current dir if it's a "project"
-    # or skip if we can't determine a project root easily for the test script.
     current_dir_as_project_root = _find_project_root(str(Path.cwd()))
     if current_dir_as_project_root:
         dummy_project_env = current_dir_as_project_root / ".env"
@@ -160,8 +184,14 @@ if __name__ == "__main__":
                 "QX_MODEL_NAME=project_model_override\n" # Example of overriding
             )
             print(f"Created dummy {dummy_project_env} for testing")
-
-    load_runtime_configurations()
+    
+    # Reload configurations to pick up any dummy files created *after* the first call
+    # if they were created for the test.
+    # In normal operation, load_runtime_configurations is called once.
+    # For this test script, if we create files after the first load, we might want to see their effect.
+    # However, the primary purpose here is to test that Q_CONFIG_DIR is created.
+    # The subsequent os.getenv calls will reflect what was loaded by the *first* call to
+    # load_runtime_configurations in this test script.
 
     print(f"TEST_Q_CONF_VAR: {os.getenv('TEST_Q_CONF_VAR')}")
     print(f"TEST_PROJECT_ENV_VAR: {os.getenv('TEST_PROJECT_ENV_VAR')}")
