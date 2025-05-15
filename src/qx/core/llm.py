@@ -6,8 +6,8 @@ from pydantic_ai.agent import AgentRunResult
 from rich.console import Console
 
 # Import the tools
-from ..tools.read_file import read_file
-from ..tools.write_file import write_file
+from qx.tools.read_file import read_file
+from qx.tools.write_file import write_file
 
 console = Console()
 

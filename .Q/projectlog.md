@@ -444,3 +444,37 @@ By moving `USER_HOME_DIR` and `_find_project_root` into `qx.core.paths.py`, a ba
 
 *   Continue with planned features or testing.
 *   Commit changes.
+---
+
+## Sprint 13: Standardize All Internal Imports to Absolute (Done)
+
+**Date:** 2024-07-19
+
+**Objective:** Ensure all internal imports within the `qx` package use absolute paths (e.g., `from qx.core import ...`) rather than relative paths (e.g., `from ..core import ...` or `from .module import ...`).
+
+**Tasks Completed:**
+
+1.  **Reviewed all Python files in `src/qx/`:**
+    *   `src/qx/core/config_manager.py`: Already using absolute imports. No changes.
+    *   `src/qx/core/constants.py`: No internal qx imports. No changes.
+    *   `src/qx/core/__init__.py`: No imports. No changes.
+    *   `src/qx/core/llm.py`:
+        *   Changed `from ..tools.read_file import read_file` to `from qx.tools.read_file import read_file`.
+        *   Changed `from ..tools.write_file import write_file` to `from qx.tools.write_file import write_file`.
+    *   `src/qx/core/paths.py`: No internal qx imports. No changes.
+    *   `src/qx/tools/read_file.py`: Already using absolute imports. No changes.
+    *   `src/qx/tools/write_file.py`: Already using absolute imports. No changes.
+    *   `src/qx/tools/__init__.py`: No imports. No changes.
+    *   `src/qx/tools/file_operations_base.py`: Already using absolute imports. No changes.
+    *   `src/qx/__init__.py`: No imports. No changes.
+    *   `src/qx/cli/qprompt.py`: No internal qx imports. No changes.
+    *   `src/qx/cli/__init__.py`: No imports. No changes.
+    *   `src/qx/main.py`: Already using absolute imports. No changes.
+
+**Rationale:**
+Using absolute imports throughout the package (`from qx.module...`) enhances clarity, reduces ambiguity, and is the recommended practice for Python package development. It makes the codebase easier to understand and maintain, especially as the project grows. This also aligns with fixes made in Sprint 11 to ensure the application runs correctly when installed as a package.
+
+**Next Steps:**
+
+*   Commit changes.
+*   Continue with other development tasks.
