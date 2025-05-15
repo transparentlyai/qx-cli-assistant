@@ -8,6 +8,7 @@ dependencies = [
     "pydantic-ai>=0.2.4",
     "python-dotenv>=1.1.0",
     "prompt-toolkit>=3.0.0",
+    "pyfzf>=0.2.3", # Added pyfzf
 ]
 
 [build-system]
