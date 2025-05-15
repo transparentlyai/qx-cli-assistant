@@ -245,3 +245,31 @@
 *   Re-install the package (e.g., `uv pip install -e .`).
 *   Test the `qx` command again to confirm the fix.
 *   Commit the changes.
+
+---
+
+## Sprint 9: Add `read_file` Tool
+
+**Date:** 2024-07-18
+
+**Objective:** Implement a `read_file` tool for the agent.
+
+**Tasks Completed:**
+
+1.  **Directory Structure:**
+    *   Created `src/qx/tools/` directory.
+    *   Created `src/qx/tools/__init__.py` to make `src/qx/tools` a Python package.
+
+2.  **`read_file` Module (`src/qx/tools/read_file.py`):**
+    *   Created `src/qx/tools/read_file.py`.
+    *   Defined a function `read_file(file_path: str) -> Union[str, None]`:
+        *   Takes a file path as input.
+        *   Reads the file content using `utf-8` encoding.
+        *   Returns the file content as a string.
+        *   Includes error handling for `FileNotFoundError` and `IOError`, printing an error message and returning `None` in case of an error.
+
+**Next Steps:**
+
+*   Integrate the `read_file` tool with the PydanticAI agent.
+*   Add unit tests for the `read_file` tool.
+*   Commit the changes.
