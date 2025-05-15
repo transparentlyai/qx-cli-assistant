@@ -1,14 +1,14 @@
 import asyncio
 import os
-from typing import List, Optional  # Added for type hinting
+from typing import List, Optional
 
-from pydantic_ai.agent import AgentRunResult  # For type hinting run_result
-from pydantic_ai.messages import ModelMessage  # Added for type hinting
+from pydantic_ai.agent import AgentRunResult
+from pydantic_ai.messages import ModelMessage
 from rich.console import Console
 
-from .cli.qprompt import get_user_input
-from .core.config_manager import load_runtime_configurations
-from .core.llm import initialize_llm_agent, query_llm
+from qx.cli.qprompt import get_user_input
+from qx.core.config_manager import load_runtime_configurations
+from qx.core.llm import initialize_llm_agent, query_llm
 
 # Load all runtime configurations, including .env files
 load_runtime_configurations()
