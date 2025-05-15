@@ -127,19 +127,15 @@ async def _async_main():
 
     while True:
         try:
-            # Pass both the themed console and the approval_manager to get_user_input
             user_input = await get_user_input(q_console, approval_manager)
             
-            # Handle empty input from aborted prompt (e.g. Ctrl+C in prompt)
-            if user_input == "" and not approval_manager.is_globally_approved(): # Check if prompt returned empty from interrupt
-                # qprompt.py already prints a message for prompt abort.
-                # Simply continue to re-display the prompt.
+            if user_input == "" and not approval_manager.is_globally_approved():
                 continue
 
             if user_input.lower() in ["exit", "quit"]:
                 q_console.print("Exiting QX. Goodbye!", style="info")
                 break
-            if not user_input.strip(): # Handles cases where user just presses Enter on an empty line
+            if not user_input.strip(): 
                 continue
 
             run_result: Optional[Any] = await query_llm(
@@ -163,11 +159,17 @@ async def _async_main():
                 )
 
         except KeyboardInterrupt:
-            # This handles Ctrl+C if it occurs during query_llm or other processing
-            # within this try block (but not during get_user_input itself, which has its own handling).
-            q_console.print("\nOperation cancelled. Returning to prompt. Type 'exit' or 'quit' to exit.", style="warning")
-            current_message_history = None # Optionally reset history on cancel
-            continue # Continue to the next iteration of the loop, re-displaying the prompt.
+            # Handles Ctrl+C if it occurs during query_llm or other processing
+            # within this try block (but not during get_user_input itself).
+            q_console.print("\nOperation cancelled by Ctrl+C. Returning to prompt.", style="warning")
+            current_message_history = None 
+            continue 
+        except asyncio.CancelledError:
+            # Handles task cancellation, which can be triggered by asyncio.run()
+            # when a KeyboardInterrupt occurs. We want to continue the loop.
+            q_console.print("\nOperation cancelled (async). Returning to prompt.", style="warning")
+            current_message_history = None
+            continue
         except Exception as e:
             logger.error(f"An unexpected error occurred in the main loop: {e}", exc_info=True)
             q_console.print(f"[error]Critical Error:[/] An unexpected error occurred: {e}")
@@ -178,20 +180,18 @@ async def _async_main():
 def main():
     try:
         asyncio.run(_async_main())
-    except Exception as e:
-        # This handles errors during asyncio.run() itself or if _async_main re-raises an unhandled exception.
-        logger.critical(f"Critical error running QX: {e}", exc_info=True)
-        # Ensure q_console is used if initialized, otherwise print basic.
-        # This might be redundant if q_console is always initialized early, but safe.
-        console_to_use = q_console if 'q_console' in globals() and q_console else RichConsole()
-        console_to_use.print(f"[bold red]Critical error running QX:[/bold red] {e}")
-        sys.exit(1)
     except KeyboardInterrupt:
-        # This handles Ctrl+C if it occurs outside the _async_main loop 
-        # (e.g., during initial setup before the loop, or if _async_main exits cleanly and then Ctrl+C).
+        # This should now only be reached if Ctrl+C occurs during asyncio.run()
+        # setup/teardown, or if _async_main somehow exits due to KI without
+        # its internal handlers catching it (which they should).
         console_to_use = q_console if 'q_console' in globals() and q_console else RichConsole()
         console_to_use.print("\nQX terminated by user.", style="info")
         sys.exit(0)
+    except Exception as e:
+        logger.critical(f"Critical error running QX: {e}", exc_info=True)
+        console_to_use = q_console if 'q_console' in globals() and q_console else RichConsole()
+        console_to_use.print(f"[bold red]Critical error running QX:[/bold red] {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

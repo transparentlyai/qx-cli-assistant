@@ -1,18 +1,8 @@
-feat: Implement multiline input and enhance prompt interactivity
+fix: Enhance KeyboardInterrupt handling to return to prompt
 
-Implemented multiline input mode in `src/qx/cli/qprompt.py`, enabling users to enter commands spanning multiple lines.
+Modified the main application loop in `src/qx/main.py` to improve `KeyboardInterrupt` (Ctrl+C) resilience.
 
-Key changes include:
-- Added key bindings:
-    - Alt+Enter: Toggles multiline input mode. Submits input when exiting multiline.
-    - Enter: Inserts a newline in multiline mode; otherwise, submits the command.
-    - Ctrl+C: Exits the prompt session cleanly.
-- Introduced dynamic prompt display:
-    - Standard prompt: `Q⏵ `
-    - Auto-approve prompt: `QA⏵ `
-    - Multiline prompt: `M⏵ [Alt+Enter to submit]`
-    - Prompt updates based on current input mode and approval status.
-- Defined new constants and `FormattedText` objects for prompt variations.
-- Updated history parsing in `_show_history_fzf_event` to correctly handle commands without explicit timestamps or `+` prefixes.
-- Enhanced the `__main__` test block in `qprompt.py` to demonstrate and test multiline input and dynamic prompt features.
-- Updated `.Q/projectlog.md` with details of this development session.
+- The `KeyboardInterrupt` exception handler within the main `while True:` loop in `_async_main` now directs the application to `continue` to the next iteration. This returns the user to the input prompt instead of exiting the application when an operation (e.g., LLM query) is interrupted.
+- Added a condition after `get_user_input` to check for an empty string result (which `qx/cli/qprompt.py` returns if Ctrl+C is pressed during input). If an empty string is received, the loop continues, re-displaying the prompt.
+- `current_message_history` is now reset to `None` if an operation is cancelled by `KeyboardInterrupt` to prevent carrying over potentially incomplete context.
+- Updated `.Q/projectlog.md` to document these changes.
