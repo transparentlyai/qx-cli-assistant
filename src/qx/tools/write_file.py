@@ -1,11 +1,9 @@
 import os
 from pathlib import Path
-from typing import Optional # Optional might be needed if project_root can be None
+from typing import Optional 
 
-# Corrected import for file_operations_base
 from qx.tools.file_operations_base import is_path_allowed
-# Imports for project_root and USER_HOME_DIR determination
-from qx.core.config_manager import _find_project_root, USER_HOME_DIR
+from qx.core.paths import USER_HOME_DIR, _find_project_root # Updated import
 
 def write_file(path_str: str, content: str) -> bool:
     """
@@ -21,6 +19,7 @@ def write_file(path_str: str, content: str) -> bool:
     """
     try:
         absolute_path = Path(path_str).resolve()
+        # _find_project_root is now imported from qx.core.paths
         project_root = _find_project_root(str(Path.cwd()))
         parent_dir = absolute_path.parent
 
@@ -30,18 +29,15 @@ def write_file(path_str: str, content: str) -> bool:
             return False
 
         # Check if the file path itself is allowed (even if parent is, file might be special)
-        # This also covers cases where parent_dir might be project_root but file is project_root/.git/config
         if not is_path_allowed(absolute_path, project_root, USER_HOME_DIR):
             print(f"Error: Path not allowed for writing: {absolute_path}")
             return False
 
         # Create parent directories if they don't exist
-        # This is safe now because parent_dir was checked by is_path_allowed
         os.makedirs(parent_dir, exist_ok=True)
 
         with open(absolute_path, 'w', encoding='utf-8') as f:
             f.write(content)
-        # print(f"Successfully wrote to {absolute_path}") # Optional: for verbose success
         return True
     except IOError as e:
         print(f"Error writing file at path {absolute_path}: {e}")
@@ -62,8 +58,6 @@ if __name__ == '__main__':
     allowed_file_in_subdir = allowed_subdir / "another_file.txt"
 
     dot_q_dir = test_project_dir / ".Q"
-    # .Q directory itself is allowed if project_root is defined.
-    # We don't need to create it here for is_path_allowed to permit writing *into* it.
     allowed_file_in_dot_q = dot_q_dir / "q_config.txt"
 
 
@@ -90,7 +84,6 @@ if __name__ == '__main__':
 
 
     # Test case 4: Attempt to write to a restricted path (e.g., /etc/new_file.txt)
-    # This path will likely be outside any allowed scope
     restricted_path_write = "/etc/test_qx_write.txt"
     success4 = write_file(restricted_path_write, "Attempting to write to /etc.")
     print(f"Writing {restricted_path_write}: {'Success (unexpected)' if success4 else 'Failed (expected)'}")
@@ -101,7 +94,6 @@ if __name__ == '__main__':
     if allowed_file_in_subdir.exists(): allowed_file_in_subdir.unlink()
     if allowed_subdir.exists(): allowed_subdir.rmdir()
     if allowed_file_in_dot_q.exists(): allowed_file_in_dot_q.unlink()
-    if dot_q_dir.exists(): dot_q_dir.rmdir() # remove only if empty, os.rmdir fails otherwise
-                                            # for robust cleanup, shutil.rmtree might be needed if .Q had other files
+    if dot_q_dir.exists(): dot_q_dir.rmdir() 
     if (test_project_dir / ".git").exists(): (test_project_dir / ".git").rmdir()
     if test_project_dir.exists(): test_project_dir.rmdir()
