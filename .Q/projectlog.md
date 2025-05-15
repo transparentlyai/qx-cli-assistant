@@ -188,42 +188,33 @@
 
 ---
 
-## Sprint 7: Update Pyproject.toml for Script Installation
+## Sprint 7: Project Restructuring for Packaging
 
 **Date:** 2024-07-17
 
-**Objective:** Configure `pyproject.toml` to include `bin/qx` as an installable script.
+**Objective:** Restructure the project to place the main application code within a `qx` package inside `src` for better organization and standard packaging practices.
 
 **Tasks Completed:**
 
-1.  **`pyproject.toml` Update:**
-    *   Added `[tool.setuptools]` section.
-    *   Added `script-files = ["bin/qx"]` under `[tool.setuptools]` to specify the script for installation.
+1.  **Directory Structure Changes:**
+    *   Created the main package directory: `src/qx`.
+    *   Moved `src/main.py` to `src/qx/main.py`.
+    *   Moved the `src/core` directory to `src/qx/core`.
+    *   Moved the `src/cli` directory to `src/qx/cli`.
+    *   Created `src/qx/__init__.py` to mark `src/qx` as a Python package.
+
+2.  **Configuration Update (`pyproject.toml`):**
+    *   Updated the script entry point from `qx = "src.main:main"` to `qx = "qx.main:main"`.
+    *   Added `[tool.setuptools.packages.find]` section with `where = ["src"]` to guide `setuptools` in discovering the `qx` package within the `src` directory.
+
+3.  **Import Statement Adjustments:**
+    *   In `src/qx/main.py`:
+        *   Changed `from cli.qprompt import ...` to `from .cli.qprompt import ...`.
+        *   Changed `from core.llm import ...` to `from .core.llm import ...`.
+    *   No import changes were needed in `src/qx/cli/qprompt.py` or `src/qx/core/llm.py` as they did not have internal project imports affected by this level of restructuring.
+    *   Updated comments in `src/qx/core/__init__.py` and `src/qx/cli/__init__.py` to reflect their new paths.
 
 **Next Steps:**
 
-*   Run `uv sync` to ensure the project configuration is updated.
-*   Test the script installation (e.g., by building a wheel and installing it).
-*   Continue with planned development.
-
----
-
-## Sprint 8: Create Executable Launcher Script
-
-**Date:** 2024-07-17
-
-**Objective:** Create an executable script `bin/qx` to launch the application.
-
-**Tasks Completed:**
-
-1.  **Script Creation (`bin/qx`):**
-    *   Created a new bash script `bin/qx`.
-    *   The script changes to the project root directory.
-    *   It uses `uv run python src/main.py "$@"` to execute the application, passing along any command-line arguments.
-2.  **Permissions:**
-    *   Made `bin/qx` executable using `chmod +x bin/qx`.
-
-**Next Steps:**
-
-*   Commit the new script and log updates.
-*   Continue with planned development.
+*   Test the application thoroughly after restructuring (e.g., by installing with `uv pip install .` and running the `qx` command).
+*   Commit the changes.
