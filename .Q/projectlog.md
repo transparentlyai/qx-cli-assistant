@@ -413,9 +413,11 @@ Using `all_messages()` provides the LLM with the most complete context of the in
         *   Changed to import `_find_project_root` and `USER_HOME_DIR` from `qx.core.paths`.
         *   Ensured it imports `is_path_allowed` from `qx.tools.file_operations_base`.
         *   Included path restriction logic.
+4.  **Standardize Imports in `main.py`:**
+    *   Changed relative imports (e.g., `from .core.llm import ...`) in `src/qx/main.py` to absolute imports from the package root (e.g., `from qx.core.llm import ...`).
 
-**Rationale for Decoupling with `paths.py`:**
-By moving `USER_HOME_DIR` and `_find_project_root` (which are fundamental path utilities not dependent on other application logic like constants or full config loading) into `qx.core.paths.py`, we create a base module that other modules (`config_manager`, `file_operations_base`) can depend on without creating circular import chains. This makes the import structure more robust.
+**Rationale for Decoupling with `paths.py` and Absolute Imports:**
+By moving `USER_HOME_DIR` and `_find_project_root` into `qx.core.paths.py`, a base module is created that other modules can depend on without circular import chains. Using absolute imports (e.g., `from qx.core...`) throughout the package ensures consistency and correct module resolution when the application is installed and run, as Python's import system can then resolve `qx` as a top-level package.
 
 **Next Steps:**
 
