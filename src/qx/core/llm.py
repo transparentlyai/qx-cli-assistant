@@ -1,6 +1,6 @@
 import os
 from typing import List, Optional
-from pathlib import Path # Added for path operations
+from pathlib import Path
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.agent import AgentRunResult
@@ -8,16 +8,11 @@ from rich.console import Console
 
 from qx.tools.read_file import read_file
 from qx.tools.write_file import write_file
-from qx.core.paths import _find_project_root # For finding project root to locate prompt
+from qx.tools.execute_shell import execute_shell # New tool import
+from qx.core.paths import _find_project_root
 
 console = Console()
 
-# Define the path to the system prompt template relative to this file's location
-# Assuming llm.py is in src/qx/core/ and prompt is in src/qx/prompts/
-# Path(__file__).resolve() -> /path/to/project/src/qx/core/llm.py
-# .parent -> /path/to/project/src/qx/core/
-# .parent -> /path/to/project/src/qx/
-# / "prompts" / "system-prompt.md" -> /path/to/project/src/qx/prompts/system-prompt.md
 SYSTEM_PROMPT_TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "prompts" / "system-prompt.md"
 
 def load_and_format_system_prompt() -> str:
@@ -30,11 +25,11 @@ def load_and_format_system_prompt() -> str:
     except FileNotFoundError:
         console.print(f"[bold red]LLM Error: System prompt template not found at {SYSTEM_PROMPT_TEMPLATE_PATH}[/bold red]")
         console.print("[bold yellow]LLM Warning: Using a basic default system prompt.[/bold yellow]")
-        return "You are a helpful AI assistant." # Basic fallback
+        return "You are a helpful AI assistant."
     except Exception as e:
         console.print(f"[bold red]LLM Error: Could not read system prompt template: {e}[/bold red]")
         console.print("[bold yellow]LLM Warning: Using a basic default system prompt.[/bold yellow]")
-        return "You are a helpful AI assistant." # Basic fallback
+        return "You are a helpful AI assistant."
 
     user_context = os.environ.get("QX_USER_CONTEXT", "")
     project_context = os.environ.get("QX_PROJECT_CONTEXT", "")
@@ -69,16 +64,15 @@ def initialize_llm_agent():
     if not vertex_location:
         console.print("[bold yellow]LLM Warning: QX_VERTEX_LOCATION not found, relying on PydanticAI/gcloud defaults.[/bold yellow]")
 
-    # Load and format the system prompt
     system_prompt_content = load_and_format_system_prompt()
 
     try:
         agent = Agent(
             model_name,
-            tools=[read_file, write_file],
+            tools=[read_file, write_file, execute_shell], # Added execute_shell
             system_prompt=system_prompt_content
         )
-        console.print("[green]LLM Agent initialized successfully with read_file, write_file tools and dynamic system prompt.[/green]")
+        console.print("[green]LLM Agent initialized successfully with read_file, write_file, execute_shell tools and dynamic system prompt.[/green]")
         return agent
     except Exception as e:
         console.print(f"[bold red]LLM Error initializing PydanticAI Agent: {e}[/bold red]")

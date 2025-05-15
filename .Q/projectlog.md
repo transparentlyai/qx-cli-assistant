@@ -509,3 +509,39 @@ This change allows the system prompt to be dynamically configured with user-spec
 
 *   Commit changes.
 *   Thoroughly test the application to ensure the system prompt is correctly loaded and formatted.
+---
+
+## Sprint 15: Implement `execute_shell` Tool (Done)
+
+**Date:** 2024-07-19
+
+**Objective:** Create and integrate a tool to execute shell commands safely.
+
+**Tasks Completed:**
+
+1.  **Created `src/qx/tools/execute_shell.py`**:
+    *   Defined `execute_shell(command: str) -> dict` function.
+    *   Uses `shlex.split()` for command parsing.
+    *   Imports `DEFAULT_PROHIBITED_COMMANDS` from `qx.core.constants`.
+    *   Checks the input command against prohibited patterns using `fnmatch.fnmatch`. If prohibited, returns an error.
+    *   Executes allowed commands using `subprocess.run()` with a timeout (`SHELL_COMMAND_TIMEOUT = 60` seconds).
+    *   Returns a dictionary with `stdout`, `stderr`, `returncode`, and an optional `error` field for tool-specific issues (e.g., prohibited, timeout, command not found by OS).
+    *   Includes basic `if __name__ == '__main__':` for direct testing.
+2.  **Updated `src/qx/tools/__init__.py`**:
+    *   Added `execute_shell` to the import list and `__all__` to make it available via `from qx.tools import execute_shell`.
+3.  **Integrated into LLM Agent (`src/qx/core/llm.py`)**:
+    *   Imported `execute_shell` from `qx.tools.execute_shell`.
+    *   Added `execute_shell` to the `tools` list in `Agent` initialization.
+    *   Updated the agent initialization console message to include `execute_shell`.
+4.  **Updated System Prompt (`src/qx/prompts/system-prompt.md`)**:
+    *   Added a new `<execute-shell>` section under `<tools>`.
+    *   Described the tool's purpose, usage (`execute_shell(command="...")`), and return structure.
+    *   Emphasized safety: only non-destructive commands, no networking (use `fetch`), no privileged operations. Mentioned that prohibited commands will be denied.
+
+**Security Considerations:**
+The `execute_shell` tool relies on a denylist (`DEFAULT_PROHIBITED_COMMANDS`) and `shlex.split()` to mitigate risks. The denylist uses `fnmatch` for basic wildcard matching. This approach is a primary defense against known dangerous command patterns. The timeout prevents runaway processes.
+
+**Next Steps:**
+
+*   Commit changes.
+*   Thoroughly test the `execute_shell` tool with various safe and prohibited commands.
