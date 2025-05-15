@@ -2,7 +2,7 @@ import datetime
 import logging
 from typing import List, Optional, Tuple
 
-from rich.console import Console
+from rich.console import Console as RichConsole # Use RichConsole for clarity
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.text import Text
@@ -26,9 +26,10 @@ class ApprovalManager:
     Manages user approval for operations, supporting "approve all" and modification.
     """
 
-    def __init__(self, console: Optional[Console] = None):
+    def __init__(self, console: Optional[RichConsole] = None): # Type hint with RichConsole
         self._approve_all_until: Optional[datetime.datetime] = None
-        self._console = console or Console()
+        # If no console is passed, create a basic one. The main app should pass its themed console.
+        self._console = console or RichConsole()
         self.default_approve_all_duration_minutes = DEFAULT_APPROVE_ALL_DURATION_MINUTES
 
     def _is_approve_all_active(self) -> bool:
@@ -41,7 +42,7 @@ class ApprovalManager:
                 return True
             else:
                 self._console.print(
-                    "[yellow]INFO:[/] 'Approve All' period has expired.", # Direct style
+                    "[warning]INFO:[/] 'Approve All' period has expired.", # Use themed warning
                 )
                 logger.info("'Approve All' period has expired.")
                 self._approve_all_until = None  # Reset expired timer
@@ -65,15 +66,20 @@ class ApprovalManager:
             choice_map[full_word.lower()] = key
 
         choices_display_parts = [
-            f"{display}[{key.upper()}]" for key, display, _ in available_choices
+            # Using theme's default style for choice text, bold for key
+            f"{display}[prompt.choices.key]{key.upper()}[/]" for key, display, _ in available_choices
         ]
         choices_str = "/".join(choices_display_parts)
-        full_prompt = f"{prompt_message} ({choices_str})"
+        # Prompt message itself will use default console style
+        full_prompt_text = Text(prompt_message, style="prompt") # Use prompt style
+        full_prompt_text.append(f" ({choices_str})")
+
 
         while True:
             try:
+                # Prompt.ask uses its own styling for the input part, but the message uses console's theme
                 raw_choice = Prompt.ask(
-                    full_prompt,
+                    full_prompt_text, # Pass Text object
                     console=self._console,
                 )
                 choice = raw_choice.strip().lower()
@@ -82,13 +88,15 @@ class ApprovalManager:
                     return choice_map[choice]
 
                 self._console.print(
-                    f"[prompt.invalid]Invalid input. Please enter one of: {choices_str}"
+                    f"[error]Invalid input.[/] Please enter one of: {choices_str}", # Use themed error
+                    style="prompt.invalid" # A more specific style if defined in theme
                 )
 
             except Exception as e:
                 logger.error(f"Failed to get user confirmation choice: {e}", exc_info=True)
                 self._console.print(
-                    "[prompt.invalid]An error occurred during input. Defaulting to Cancel."
+                    "[error]An error occurred during input. Defaulting to Cancel.[/]", # Use themed error
+                     style="prompt.invalid"
                 )
                 return "c"  # Default to cancel on error
 
@@ -97,25 +105,28 @@ class ApprovalManager:
         while True:
             try:
                 duration_str = Prompt.ask(
-                    prompt_message,
+                    Text(prompt_message, style="prompt"), # Use prompt style
                     default=str(default),
                     console=self._console,
                 )
                 duration = int(duration_str)
                 if duration < 0:
                     self._console.print(
-                        "[prompt.invalid]Please enter a non-negative number of minutes."
+                        "[error]Please enter a non-negative number of minutes.[/]", # Use themed error
+                        style="prompt.invalid"
                     )
                     continue
                 return duration
             except ValueError:
                 self._console.print(
-                    "[prompt.invalid]Please enter a valid number of minutes."
+                    "[error]Please enter a valid number of minutes.[/]", # Use themed error
+                    style="prompt.invalid"
                 )
             except Exception as e:
                 logger.error(f"Failed to get duration input: {e}", exc_info=True)
                 self._console.print(
-                    f"[prompt.invalid]An error occurred. Using default value ({default} minutes)."
+                    f"[error]An error occurred. Using default value ({default} minutes).[/]", # Use themed error
+                    style="prompt.invalid"
                 )
                 return default
 
@@ -128,42 +139,31 @@ class ApprovalManager:
     ) -> Tuple[bool, str]:
         """
         Requests user approval for a given operation.
-
-        Args:
-            operation_description: A human-readable description of the operation
-                                   (e.g., "Execute shell command", "Write file").
-            item_to_approve: The specific item needing approval (e.g., the command string, the file path).
-            allow_modify: If True, allows the user to modify `item_to_approve`.
-            content_preview: Optional string to display as a preview (e.g., file content for write).
-
-        Returns:
-            A tuple (approved: bool, final_item: str).
-            `approved` is True if the user approved, False otherwise.
-            `final_item` is the original `item_to_approve` or its modified version.
         """
         if self._is_approve_all_active():
             self._console.print(
-                f"[green]AUTO-APPROVED:[/] {operation_description}: [cyan]{item_to_approve}[/]",
+                # Using semantic styles that the theme will define
+                f"[success]AUTO-APPROVED:[/] {operation_description}: [info]{item_to_approve}[/]",
             )
             return True, item_to_approve
 
-        panel_content = Text(f"{operation_description}:\n", style="bold yellow")
-        panel_content.append(item_to_approve, style="cyan")
+        # Panel content uses semantic styles
+        panel_content = Text(f"{operation_description}:\n", style="title") # e.g. "title" or "bold"
+        panel_content.append(item_to_approve, style="info") # e.g. "info" or "cyan"
 
         if content_preview:
-            panel_content.append("\n\nContent Preview:\n", style="bold dim")
-            # Limit preview length for display
+            panel_content.append("\n\nContent Preview:\n", style="highlight") # e.g. "highlight" or "bold dim"
             preview_limit = 200
             if len(content_preview) > preview_limit:
-                panel_content.append(content_preview[:preview_limit] + "...", style="dim")
+                panel_content.append(content_preview[:preview_limit] + "...", style="code") # e.g. "code" or "dim"
             else:
-                panel_content.append(content_preview, style="dim")
+                panel_content.append(content_preview, style="code")
 
-        self._console.print(Panel(panel_content, border_style="blue"))
+        self._console.print(Panel(panel_content, border_style="prompt.border")) # e.g. "prompt.border" or "blue"
 
-        current_choices = list(BASE_CHOICES)  # Make a mutable copy
+        current_choices = list(BASE_CHOICES)
         if allow_modify:
-            current_choices.insert(2, MODIFY_CHOICE) # Insert Modify before Approve All
+            current_choices.insert(2, MODIFY_CHOICE)
 
         user_choice_key = self._ask_confirmation("Proceed?", current_choices)
 
@@ -172,11 +172,11 @@ class ApprovalManager:
             return True, item_to_approve
         elif user_choice_key == "n":
             logger.warning(f"User denied: {operation_description} for '{item_to_approve}'")
-            self._console.print(f"[yellow]Denied by user:[/] {operation_description}") # Direct style
+            self._console.print(f"[warning]Denied by user:[/] {operation_description}")
             return False, item_to_approve
         elif user_choice_key == "c":
             logger.warning(f"User cancelled: {operation_description} for '{item_to_approve}'")
-            self._console.print(f"[yellow]Cancelled by user:[/] {operation_description}") # Direct style
+            self._console.print(f"[warning]Cancelled by user:[/] {operation_description}")
             return False, item_to_approve
         elif user_choice_key == "a":
             logger.info(
@@ -192,16 +192,25 @@ class ApprovalManager:
                 )
                 logger.info(f"'Approve All' activated until {self._approve_all_until}")
                 self._console.print(
-                    f"\n[bold green]▶▶▶ Auto-approval enabled for {duration_minutes} minutes.[/]\n"
+                    f"\n[success]▶▶▶ Auto-approval enabled for {duration_minutes} minutes.[/]\n"
                 )
-                return True, item_to_approve  # Approve current operation
+                return True, item_to_approve
             else:
                 logger.info(
                     "User entered 0 or negative duration for 'Approve All'. Not activating."
                 )
                 self._console.print(
-                    "[yellow]Auto-approval not enabled (duration was 0 or less). Current operation still needs choice.[/]"
+                    "[warning]Auto-approval not enabled (duration was 0 or less). Current operation still needs choice.[/]"
                 )
+                # This was returning False, but if they chose 'a' for the current op, it should be approved.
+                # The auto-approval for *subsequent* ops is what might not be active.
+                # Re-prompting or defaulting to 'no' for current if duration is <=0.
+                # For simplicity, let's assume 'a' with 0 duration means "approve this one, but not future ones"
+                # Or, better: if duration is <=0, it's like they didn't activate "all", so re-evaluate current.
+                # Current logic: if duration <=0, current is NOT approved via 'a'.
+                # This seems reasonable: "Approve All for 0 minutes" means "don't approve all".
+                # The current operation was tied to the "Approve All" choice.
+                # Let's make it so that if "Approve All" fails to activate, the current operation is also not approved via this path.
                 return False, item_to_approve
 
 
@@ -210,11 +219,11 @@ class ApprovalManager:
                 f"User chose 'Modify' for: {operation_description} on '{item_to_approve}'"
             )
             modified_item = Prompt.ask(
-                "Enter the modified value",
+                Text("Enter the modified value", style="prompt"), # Use prompt style
                 default=item_to_approve,
                 console=self._console,
             )
-            self._console.print(f"[green]Modified value:[/] [cyan]{modified_item}[/]")
+            self._console.print(f"[success]Modified value:[/] [info]{modified_item}[/]")
             return True, modified_item
 
         logger.error(f"Unexpected choice key '{user_choice_key}' received.")
@@ -226,45 +235,49 @@ class ApprovalManager:
 
 if __name__ == "__main__":
     # Example Usage
-    console = Console()
+    # For testing, create a themed console if you want to see theme effects here
+    # from rich.theme import Theme
+    # test_theme = Theme({
+    #     "info": "cyan", "warning": "yellow", "error": "bold red", "success": "green",
+    #     "prompt": "blue", "prompt.invalid": "red", "prompt.choices.key": "bold",
+    #     "title": "bold magenta", "highlight": "dim", "code": "grey50", "prompt.border": "blue"
+    # })
+    # console = RichConsole(theme=test_theme)
+    console = RichConsole() # Basic console for standalone test
+    
     approval_manager = ApprovalManager(console=console)
 
-    # Test 1: Simple approval
-    console.rule("[bold blue]Test 1: Simple Read File Approval")
+    console.rule("[title]Test 1: Simple Read File Approval[/]")
     approved, item = approval_manager.request_approval(
         "Read file", "/path/to/some/file.txt"
     )
     console.print(f"Approved: {approved}, Item: {item}\n")
 
-    # Test 2: Shell command with modify option
-    console.rule("[bold blue]Test 2: Shell Command Approval (with Modify)")
+    console.rule("[title]Test 2: Shell Command Approval (with Modify)[/]")
     approved, command = approval_manager.request_approval(
         "Execute shell command", "ls -la /tmp", allow_modify=True
     )
     console.print(f"Approved: {approved}, Command: {command}\n")
 
-    # Test 3: Write file with content preview
-    console.rule("[bold blue]Test 3: Write File Approval (with Content Preview)")
+    console.rule("[title]Test 3: Write File Approval (with Content Preview)[/]")
     file_content_preview = "Line 1 of the file.\nLine 2 of the file.\nThis is the third line."
     approved, path = approval_manager.request_approval(
         "Write file", "/path/to/new_document.md", content_preview=file_content_preview
     )
     console.print(f"Approved: {approved}, Path: {path}\n")
 
-    # Test 4: Activate "Approve All"
-    console.rule("[bold blue]Test 4: Activate 'Approve All'")
+    console.rule("[title]Test 4: Activate 'Approve All'[/]")
     approved, item = approval_manager.request_approval(
         "Another operation", "some_other_item"
     )
     console.print(f"Approved: {approved}, Item: {item}\n")
 
-    # Test 5: Check if "Approve All" is active
-    console.rule("[bold blue]Test 5: Check 'Approve All' status and subsequent approval")
+    console.rule("[title]Test 5: Check 'Approve All' status and subsequent approval[/]")
     if approval_manager.is_globally_approved():
-        console.print("Global approval is ACTIVE.", style="bold green")
+        console.print("Global approval is ACTIVE.", style="success")
         approved, item = approval_manager.request_approval(
             "Yet another operation", "final_item_test"
         )
         console.print(f"Approved (should be auto): {approved}, Item: {item}\n")
     else:
-        console.print("Global approval is NOT active.", style="bold yellow")
+        console.print("Global approval is NOT active.", style="warning")
