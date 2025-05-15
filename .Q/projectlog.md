@@ -186,3 +186,22 @@
 *   Review code for any further cleanup opportunities.
 *   Continue with planned development.
 
+---
+
+## Sprint 7: Update Pyproject.toml for Script Installation
+
+**Date:** 2024-07-17
+
+**Objective:** Configure `pyproject.toml` to include `bin/qx` as an installable script.
+
+**Tasks Completed:**
+
+1.  **`pyproject.toml` Update:**
+    *   Added `[tool.setuptools]` section.
+    *   Added `script-files = ["bin/qx"]` under `[tool.setuptools]` to specify the script for installation.
+
+**Next Steps:**
+
+*   Run `uv sync` to ensure the project configuration is updated.
+*   Test the script installation (e.g., by building a wheel and installing it).
+*   Continue with planned development.
