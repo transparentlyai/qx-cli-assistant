@@ -4,8 +4,8 @@ import os
 from dotenv import load_dotenv
 from rich.console import Console
 
-from .cli.qprompt import get_user_input  # Updated import
-from .core.llm import initialize_llm_agent, query_llm  # Updated import
+from .cli.qprompt import get_user_input
+from .core.llm import initialize_llm_agent, query_llm
 
 # Load environment variables from .env file
 load_dotenv()
@@ -19,9 +19,9 @@ vertex_location_env = os.getenv("QX_VERTEX_LOCATION")
 console = Console()
 
 
-async def main():
+async def _async_main():  # Renamed from main
     """
-    Main function to run the QX agent.
+    Core asynchronous logic for the QX agent.
     """
     if not model_name_env:
         console.print(
@@ -89,11 +89,19 @@ async def main():
             )
             break
 
-
-if __name__ == "__main__":
+def main(): # New synchronous entry point
+    """
+    Main synchronous entry point function to run the QX agent.
+    This function initializes and runs the asyncio event loop.
+    """
     try:
-        asyncio.run(main())
+        asyncio.run(_async_main())
     except KeyboardInterrupt:
         console.print("\n[yellow]QX terminated by user.[/yellow]")
     except Exception as e:
-        console.print(f"[bold red]Critical error starting QX: {e}[/bold red]")
+        # This catches errors during asyncio.run() itself or unhandled exceptions from _async_main
+        console.print(f"[bold red]Critical error running QX: {e}[/bold red]")
+
+
+if __name__ == "__main__":
+    main() # Call the new synchronous main

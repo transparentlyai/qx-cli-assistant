@@ -218,3 +218,30 @@
 
 *   Test the application thoroughly after restructuring (e.g., by installing with `uv pip install .` and running the `qx` command).
 *   Commit the changes.
+
+---
+
+## Sprint 8: Fix Async Entry Point for Packaged Script
+
+**Date:** 2024-07-17
+
+**Objective:** Resolve `RuntimeWarning` and ensure the `qx` script runs correctly when installed via `pyproject.toml` entry point.
+
+**Tasks Completed:**
+
+1.  **Problem Identification:**
+    *   When running the installed `qx` script, a `RuntimeWarning: coroutine 'main' was never awaited` occurred because the setuptools entry point directly called the `async def main()` coroutine without an event loop.
+
+2.  **`src/qx/main.py` Update:**
+    *   Renamed the existing `async def main()` to `async def _async_main()`.
+    *   Created a new synchronous wrapper function `def main()`.
+    *   This new `main()` function calls `asyncio.run(_async_main())` to properly execute the asynchronous code.
+    *   The `if __name__ == "__main__":` block was updated to call the new synchronous `main()` as well, ensuring consistent behavior whether run as a script or via the entry point.
+    *   The docstring for the new `main()` clarifies its role as the synchronous entry point, and the docstring for `_async_main()` clarifies its role as the core async logic.
+    *   Exception handling in the new `main()` function was refined to catch `KeyboardInterrupt` and other potential exceptions during `asyncio.run()`.
+
+**Next Steps:**
+
+*   Re-install the package (e.g., `uv pip install -e .`).
+*   Test the `qx` command again to confirm the fix.
+*   Commit the changes.
