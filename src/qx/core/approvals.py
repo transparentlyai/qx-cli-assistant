@@ -65,14 +65,20 @@ class ApprovalManager:
         for key, _, full_word in available_choices:
             choice_map[full_word.lower()] = key
 
-        choices_display_parts = [
-            # Using theme's default style for choice text, bold for key
-            f"{display}[prompt.choices.key]{key.upper()}[/]" for key, display, _ in available_choices
-        ]
-        choices_str = "/".join(choices_display_parts)
-        # Prompt message itself will use default console style
-        full_prompt_text = Text(prompt_message, style="prompt") # Use prompt style
-        full_prompt_text.append(f" ({choices_str})")
+        # Construct the prompt Text object with proper styling
+        full_prompt_text = Text(prompt_message, style="prompt")
+        full_prompt_text.append(" (")
+        
+        choices_for_display_str_list = [] # For the error message
+        for i, (key, display, _) in enumerate(available_choices):
+            full_prompt_text.append(display)
+            full_prompt_text.append(f"[{key.upper()}]", style="prompt.choices.key")
+            choices_for_display_str_list.append(f"{display}[{key.upper()}]")
+            if i < len(available_choices) - 1:
+                full_prompt_text.append("/")
+        full_prompt_text.append(")")
+        
+        choices_display_str_for_error = "/".join(choices_for_display_str_list)
 
 
         while True:
@@ -88,7 +94,7 @@ class ApprovalManager:
                     return choice_map[choice]
 
                 self._console.print(
-                    f"[error]Invalid input.[/] Please enter one of: {choices_str}", # Use themed error
+                    f"[error]Invalid input.[/] Please enter one of: {choices_display_str_for_error}", # Use themed error
                     style="prompt.invalid" # A more specific style if defined in theme
                 )
 
@@ -202,15 +208,6 @@ class ApprovalManager:
                 self._console.print(
                     "[warning]Auto-approval not enabled (duration was 0 or less). Current operation still needs choice.[/]"
                 )
-                # This was returning False, but if they chose 'a' for the current op, it should be approved.
-                # The auto-approval for *subsequent* ops is what might not be active.
-                # Re-prompting or defaulting to 'no' for current if duration is <=0.
-                # For simplicity, let's assume 'a' with 0 duration means "approve this one, but not future ones"
-                # Or, better: if duration is <=0, it's like they didn't activate "all", so re-evaluate current.
-                # Current logic: if duration <=0, current is NOT approved via 'a'.
-                # This seems reasonable: "Approve All for 0 minutes" means "don't approve all".
-                # The current operation was tied to the "Approve All" choice.
-                # Let's make it so that if "Approve All" fails to activate, the current operation is also not approved via this path.
                 return False, item_to_approve
 
 
@@ -236,13 +233,13 @@ class ApprovalManager:
 if __name__ == "__main__":
     # Example Usage
     # For testing, create a themed console if you want to see theme effects here
-    # from rich.theme import Theme
-    # test_theme = Theme({
-    #     "info": "cyan", "warning": "yellow", "error": "bold red", "success": "green",
-    #     "prompt": "blue", "prompt.invalid": "red", "prompt.choices.key": "bold",
-    #     "title": "bold magenta", "highlight": "dim", "code": "grey50", "prompt.border": "blue"
-    # })
-    # console = RichConsole(theme=test_theme)
+    from rich.theme import Theme
+    test_theme_dark = Theme({
+        "info": "bright_cyan", "warning": "bright_yellow", "error": "bold bright_red", "success": "bright_green",
+        "prompt": "bold bright_blue", "prompt.invalid": "bold red", "prompt.choices.key": "bold bright_yellow",
+        "title": "bold bright_magenta", "highlight": "dim white", "code": "grey70", "prompt.border": "blue"
+    })
+    # console = RichConsole(theme=test_theme_dark)
     console = RichConsole() # Basic console for standalone test
     
     approval_manager = ApprovalManager(console=console)

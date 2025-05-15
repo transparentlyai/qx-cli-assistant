@@ -23,11 +23,19 @@
     *   Diagnosed that style keys like `prompt.border` were used in `approvals.py` but not defined in `CLI_THEMES` in `constants.py`.
 8.  **Add Missing Prompt Styles to Themes:**
     *   Added `prompt.border`, `prompt.choices.key`, and `prompt.invalid` style definitions to both "dark" and "light" themes in `src/qx/core/constants.py`.
+9.  **Commit Missing Styles Fix:**
+    *   Committed changes with hash `3c82128`.
+10. **Identify and Fix Literal Style Tags in Approval Prompt:**
+    *   User observed that style tags like `[prompt.choices.key]` were appearing as literal text in the approval prompt.
+    *   Diagnosed that the `Text` object for the prompt was not being constructed in a way that Rich would parse the embedded markup within the choices string.
+11. **Refactor Approval Prompt Construction:**
+    *   Modified `_ask_confirmation` in `src/qx/core/approvals.py`.
+    *   The `full_prompt_text` (a `Text` object) is now built by appending styled segments for each part of the choice display (e.g., `display_text`, `[KEY]`, `/`), ensuring Rich correctly applies the `prompt.choices.key` style to the key letters.
 
 **Next Steps:**
 
-*   Commit the fix for missing theme styles.
-*   Thoroughly test theme switching and ensure all outputs are styled correctly.
+*   Commit the fix for the approval prompt display.
+*   Thoroughly test theme switching and ensure all outputs, especially approval prompts, are styled correctly.
 
 ---
 ## Previous Sessions
@@ -38,13 +46,10 @@
 
 **Activities:**
 
-1.  **Read Rich Documentation:** User requested to read `.Q/documentation/python-rich-docs.md`.
-2.  **Discuss Rich Theming:** User inquired about Rich's theming capabilities.
-3.  **Add CLI Themes to Constants:** User requested to add comprehensive "dark" and "light" themes to `src/qx/core/constants.py` under a dictionary `CLI_THEMES`.
-    *   Correctly wrote `CLI_THEMES` with keys "dark" and "light".
-4.  **Commit Theme Constants:**
-    *   Updated `.Q/projectlog.md`.
-    *   Committed changes with hash `aed1e3b`.
+1.  **Read Rich Documentation.**
+2.  **Discuss Rich Theming.**
+3.  **Add CLI Themes to Constants:** Correctly wrote `CLI_THEMES` with keys "dark" and "light".
+4.  **Commit Theme Constants:** Hash `aed1e3b`.
 
 **Next Steps:**
 *   Implement selectable Rich CLI themes.
@@ -57,7 +62,7 @@
 
 **Activities:**
 
-1.  **Initial Project Setup:** (Simulated)
+1.  **Initial Project Setup.**
 2.  **Review Project Directives.**
 3.  **Read Project Log.**
 4.  **Create `src/qx/core/constants.py`:** Added initial constants.
