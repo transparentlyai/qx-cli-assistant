@@ -11,11 +11,22 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.document import Document # Corrected import
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.formatted_text import HTML # HTML is used for prompt message
+from prompt_toolkit.styles import Style # Import for styling
+
 from rich.console import Console as RichConsole
 from pyfzf.pyfzf import FzfPrompt # Import FzfPrompt
 
 from qx.core.paths import Q_HISTORY_FILE
+
+# Define the prompt style using the user-provided colors
+prompt_style = Style.from_dict(
+    {
+        "": "#ff0066",  # Default text (user input)
+        "prompt": "#FF4500",  # Style for the prompt marker "Q⏵ "
+        "prompt.multiline": "#0066CC",  # Style for multiline continuation
+        "hint": "#888888",  # Style for hints (e.g., auto-suggestion)
+    }
+)
 
 async def get_user_input(console: RichConsole) -> str:
     """
@@ -28,7 +39,8 @@ async def get_user_input(console: RichConsole) -> str:
         console.print(f"[warning]Warning: Could not create history directory {Q_HISTORY_FILE.parent}: {e}[/warning]")
 
     q_history = FileHistory(str(Q_HISTORY_FILE))
-    session = PromptSession(history=q_history) # session created early
+    # Pass the defined style to the PromptSession
+    session = PromptSession(history=q_history, style=prompt_style)
     kb = KeyBindings()
 
     def _parse_history_entry_for_fzf(timestamp_line: str, command_line: str) -> Optional[Tuple[str, str]]:
@@ -127,11 +139,13 @@ async def get_user_input(console: RichConsole) -> str:
             console.print(f"[error]Error running fzf: {e}[/error]")
             console.print("[info]Ensure 'fzf' executable is installed and in your PATH.[/info]")
 
-    prompt_message_html = HTML('<style fg="ansicyan" bold="true">Q⏵ </style>')
+    # Use a list of (style_class, text) tuples for the prompt message
+    # This allows "class:prompt" to be styled by `prompt_style`
+    prompt_message = [("class:prompt", "Q⏵ ")]
     
     user_input = await asyncio.to_thread(
         session.prompt,
-        prompt_message_html,
+        prompt_message, # Pass the new prompt_message
         key_bindings=kb 
     )
     return user_input
