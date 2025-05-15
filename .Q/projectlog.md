@@ -267,9 +267,46 @@
         *   Reads the file content using `utf-8` encoding.
         *   Returns the file content as a string.
         *   Includes error handling for `FileNotFoundError` and `IOError`, printing an error message and returning `None` in case of an error.
+3.  **Tool Integration (`src/qx/core/llm.py`):**
+    *   Imported `read_file` from `..tools.read_file`.
+    *   Registered `read_file` in the `tools` list during `Agent` initialization.
+    *   Added a console message confirming successful agent initialization with the tool.
+
 
 **Next Steps:**
 
-*   Integrate the `read_file` tool with the PydanticAI agent.
+*   Implement conversation history.
+*   Add unit tests for the `read_file` tool.
+*   Commit the changes.
+
+---
+
+## Sprint 10: Implement Conversation History
+
+**Date:** 2024-07-18
+
+**Objective:** Modify the application to maintain conversation history throughout the main loop.
+
+**Tasks Completed:**
+
+1.  **`src/qx/core/llm.py` Update:**
+    *   Imported `List`, `Optional` from `typing`, and `ModelMessage`, `AsyncRunResult` from `pydantic_ai.messages` and `pydantic_ai.runners` respectively for type hinting.
+    *   Modified `query_llm` function:
+        *   Added `message_history: Optional[List[ModelMessage]] = None` as a parameter.
+        *   Passed `message_history` to `agent.run()`.
+        *   Changed return type to `Optional[AsyncRunResult]` to return the full result object.
+        *   Updated docstrings and error handling to reflect changes.
+
+2.  **`src/qx/main.py` Update:**
+    *   Imported `List`, `Optional` from `typing` and `ModelMessage` from `pydantic_ai.messages` for type hinting.
+    *   In `_async_main` function:
+        *   Initialized `current_message_history: Optional[List[ModelMessage]] = None` before the main loop.
+        *   Passed `current_message_history` to `query_llm`.
+        *   Updated `current_message_history = run_result.new_messages()` after a successful call to `query_llm`.
+        *   Adjusted logic to handle the `AsyncRunResult` object returned by `query_llm` and print `run_result.output`.
+        *   Updated error handling for cases where `query_llm` might return `None`.
+
+**Next Steps:**
+
 *   Add unit tests for the `read_file` tool.
 *   Commit the changes.

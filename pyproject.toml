@@ -5,7 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "pydantic-ai>=0.2.3",
+    "pydantic-ai>=0.2.4",
     "python-dotenv>=1.1.0",
     "prompt-toolkit>=3.0.0",
 ]
@@ -21,3 +21,8 @@ qx = "qx.main:main"  # Corrected: points to 'qx.main'
 # It will find the 'qx' package there.
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[dependency-groups]
+dev = [
+    "ipython>=9.2.0",
+]

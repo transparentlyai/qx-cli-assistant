@@ -1,6 +1,12 @@
 import os
+from typing import List, Optional
 from pydantic_ai import Agent
+from pydantic_ai.messages import ModelMessage # Corrected import path for ModelMessage
+from pydantic_ai.agent import AgentRunResult 
 from rich.console import Console
+
+# Import the read_file tool
+from ..tools.read_file import read_file
 
 console = Console()
 
@@ -8,7 +14,7 @@ def initialize_llm_agent():
     """
     Initializes the PydanticAI LLM agent.
 
-    Retrieves model configuration from environment variables.
+    Retrieves model configuration from environment variables and registers tools.
 
     Returns:
         An initialized Agent instance or None if initialization fails.
@@ -28,28 +34,37 @@ def initialize_llm_agent():
         console.print("[bold yellow]LLM Warning: QX_VERTEX_LOCATION not found, relying on PydanticAI/gcloud defaults.[/bold yellow]")
 
     try:
-        agent = Agent(model_name)
+        # Register the read_file tool with the agent
+        agent = Agent(model_name, tools=[read_file])
+        console.print("[green]LLM Agent initialized successfully with read_file tool.[/green]")
         return agent
     except Exception as e:
         console.print(f"[bold red]LLM Error initializing PydanticAI Agent: {e}[/bold red]")
         return None
 
-async def query_llm(agent: Agent, user_input: str):
+async def query_llm(
+    agent: Agent, 
+    user_input: str, 
+    message_history: Optional[List[ModelMessage]] = None
+) -> Optional[AgentRunResult]: 
     """
-    Asynchronously queries the LLM agent with the user's input.
+    Asynchronously queries the LLM agent with the user's input and conversation history.
 
     Args:
         agent: The initialized PydanticAI Agent instance.
         user_input: The input string from the user.
+        message_history: Optional list of previous messages for context.
 
     Returns:
-        The output string from the LLM, or an error message string if an exception occurs.
+        The AgentRunResult object from the agent, or None if an error occurs or agent is not initialized.
     """
     if not agent:
-        return "LLM Agent not initialized. Cannot process query."
+        console.print("[bold red]LLM Error: Agent not initialized. Cannot process query.[/bold red]")
+        return None
     try:
-        result = await agent.run(user_input)
-        return result.output
+        # The agent.run() method returns an AgentRunResult for async non-streaming runs
+        result: AgentRunResult = await agent.run(user_input, message_history=message_history)
+        return result
     except Exception as e:
         console.print(f"[bold red]LLM Error during agent execution: {e}[/bold red]")
-        return f"Error during agent execution: {e}"
+        return None
