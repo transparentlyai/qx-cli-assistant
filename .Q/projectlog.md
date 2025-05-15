@@ -1,6 +1,45 @@
 # Project QX Log
 
-## Session 2024-07-16
+## Session 2024-07-19 (Ongoing)
+**Goal:** Implement selectable Rich CLI themes.
+
+**Activities:**
+
+1.  **Add `DEFAULT_CLI_THEME` Constant:**
+    *   Added `DEFAULT_CLI_THEME = "dark"` to `src/qx/core/constants.py`.
+    *   This sets the default theme if the `CLI_THEME` environment variable is not specified.
+2.  **Implement Theme Loading in `main.py`:**
+    *   Modified `src/qx/main.py` (`_async_main` function).
+    *   Logic added to read the `CLI_THEME` environment variable.
+    *   If `CLI_THEME` is set and valid (exists in `CLI_THEMES` from `constants.py`), it's used.
+    *   If invalid or not set, `DEFAULT_CLI_THEME` is used.
+    *   The global `q_console` instance is re-initialized with the selected `Theme` object.
+    *   Error handling for invalid theme names or issues applying the theme.
+    *   Passed the themed `q_console` instance to `initialize_llm_agent` and `query_llm`.
+3.  **Adapt `llm.py` for Themed Console:**
+    *   Modified `src/qx/core/llm.py`.
+    *   Removed its module-level `q_console`.
+    *   `initialize_llm_agent` and `query_llm` now accept a `console: RichConsole` parameter.
+    *   Internal print statements and `ApprovalManager` instantiation now use the passed-in themed console.
+4.  **Adapt `qprompt.py` for Themed Console:**
+    *   Modified `src/qx/cli/qprompt.py`.
+    *   Ensured `get_user_input` accepts `console: RichConsole`.
+    *   Noted that `prompt_toolkit` handles its own prompt string styling, but the passed console would be used for any other messages printed by this module.
+5.  **Adapt `approvals.py` for Themed Console:**
+    *   Modified `src/qx/core/approvals.py`.
+    *   `ApprovalManager`'s `__init__` accepts `console: Optional[RichConsole]`.
+    *   Updated internal print statements to use semantic styles (e.g., `[warning]`, `[info]`, `[success]`, `[error]`, `[prompt]`) which will be resolved by the theme applied to the console instance.
+
+**Next Steps:**
+
+*   Commit changes.
+*   Thoroughly test theme switching via `CLI_THEME` environment variable and ensure all outputs are styled correctly.
+
+---
+## Previous Sessions
+
+<details>
+<summary>Session 2024-07-16</summary>
 **Goal:** Add Rich CLI themes to constants.
 
 **Activities:**
@@ -14,17 +53,16 @@
     *   Q Agent Action (initial): `read src/qx/core/constants.py`
     *   Q Agent Action (write): Wrote `CLI_THEMES` with keys "dark_background" and "light_background".
     *   User Feedback: Requested keys to be "dark" and "light".
-    *   Q Agent Action (correction): `read src/qx/core/constants.py` (to get the just-written content for modification, though in this case it was a direct re-write based on previous state + new themes).
+    *   Q Agent Action (correction): `read src/qx/core/constants.py`.
     *   Q Agent Action (write): Correctly wrote `CLI_THEMES` with keys "dark" and "light" to `src/qx/core/constants.py`.
     *   Outcome: `src/qx/core/constants.py` updated successfully with the new themes.
+4.  **Commit Theme Constants:**
+    *   Updated `.Q/projectlog.md`.
+    *   Committed changes with hash `aed1e3b`.
 
 **Next Steps:**
-
-*   Commit changes.
-*   Continue development based on user requests.
-
----
-## Previous Sessions
+*   Implement selectable Rich CLI themes.
+</details>
 
 <details>
 <summary>Session 2024-07-15</summary>

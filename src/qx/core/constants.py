@@ -114,6 +114,9 @@ DEFAULT_GROQ_MAX_TOKENS = 8192
 DEFAULT_GROQ_TOKENS_PER_MIN = 300000 # Example TPM (Groq is fast)
 
 
+# --- Rich CLI Theme Configuration ---
+DEFAULT_CLI_THEME = "dark" # Default theme if CLI_THEME env var is not set
+
 # --- Rich CLI Themes ---
 # These themes can be used with Rich Console for consistent styling.
 # Add more themes or customize existing ones as needed.

@@ -9,7 +9,7 @@ from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.models.gemini import GeminiModel
 from pydantic_ai.providers.google_vertex import GoogleVertexProvider
-from rich.console import Console as RichConsole
+from rich.console import Console as RichConsole # Keep for type hinting
 
 from qx.core.approvals import ApprovalManager
 from qx.core.config_manager import load_runtime_configurations
@@ -20,9 +20,7 @@ from qx.tools.write_file import write_file_impl
 # Configure logging for this module
 logger = logging.getLogger(__name__)
 
-# Use a global console instance for this module
-q_console = RichConsole()
-
+# No global q_console here anymore, it will be passed in.
 
 def load_and_format_system_prompt() -> str:
     """
@@ -54,23 +52,24 @@ def load_and_format_system_prompt() -> str:
 def initialize_llm_agent(
     model_name_str: str,
     project_id: Optional[str],
-    location: Optional[str], # Changed back to 'location' to match call site
+    location: Optional[str],
+    console: RichConsole, # Accept console instance
 ) -> Optional[Agent]:
     """
     Initializes the Pydantic-AI Agent.
     The 'location' parameter is used as 'region' for GoogleVertexProvider.
     """
-    q_console.print("Initializing LLM Agent...", style="blue")
-    load_runtime_configurations()
+    console.print("Initializing LLM Agent...", style="info") # Use themed style
+    # load_runtime_configurations() is called in main.py before this
     system_prompt_content = load_and_format_system_prompt()
-    approval_manager = ApprovalManager(console=q_console)
+    approval_manager = ApprovalManager(console=console) # Pass console to ApprovalManager
 
     def approved_read_file_tool(path: str) -> Optional[str]:
         approved, final_path = approval_manager.request_approval(
             "Read file", path, allow_modify=False
         )
         if not approved:
-            q_console.print(f"File read denied: {final_path}", style="yellow")
+            console.print(f"File read denied: {final_path}", style="warning")
             return f"Error: File read operation denied by user for: {final_path}"
         return read_file_impl(final_path)
 
@@ -79,7 +78,7 @@ def initialize_llm_agent(
             "Write file", path, content_preview=content, allow_modify=False
         )
         if not approved:
-            q_console.print(f"File write denied: {final_path}", style="yellow")
+            console.print(f"File write denied: {final_path}", style="warning")
             return False
         return write_file_impl(final_path, content)
 
@@ -88,7 +87,7 @@ def initialize_llm_agent(
             "Execute shell command", command, allow_modify=True
         )
         if not approved:
-            q_console.print(f"Shell execution denied: {final_command}", style="yellow")
+            console.print(f"Shell execution denied: {final_command}", style="warning")
             return {
                 "stdout": "", "stderr": "Operation denied by user.",
                 "returncode": -1, "error": "Operation denied by user.",
@@ -109,8 +108,8 @@ def initialize_llm_agent(
         provider_config = {}
         if project_id:
             provider_config['project_id'] = project_id
-        if location: # Use the 'location' parameter here
-            provider_config['region'] = location # Pass 'location' as 'region' to the provider
+        if location:
+            provider_config['region'] = location
 
         gemini_model_instance = GeminiModel(
             model_name=actual_model_name,
@@ -124,27 +123,28 @@ def initialize_llm_agent(
         )
         
         tool_names = [tool.__name__ for tool in registered_tools]
-        q_console.print(
-            f"LLM Agent initialized: [bold cyan]{model_name_str}[/bold cyan] "
-            f"Tools: [bold cyan]{', '.join(tool_names)}[/bold cyan].",
-            style="green",
+        console.print(
+            f"LLM Agent initialized: [info]{model_name_str}[/] " # Use themed style
+            f"Tools: [info]{', '.join(tool_names)}[/].", # Use themed style
+            style="success", # Use themed style
         )
         return agent
     except Exception as e:
         logger.error(f"Failed to initialize Pydantic-AI Agent: {e}", exc_info=True)
-        q_console.print(f"[bold red]Error:[/bold red] Init LLM Agent: {e}")
+        console.print(f"[error]Error:[/] Init LLM Agent: {e}") # Use themed style
         return None
 
 
 async def query_llm(
     agent: Agent,
     user_input: str,
+    console: RichConsole, # Accept console instance
     message_history: Optional[List[ModelMessage]] = None,
 ) -> Optional[Any]:
     """
     Queries the LLM agent. Assumes agent.run() is a coroutine.
     """
-    q_console.print("\nQX is thinking...", style="italic green")
+    console.print("\nQX is thinking...", style="info") # Use themed style (e.g. "italic green" or similar)
     try:
         if message_history:
             result = await agent.run(user_input, message_history=message_history)
@@ -153,5 +153,5 @@ async def query_llm(
         return result
     except Exception as e:
         logger.error(f"Error during LLM query: {e}", exc_info=True)
-        q_console.print(f"[bold red]Error:[/bold red] LLM query: {e}")
+        console.print(f"[error]Error:[/] LLM query: {e}") # Use themed style
         return None
