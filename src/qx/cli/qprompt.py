@@ -110,7 +110,7 @@ if __name__ == '__main__':
         if not Q_HISTORY_FILE.exists() or Q_HISTORY_FILE.stat().st_size == 0:
              with open(Q_HISTORY_FILE, "w", encoding="utf-8") as f:
                 f.write("ls -la\\n")
-                f.write("echo \\"hello world\\"\\n")
+                f.write('echo "hello world"\\n') # Corrected line
                 f.write("git status\\n")
                 f.write("python script.py --arg value\\n")
         
