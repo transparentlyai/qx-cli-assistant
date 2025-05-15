@@ -205,3 +205,25 @@
 *   Run `uv sync` to ensure the project configuration is updated.
 *   Test the script installation (e.g., by building a wheel and installing it).
 *   Continue with planned development.
+
+---
+
+## Sprint 8: Create Executable Launcher Script
+
+**Date:** 2024-07-17
+
+**Objective:** Create an executable script `bin/qx` to launch the application.
+
+**Tasks Completed:**
+
+1.  **Script Creation (`bin/qx`):**
+    *   Created a new bash script `bin/qx`.
+    *   The script changes to the project root directory.
+    *   It uses `uv run python src/main.py "$@"` to execute the application, passing along any command-line arguments.
+2.  **Permissions:**
+    *   Made `bin/qx` executable using `chmod +x bin/qx`.
+
+**Next Steps:**
+
+*   Commit the new script and log updates.
+*   Continue with planned development.

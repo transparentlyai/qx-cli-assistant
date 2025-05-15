@@ -10,5 +10,5 @@ dependencies = [
     "prompt-toolkit>=3.0.0", # Added prompt-toolkit
 ]
 
-[tool.setuptools]
-script-files = ["bin/qx"]
+[project.scripts]
+qx = "src.main:main"

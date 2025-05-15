@@ -1,23 +1,22 @@
 #!/usr/bin/env bash
 
-# Get the directory where the script is located.
-# This ensures the script works correctly even if called from a different directory
-# or via a symlink.
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+# Exit immediately if a command exits with a non-zero status.
+set -e
 
-# The project root is assumed to be the parent directory of the 'bin' directory
-# where this script resides (e.g., if script is in /path/to/project/bin,
-# project root is /path/to/project).
-PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
+# Get the directory where this script is located.
+# This ensures that the script can be run from anywhere.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 
-# Navigate to the project root. This is important so that `uv run`
-# and the Python script itself can find project files (e.g., pyproject.toml, src/)
-# relative to the project root.
-cd "$PROJECT_ROOT" || { echo "Error: Could not change to project root directory: $PROJECT_ROOT"; exit 1; }
+# The project root is assumed to be the parent directory of the SCRIPT_DIR.
+# (e.g., if script is in project_root/bin/, then project_root is ../)
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-# Execute the main Python application (src/main.py) using 'uv run'.
-# 'uv run' ensures that the command is executed within the project's
-# managed Python environment, with all dependencies available as per pyproject.toml.
-# "$@" passes all command-line arguments received by this script (bin/qx)
-# to the src/main.py script.
+# Change to the project root directory. This is important for relative paths in the Python code
+# and for uv to find the pyproject.toml.
+cd "$PROJECT_ROOT"
+
+# Execute the main QX application using 'uv run'.
+# 'uv run' executes a command within the project's virtual environment.
+# 'python src/main.py' is the command to start the application.
+# '"$@"' passes all command-line arguments received by this script to main.py.
 uv run python src/main.py "$@"
