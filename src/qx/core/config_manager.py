@@ -4,7 +4,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from .constants import DEFAULT_TREE_IGNORE_PATTERNS # Corrected relative import
+from qx.core.constants import DEFAULT_TREE_IGNORE_PATTERNS # Corrected absolute import
 
 # Determine USER_HOME_DIR dynamically at runtime
 USER_HOME_DIR = Path.home().resolve()
