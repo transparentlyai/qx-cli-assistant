@@ -1,32 +1,23 @@
-#!/usr/bin/env python3
-import os
-import sys
-import runpy
+#!/usr/bin/env bash
 
-def main():
-    # Get the absolute path of the directory containing this script (bin/)
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    # Get the project root directory (one level up from bin/)
-    project_root = os.path.dirname(script_dir)
-    # Construct the path to the src directory
-    src_dir = os.path.join(project_root, 'src')
+# Get the directory where the script is located.
+# This ensures the script works correctly even if called from a different directory
+# or via a symlink.
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 
-    # Add project_root to the Python path to allow imports like 'from src.core import ...'
-    # and also src_dir for direct imports from main.py if it expects 'import core'
-    sys.path.insert(0, project_root)
-    sys.path.insert(1, src_dir) # Insert after project_root
+# The project root is assumed to be the parent directory of the 'bin' directory
+# where this script resides (e.g., if script is in /path/to/project/bin,
+# project root is /path/to/project).
+PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
 
-    # Path to the main module/script
-    # main.py is inside the src directory
-    main_script_path = os.path.join(src_dir, 'main.py')
+# Navigate to the project root. This is important so that `uv run`
+# and the Python script itself can find project files (e.g., pyproject.toml, src/)
+# relative to the project root.
+cd "$PROJECT_ROOT" || { echo "Error: Could not change to project root directory: $PROJECT_ROOT"; exit 1; }
 
-    # Set necessary environment variables or configurations if needed
-    # For example, if main.py relies on being in a specific CWD:
-    # os.chdir(project_root)
-
-    # runpy.run_path executes the code in a module-like environment.
-    # It sets __name__ to '__main__', __file__ to main_script_path, etc.
-    runpy.run_path(main_script_path, run_name="__main__")
-
-if __name__ == "__main__":
-    main()
+# Execute the main Python application (src/main.py) using 'uv run'.
+# 'uv run' ensures that the command is executed within the project's
+# managed Python environment, with all dependencies available as per pyproject.toml.
+# "$@" passes all command-line arguments received by this script (bin/qx)
+# to the src/main.py script.
+uv run python src/main.py "$@"

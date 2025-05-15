@@ -186,26 +186,3 @@
 *   Review code for any further cleanup opportunities.
 *   Continue with planned development.
 
----
-
-## Sprint 7: Add Project Entry Point
-
-**Date:** 2024-07-17
-
-**Objective:** Create a root-level entry point script for the QX application.
-
-**Tasks Completed:**
-
-1.  **Entry Point Script (`qx.py`):**
-    *   Created `qx.py` in the project root directory.
-    *   The script uses `runpy.run_module("main", run_name="__main__", alter_sys=True)` to execute `src/main.py`.
-    *   It dynamically adds the `src` directory to `sys.path` to ensure the `main` module can be found.
-    *   Includes error handling for `ModuleNotFoundError` and other exceptions during module execution.
-
-2.  **Permissions:**
-    *   Made `qx.py` executable using `chmod +x qx.py`.
-
-**Next Steps:**
-
-*   Test the application using `./qx.py`.
-*   Continue with planned development.
