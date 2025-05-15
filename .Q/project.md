@@ -16,3 +16,4 @@
 - use the existing pyproject.toml file for package management.
 - at the start of every session read the .Q/projectlog.md file for the latest updates and context.
 - if you need to create temporary scirpts, files, ad other artifacts,use the tmp directory.
+- do not use relative imports 

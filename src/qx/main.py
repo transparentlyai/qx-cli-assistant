@@ -1,114 +1,128 @@
 import asyncio
+import logging
 import os
-from typing import List, Optional
+import sys
 
-from pydantic_ai.agent import AgentRunResult
-from pydantic_ai.messages import ModelMessage
-from rich.console import Console
+from rich.console import Console as RichConsole
+from rich.panel import Panel
+from rich.text import Text
 
 from qx.cli.qprompt import get_user_input
 from qx.core.config_manager import load_runtime_configurations
+from qx.core.constants import DEFAULT_MODEL, DEFAULT_VERTEXAI_LOCATION
 from qx.core.llm import initialize_llm_agent, query_llm
+from pydantic_ai.messages import ModelMessage # For type hinting message history
+from typing import List, Optional, Any # For AgentRunResult type hint
 
-# Load all runtime configurations, including .env files
-load_runtime_configurations()
+# Configure logging for the application
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger("qx")
 
-# Get environment variables for display and initial checks
-# These are now fetched *after* load_runtime_configurations has run
-model_name_env = os.getenv("QX_MODEL_NAME")
-vertex_project_id_env = os.getenv("QX_VERTEX_PROJECT_ID")
-vertex_location_env = os.getenv("QX_VERTEX_LOCATION")
-
-# Initialize Rich Console for better output
-console = Console()
+# Global console instance
+q_console = RichConsole()
 
 
 async def _async_main():
-    """
-    Core asynchronous logic for the QX agent.
-    """
-    if not model_name_env:
-        console.print(
-            "[bold red]Error: QX_MODEL_NAME environment variable not set.[/bold red]"
+    """Asynchronous main function to handle the QX agent logic."""
+    q_console.print(
+        Panel(
+            Text("Welcome to QX - Your AI Coding Agent by Transparently.AI", justify="center"),
+            title="QX Agent",
+            border_style="bold blue",
         )
-        return
-
-    if not vertex_project_id_env:
-        console.print(
-            "[bold red]Error: QX_VERTEX_PROJECT_ID environment variable not set.[/bold red]"
-        )
-        return
-
-    if not vertex_location_env:
-        console.print(
-            "[bold red]Error: QX_VERTEX_LOCATION environment variable not set.[/bold red]"
-        )
-        return
-
-    agent = initialize_llm_agent()
-    if not agent:
-        return
-
-    console.print(f"[green]QX Agent initialized with model: {model_name_env}[/green]")
-    console.print(
-        f"[blue]Using Vertex AI Project: {vertex_project_id_env}, Location: {vertex_location_env}[/blue]"
     )
-    console.print("\nWelcome to QX! Type 'exit' or 'quit' to end the session.")
+
+    load_runtime_configurations()
+    # This variable holds the full model string, e.g., "google-vertex:gemini-2.0-flash"
+    model_name_from_env = os.environ.get("QX_MODEL_NAME", DEFAULT_MODEL)
+    project_id = os.environ.get("QX_VERTEX_PROJECT_ID")
+    location = os.environ.get("QX_VERTEX_LOCATION", DEFAULT_VERTEXAI_LOCATION if project_id else None)
+
+    if not model_name_from_env:
+        q_console.print(
+            "[bold red]Critical Error:[/bold red] QX_MODEL_NAME missing."
+        )
+        sys.exit(1)
+
+    if project_id and not location:
+        q_console.print(
+            f"[yellow]Warning:[/yellow] QX_VERTEX_PROJECT_ID ('{project_id}') set, "
+            f"but QX_VERTEX_LOCATION is not. Using default: '{DEFAULT_VERTEXAI_LOCATION}'.",
+        )
+        location = DEFAULT_VERTEXAI_LOCATION
+
+    q_console.print(f"Using Model: [cyan]{model_name_from_env}[/cyan]")
+    if project_id:
+        q_console.print(f"Vertex AI Project ID: [cyan]{project_id}[/cyan]")
+        q_console.print(f"Vertex AI Location: [cyan]{location}[/cyan]")
+
+    agent = initialize_llm_agent(
+        model_name_str=model_name_from_env,
+        project_id=project_id,
+        location=location,
+    )
+
+    if agent is None:
+        q_console.print(
+            "[bold red]Critical Error:[/bold red] Failed to initialize LLM agent. Exiting."
+        )
+        sys.exit(1)
 
     current_message_history: Optional[List[ModelMessage]] = None
 
     while True:
         try:
-            user_input = await get_user_input(console)
-
+            user_input = await get_user_input(q_console)
             if user_input.lower() in ["exit", "quit"]:
-                console.print("[yellow]Exiting QX. Goodbye![/yellow]")
+                q_console.print("Exiting QX. Goodbye!", style="blue")
                 break
-
             if not user_input.strip():
                 continue
 
-            console.print("[italic yellow]QX is thinking...[/italic yellow]")
-
-            run_result: Optional[AgentRunResult] = await query_llm(
+            run_result: Optional[Any] = await query_llm(
                 agent, user_input, message_history=current_message_history
             )
 
             if run_result:
-                console.print(f"\n[bold green]QX:[/bold green] {run_result.output}\n")
-                # Use all_messages() to accumulate the entire conversation history
-                current_message_history = run_result.all_messages()
+                q_console.print("\n[bold magenta]QX:[/bold magenta]")
+                if hasattr(run_result, 'output'):
+                    q_console.print(run_result.output)
+                    if hasattr(run_result, 'all_messages'):
+                        current_message_history = run_result.all_messages()
+                    else:
+                        logger.warning("run_result is missing 'all_messages' attribute.")
+                else:
+                    logger.error(f"run_result is missing 'output' attribute. run_result type: {type(run_result)}, value: {run_result}")
+                    q_console.print("[bold red]Error:[/bold red] Unexpected response structure from LLM.")
+
             else:
-                console.print(
-                    f"\n[bold red]QX Error:[/bold red] Failed to get a response from the LLM.\n"
+                q_console.print(
+                    "[yellow]Info:[/yellow] No response generated or an error occurred.",
+                    style="yellow"
                 )
-                # Optionally, decide how to handle history on error (e.g., reset or keep)
-                # current_message_history = None
 
         except KeyboardInterrupt:
-            console.print("\n[yellow]Interrupted. Exiting QX. Goodbye![/yellow]")
-            break
-        except EOFError:
-            console.print("\n[yellow]Exiting QX (EOF). Goodbye![/yellow]")
+            q_console.print("\nExiting QX due to user interruption. Goodbye!", style="blue")
             break
         except Exception as e:
-            console.print(
-                f"[bold red]An unexpected error occurred in main loop: {e}[/bold red]"
-            )
+            logger.error(f"An unexpected error occurred in the main loop: {e}", exc_info=True)
+            q_console.print(f"[bold red]Critical Error:[/bold red] An unexpected error occurred: {e}")
             break
 
 
 def main():
-    """
-    Main synchronous entry point function to run the QX agent.
-    This function initializes and runs the asyncio event loop.
-    """
+    """Synchronous entry point that runs the asyncio event loop."""
     try:
         asyncio.run(_async_main())
-    except KeyboardInterrupt:
-        console.print("\n[yellow]QX terminated by user.[/yellow]")
     except Exception as e:
-        console.print(f"[bold red]Critical error running QX: {e}[/bold red]")
+        logger.critical(f"Critical error running QX: {e}", exc_info=True)
+        q_console.print(f"[bold red]Critical error running QX:[/bold red] {e}")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        q_console.print("\nQX terminated by user.", style="blue")
+        sys.exit(0)
 
 
 if __name__ == "__main__":
