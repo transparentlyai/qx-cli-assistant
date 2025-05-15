@@ -9,7 +9,7 @@ from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.models.gemini import GeminiModel
 from pydantic_ai.providers.google_vertex import GoogleVertexProvider
-from rich.console import Console as RichConsole # Keep for type hinting
+from rich.console import Console as RichConsole
 
 from qx.core.approvals import ApprovalManager
 from qx.core.config_manager import load_runtime_configurations
@@ -19,8 +19,6 @@ from qx.tools.write_file import write_file_impl
 
 # Configure logging for this module
 logger = logging.getLogger(__name__)
-
-# No global q_console here anymore, it will be passed in.
 
 def load_and_format_system_prompt() -> str:
     """
@@ -53,16 +51,17 @@ def initialize_llm_agent(
     model_name_str: str,
     project_id: Optional[str],
     location: Optional[str],
-    console: RichConsole, # Accept console instance
+    console: RichConsole,
+    approval_manager: ApprovalManager, # Accept ApprovalManager instance
 ) -> Optional[Agent]:
     """
     Initializes the Pydantic-AI Agent.
     The 'location' parameter is used as 'region' for GoogleVertexProvider.
+    The 'approval_manager' is used for tool approval.
     """
-    console.print("Initializing LLM Agent...", style="info") # Use themed style
-    # load_runtime_configurations() is called in main.py before this
+    console.print("Initializing LLM Agent...", style="info")
     system_prompt_content = load_and_format_system_prompt()
-    approval_manager = ApprovalManager(console=console) # Pass console to ApprovalManager
+    # approval_manager is now passed in, no need to create it here.
 
     def approved_read_file_tool(path: str) -> Optional[str]:
         approved, final_path = approval_manager.request_approval(
@@ -124,27 +123,27 @@ def initialize_llm_agent(
         
         tool_names = [tool.__name__ for tool in registered_tools]
         console.print(
-            f"LLM Agent initialized: [info]{model_name_str}[/] " # Use themed style
-            f"Tools: [info]{', '.join(tool_names)}[/].", # Use themed style
-            style="success", # Use themed style
+            f"LLM Agent initialized: [info]{model_name_str}[/] "
+            f"Tools: [info]{', '.join(tool_names)}[/].",
+            style="success",
         )
         return agent
     except Exception as e:
         logger.error(f"Failed to initialize Pydantic-AI Agent: {e}", exc_info=True)
-        console.print(f"[error]Error:[/] Init LLM Agent: {e}") # Use themed style
+        console.print(f"[error]Error:[/] Init LLM Agent: {e}")
         return None
 
 
 async def query_llm(
     agent: Agent,
     user_input: str,
-    console: RichConsole, # Accept console instance
+    console: RichConsole,
     message_history: Optional[List[ModelMessage]] = None,
 ) -> Optional[Any]:
     """
     Queries the LLM agent. Assumes agent.run() is a coroutine.
     """
-    console.print("\nQX is thinking...", style="info") # Use themed style (e.g. "italic green" or similar)
+    console.print("\nQX is thinking...", style="info")
     try:
         if message_history:
             result = await agent.run(user_input, message_history=message_history)
@@ -153,5 +152,5 @@ async def query_llm(
         return result
     except Exception as e:
         logger.error(f"Error during LLM query: {e}", exc_info=True)
-        console.print(f"[error]Error:[/] LLM query: {e}") # Use themed style
+        console.print(f"[error]Error:[/] LLM query: {e}")
         return None
