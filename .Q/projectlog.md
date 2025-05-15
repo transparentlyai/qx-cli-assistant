@@ -381,3 +381,30 @@ Using `all_messages()` provides the LLM with the most complete context of the in
 
 *   Update project log.
 *   Commit changes.
+
+---
+## Sprint 11: Resolve Import Errors for Packaged Application (Done)
+
+**Date:** 2024-07-19
+
+**Objective:** Fix `ModuleNotFoundError` related to imports within the `qx` package when the application is run as an installed script.
+
+**Tasks Completed:**
+
+1.  **Initial Problem:**
+    *   A `ModuleNotFoundError: No module named 'src'` occurred in `src/qx/core/config_manager.py` when importing `DEFAULT_TREE_IGNORE_PATTERNS` using `from src.qx.core.constants import ...`. This absolute import style is incorrect when the code is running from within the `src` directory or as part of the `qx` package.
+2.  **First Attempted Fix (Relative Import):**
+    *   Changed the import in `src/qx/core/config_manager.py` to `from .constants import DEFAULT_TREE_IGNORE_PATTERNS`.
+    *   This is a common way to handle intra-package imports and works when Python recognizes `qx.core` as a package.
+3.  **Second Attempted Fix (Absolute Package Import):**
+    *   Based on user feedback preferring absolute imports and further analysis of Python's import mechanism for packages, the import was changed to `from qx.core.constants import DEFAULT_TREE_IGNORE_PATTERNS`.
+    *   This style assumes that the `src` directory is in `sys.path` (often managed by `uv run` or by installing the package) and `qx` is the top-level package being imported from. This is the standard way to perform absolute imports within a package.
+
+**Rationale for `from qx.core.constants ...`:**
+When the project is installed or run in a way that `src` is added to `PYTHONPATH` (or `sys.path`), Python's import system can resolve `qx` as a top-level package. Imports within the `qx` package can then use `qx.` as their base. This is generally more robust for packaged applications compared to relative imports, which can sometimes behave differently depending on how a script is executed.
+
+**Next Steps:**
+
+*   Thoroughly test the application after installation (`uv pip install .`) to ensure all imports resolve correctly.
+*   Update project log.
+*   Commit changes.
