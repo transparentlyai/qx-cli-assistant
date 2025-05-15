@@ -1,11 +1,9 @@
 import os
 from pathlib import Path
-from typing import Optional, Union # Union is already there, Optional might be needed
+from typing import Optional, Union 
 
-# Corrected import for file_operations_base
 from qx.tools.file_operations_base import is_path_allowed
-# Imports for project_root and USER_HOME_DIR determination
-from qx.core.config_manager import _find_project_root, USER_HOME_DIR
+from qx.core.paths import USER_HOME_DIR, _find_project_root # Updated import
 
 def read_file(path_str: str) -> Union[str, None]:
     """
@@ -21,6 +19,7 @@ def read_file(path_str: str) -> Union[str, None]:
     """
     try:
         absolute_path = Path(path_str).resolve()
+        # _find_project_root is now imported from qx.core.paths
         project_root = _find_project_root(str(Path.cwd()))
 
         if not is_path_allowed(absolute_path, project_root, USER_HOME_DIR):

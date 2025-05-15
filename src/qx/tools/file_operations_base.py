@@ -2,12 +2,7 @@
 from pathlib import Path
 from typing import Optional
 
-# Import from qx.core.config_manager - this assumes config_manager.py is correctly structured
-# and _find_project_root, USER_HOME_DIR are available for import.
-# If _find_project_root and USER_HOME_DIR are not meant to be directly imported,
-# this might need adjustment (e.g., pass them as arguments).
-# For now, proceeding with direct import as implied by previous fixes.
-from qx.core.config_manager import _find_project_root, USER_HOME_DIR
+from qx.core.paths import USER_HOME_DIR, _find_project_root # Updated import
 
 
 def is_path_allowed(
