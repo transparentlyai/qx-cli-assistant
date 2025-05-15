@@ -46,7 +46,7 @@
 1.  **Inspected `src/qx/main.py`:**
     *   Reviewed the main application loop in the `_async_main` function.
 
-2.  **Modified `KeyboardInterrupt` Handling in `_async_main`:**
+2.  **Modified `KeyboardInterrupt` Handling in `_async_main` (Attempt 1):**
     *   Updated the `try...except KeyboardInterrupt` block within the main `while True:` loop.
     *   Instead of `break` (which would exit the application), the handler now prints a message ("Operation cancelled. Returning to prompt...") and uses `continue` to proceed to the next loop iteration, effectively re-displaying the input prompt.
     *   Added a check after `get_user_input` to `continue` if an empty string is returned (indicating Ctrl+C during prompt input), preventing further processing of an empty command.
@@ -57,7 +57,20 @@
 *   `src/qx/main.py`: Updated main loop `KeyboardInterrupt` handling.
 *   `.Q/projectlog.md`: Updated with session activities.
 
+**Commit:** `c7e4d5f` - fix: Enhance KeyboardInterrupt handling to return to prompt
+
+3.  **Refined `KeyboardInterrupt` Handling for Async Operations (Attempt 2):**
+    *   Identified that `asyncio.run()` cancels the main task (`_async_main`) upon `KeyboardInterrupt`, leading to an `asyncio.CancelledError` within the task.
+    *   Added an `except asyncio.CancelledError:` block within the main `while True:` loop in `_async_main`.
+    *   This handler now also prints a message, optionally resets `current_message_history`, and uses `continue`. This prevents `_async_main` from terminating due to cancellation, which in turn stops `asyncio.run()` from re-raising the `KeyboardInterrupt` that would exit the app.
+    *   The existing `except KeyboardInterrupt:` block in `_async_main` remains as a fallback for synchronous interrupts within the loop, though `asyncio.CancelledError` is the primary mechanism for handling Ctrl+C during `await` calls.
+
+**Files Modified:**
+
+*   `src/qx/main.py`: Added `asyncio.CancelledError` handling to the main loop.
+*   `.Q/projectlog.md`: Updated with session activities.
+
 **Next Steps:**
 
 *   Commit the changes.
-*   Thorough testing of `KeyboardInterrupt` behavior during various application states (e.g., waiting for LLM, during prompt input).
+*   Thorough testing of `KeyboardInterrupt` behavior, especially during long-running asynchronous operations (e.g., LLM "thinking" time).
