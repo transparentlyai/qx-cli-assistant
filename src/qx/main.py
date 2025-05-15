@@ -6,19 +6,20 @@ import sys
 from rich.console import Console as RichConsole
 from rich.panel import Panel
 from rich.text import Text
-from rich.theme import Theme # New import
+from rich.theme import Theme
 
 from qx.cli.qprompt import get_user_input
 from qx.core.config_manager import load_runtime_configurations
-from qx.core.constants import ( # New imports
+from qx.core.constants import (
     DEFAULT_MODEL,
     DEFAULT_VERTEXAI_LOCATION,
     CLI_THEMES,
     DEFAULT_CLI_THEME
 )
 from qx.core.llm import initialize_llm_agent, query_llm
-from pydantic_ai.messages import ModelMessage # For type hinting message history
-from typing import List, Optional, Any # For AgentRunResult type hint
+from qx.core.approvals import ApprovalManager # Import ApprovalManager
+from pydantic_ai.messages import ModelMessage
+from typing import List, Optional, Any
 
 # Configure logging for the application
 logging.basicConfig(
@@ -32,11 +33,10 @@ q_console = RichConsole()
 
 async def _async_main():
     """Asynchronous main function to handle the QX agent logic."""
-    global q_console # Allow reassignment of the global console instance
+    global q_console
 
-    load_runtime_configurations() # Loads env vars including CLI_THEME
+    load_runtime_configurations()
 
-    # --- Theme Loading Logic ---
     theme_name_from_env = os.getenv("CLI_THEME")
     selected_theme_name = DEFAULT_CLI_THEME
 
@@ -45,7 +45,6 @@ async def _async_main():
             selected_theme_name = theme_name_from_env
             logger.info(f"Using CLI theme from environment variable: {selected_theme_name}")
         else:
-            # Use the initial q_console for this warning, as the themed one isn't ready
             q_console.print(
                 f"[yellow]Warning:[/yellow] CLI_THEME environment variable '{theme_name_from_env}' is invalid. "
                 f"Available themes: {list(CLI_THEMES.keys())}. "
@@ -55,7 +54,6 @@ async def _async_main():
                 f"CLI_THEME environment variable '{theme_name_from_env}' is invalid. "
                 f"Falling back to default theme: {DEFAULT_CLI_THEME}."
             )
-            # selected_theme_name remains DEFAULT_CLI_THEME
     else:
         logger.info(f"Using default CLI theme: {selected_theme_name}")
 
@@ -69,34 +67,33 @@ async def _async_main():
             f"Selected theme '{selected_theme_name}' not found in CLI_THEMES. "
             f"Using basic console."
         )
-        # q_console remains as initially defined (basic RichConsole)
     else:
         try:
             rich_theme_obj = Theme(final_theme_dict)
-            q_console = RichConsole(theme=rich_theme_obj) # Reassign global q_console with the theme
+            q_console = RichConsole(theme=rich_theme_obj)
             logger.info(f"Successfully applied CLI theme: {selected_theme_name}")
         except Exception as e:
             q_console.print(f"[bold red]Error applying theme '{selected_theme_name}': {e}. Using basic console.[/bold red]")
             logger.error(f"Error applying theme '{selected_theme_name}': {e}. Using basic console.", exc_info=True)
-            # q_console remains as initially defined (basic RichConsole)
-    # --- End Theme Loading Logic ---
+
+    # Instantiate ApprovalManager after the console is potentially themed
+    approval_manager = ApprovalManager(console=q_console)
 
     q_console.print(
         Panel(
             Text("Welcome to QX - Your AI Coding Agent by Transparently.AI", justify="center"),
             title="QX Agent",
-            border_style="title", # Use a theme-defined style if available, or Rich default
+            border_style="title",
         )
     )
 
-    # This variable holds the full model string, e.g., "google-vertex:gemini-2.0-flash"
     model_name_from_env = os.environ.get("QX_MODEL_NAME", DEFAULT_MODEL)
     project_id = os.environ.get("QX_VERTEX_PROJECT_ID")
     location = os.environ.get("QX_VERTEX_LOCATION", DEFAULT_VERTEXAI_LOCATION if project_id else None)
 
     if not model_name_from_env:
         q_console.print(
-            "[error]Critical Error:[/] QX_MODEL_NAME missing." # Using themed style
+            "[error]Critical Error:[/] QX_MODEL_NAME missing."
         )
         sys.exit(1)
 
@@ -107,7 +104,7 @@ async def _async_main():
         )
         location = DEFAULT_VERTEXAI_LOCATION
 
-    q_console.print(f"Using Model: [info]{model_name_from_env}[/]") # Using themed style
+    q_console.print(f"Using Model: [info]{model_name_from_env}[/]")
     if project_id:
         q_console.print(f"Vertex AI Project ID: [info]{project_id}[/]")
         q_console.print(f"Vertex AI Location: [info]{location}[/]")
@@ -116,7 +113,8 @@ async def _async_main():
         model_name_str=model_name_from_env,
         project_id=project_id,
         location=location,
-        console=q_console # Pass the themed console
+        console=q_console,
+        approval_manager=approval_manager # Pass approval_manager to agent initialization
     )
 
     if agent is None:
@@ -129,9 +127,10 @@ async def _async_main():
 
     while True:
         try:
-            user_input = await get_user_input(q_console) # Pass themed console
+            # Pass both the themed console and the approval_manager to get_user_input
+            user_input = await get_user_input(q_console, approval_manager)
             if user_input.lower() in ["exit", "quit"]:
-                q_console.print("Exiting QX. Goodbye!", style="info") # Using themed style
+                q_console.print("Exiting QX. Goodbye!", style="info")
                 break
             if not user_input.strip():
                 continue
@@ -141,9 +140,9 @@ async def _async_main():
             )
 
             if run_result:
-                q_console.print("\n[title]QX:[/]") # Using themed style
+                q_console.print("\n[title]QX:[/]")
                 if hasattr(run_result, 'output'):
-                    q_console.print(run_result.output) # Output itself is not styled here, LLM provides markup
+                    q_console.print(run_result.output)
                     if hasattr(run_result, 'all_messages'):
                         current_message_history = run_result.all_messages()
                     else:
@@ -151,7 +150,6 @@ async def _async_main():
                 else:
                     logger.error(f"run_result is missing 'output' attribute. run_result type: {type(run_result)}, value: {run_result}")
                     q_console.print("[error]Error:[/] Unexpected response structure from LLM.")
-
             else:
                 q_console.print(
                     "[warning]Info:[/] No response generated or an error occurred.",
@@ -167,17 +165,14 @@ async def _async_main():
 
 
 def main():
-    """Synchronous entry point that runs the asyncio event loop."""
-    # Note: q_console used here for critical errors will be the initial, un-themed one
-    # if _async_main fails before theme initialization. This is acceptable.
     try:
         asyncio.run(_async_main())
     except Exception as e:
         logger.critical(f"Critical error running QX: {e}", exc_info=True)
-        q_console.print(f"[bold red]Critical error running QX:[/bold red] {e}") # Fallback style
+        q_console.print(f"[bold red]Critical error running QX:[/bold red] {e}")
         sys.exit(1)
     except KeyboardInterrupt:
-        q_console.print("\nQX terminated by user.", style="info") # Fallback style or initial console
+        q_console.print("\nQX terminated by user.", style="info")
         sys.exit(0)
 
 
