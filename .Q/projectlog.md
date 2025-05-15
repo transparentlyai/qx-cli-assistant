@@ -9,20 +9,29 @@
     *   Modified `src/qx/core/paths.py` to define `Q_CONFIG_DIR` (`~/.config/q`) and `Q_HISTORY_FILE` (`~/.config/q/history`).
 2.  **Ensure Config Directory Exists:**
     *   Modified `src/qx/core/config_manager.py` to create `Q_CONFIG_DIR` if it doesn't exist.
-3.  **Implement `fzf` History Search in `qprompt.py`:**
+3.  **Implement `fzf` History Search in `qprompt.py` (Initial):**
     *   Overhauled `get_user_input` to use `PromptSession` with `FileHistory` and custom `KeyBindings` for `Ctrl-R` to invoke `fzf`.
-4.  **Commit `fzf` History Implementation:**
+4.  **Commit `fzf` History Implementation (Initial):**
     *   Committed changes with hash `a3b8dfd`.
-5.  **Identify and Diagnose `SyntaxError` in `qprompt.py`:**
-    *   User ran `qx` and encountered `SyntaxError: invalid syntax. Perhaps you forgot a comma?` on line `f.write("echo \\"hello world\\"\\n")` in the `if __name__ == '__main__':` block of `src/qx/cli/qprompt.py`.
-    *   Diagnosed that inner double quotes were not properly escaped.
-6.  **Fix `SyntaxError` in `qprompt.py` Test Code:**
-    *   Changed the problematic line to `f.write('echo "hello world"\\n')` using single quotes for the outer string.
+5.  **Identify and Diagnose `SyntaxError` in `qprompt.py` Test Code:**
+    *   User ran `qx` and encountered `SyntaxError`.
+    *   Fixed by changing `f.write("echo \\"hello world\\"\\n")` to `f.write('echo "hello world"\\n')`.
+6.  **Commit `SyntaxError` Fix:**
+    *   Committed changes with hash `33d1ab2`.
+7.  **Refine `fzf` History Display based on Reference:**
+    *   User feedback: `fzf` display should show dates (from `+<timestamp>` lines in history file) and not the `+` prefix itself.
+    *   Modified the `Ctrl-R` handler in `src/qx/cli/qprompt.py`:
+        *   Reads the raw history file.
+        *   Parses lines starting with `+<timestamp>` to extract the timestamp and the following command line.
+        *   Formats the timestamp into a "YYYY-MM-DD HH:MM:SS" string.
+        *   Constructs a list of strings for `fzf` input, each formatted as `"{date_str}  {command}"` or `"{spaces_placeholder}  {command}"` if no timestamp.
+        *   Pipes this processed list to `fzf`.
+        *   When a line is selected from `fzf`, strips the 21-character prefix (date/spaces + two spaces) to get the actual command for the prompt buffer.
 
 **Next Steps:**
 
-*   Commit the `SyntaxError` fix.
-*   Thoroughly test history persistence, `fzf` invocation (`Ctrl-R`), and general application stability.
+*   Commit the refined `fzf` history processing logic.
+*   Thoroughly test history persistence, `fzf` invocation (`Ctrl-R`) with date display, selection, and behavior with mixed (timestamped/non-timestamped) history entries.
 
 ---
 ## Previous Sessions

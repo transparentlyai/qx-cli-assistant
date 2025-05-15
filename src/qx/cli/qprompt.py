@@ -4,6 +4,7 @@ import shlex
 import shutil
 import subprocess
 from pathlib import Path
+from datetime import datetime # New import
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
@@ -30,7 +31,6 @@ async def get_user_input(console: RichConsole) -> str:
         Q_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
     except OSError as e:
         console.print(f"[warning]Warning: Could not create history directory {Q_HISTORY_FILE.parent}: {e}[/warning]")
-        # History will likely fail or be in-memory only if this occurs.
 
     history = FileHistory(str(Q_HISTORY_FILE))
     kb = KeyBindings()
@@ -38,59 +38,82 @@ async def get_user_input(console: RichConsole) -> str:
     @kb.add('c-r')
     def _(event):
         """
-        Handle Ctrl-R: Open fzf with command history.
+        Handle Ctrl-R: Open fzf with command history, formatted with dates.
         """
         if not shutil.which('fzf'):
             console.print("[warning]fzf not found. Ctrl-R history search disabled.[/warning]")
-            # Optionally, could provide a small line to the prompt buffer indicating this.
-            # event.app.current_buffer.insert_text(" # fzf not found")
             return
 
         if not Q_HISTORY_FILE.exists() or Q_HISTORY_FILE.stat().st_size == 0:
-            # console.print("[info]History file is empty or does not exist.[/info]")
-            # No history to search
             return
 
         try:
             fzf_cmd = ['fzf', '--height', '40%', '--reverse', '--tac']
             
-            # Pass history file content to fzf's stdin
-            history_content = Q_HISTORY_FILE.read_text(encoding='utf-8')
+            raw_history_lines = Q_HISTORY_FILE.read_text(encoding='utf-8').splitlines()
+            processed_history_for_fzf = []
             
+            i = 0
+            while i < len(raw_history_lines):
+                line = raw_history_lines[i]
+                if line.startswith('+') and line[1:].isdigit():
+                    try:
+                        timestamp = int(line[1:])
+                        dt_object = datetime.fromtimestamp(timestamp)
+                        date_str = dt_object.strftime("%Y-%m-%d %H:%M:%S")
+                        if i + 1 < len(raw_history_lines):
+                            command = raw_history_lines[i+1]
+                            processed_history_for_fzf.append(f"{date_str}  {command}")
+                            i += 1 # Skip the command line as it's processed
+                        else: # Timestamp without a command, unlikely but handle
+                            processed_history_for_fzf.append(f"{date_str}  ")
+                    except ValueError: # Not a valid timestamp after '+'
+                        # Treat as a normal command line if it wasn't a valid timestamp line
+                        date_placeholder = ' ' * 19 # Length of "YYYY-MM-DD HH:MM:SS"
+                        processed_history_for_fzf.append(f"{date_placeholder}  {line}")
+                else:
+                    # Line is a command without a preceding timestamp (e.g. older history or manually edited)
+                    date_placeholder = ' ' * 19 
+                    processed_history_for_fzf.append(f"{date_placeholder}  {line}")
+                i += 1
+            
+            fzf_input = "\\n".join(processed_history_for_fzf)
+            if not fzf_input.strip(): # No processable history entries
+                return
+
             process = subprocess.run(
                 fzf_cmd,
-                input=history_content,
+                input=fzf_input,
                 capture_output=True,
                 text=True,
-                check=False  # Don't raise for non-zero exit if user cancels fzf
+                check=False
             )
 
-            if process.returncode == 0 and process.stdout: # 0 is success for fzf
-                selected_command = process.stdout.strip()
-                event.app.current_buffer.text = selected_command
-                event.app.current_buffer.cursor_position = len(selected_command)
-            # elif process.returncode == 1: # No match
-                # Do nothing, buffer remains as is
-            # elif process.returncode == 130: # User cancelled fzf (Ctrl-C, Esc)
-                # Do nothing, buffer remains as is
-            elif process.returncode not in [0, 1, 130]: # Other errors
+            if process.returncode == 0 and process.stdout:
+                selected_line_from_fzf = process.stdout.strip()
+                # Strip the date prefix (19 chars for date + 2 spaces = 21 chars)
+                # Ensure the line is long enough before stripping
+                if len(selected_line_from_fzf) > 21:
+                    actual_command = selected_line_from_fzf[21:]
+                else: # Should not happen if formatting is correct, but as a fallback
+                    actual_command = selected_line_from_fzf 
+                event.app.current_buffer.text = actual_command
+                event.app.current_buffer.cursor_position = len(actual_command)
+            elif process.returncode not in [0, 1, 130]:
                 console.print(f"[error]fzf error (code {process.returncode}): {process.stderr.strip()}[/error]")
 
-        except FileNotFoundError: # Should be caught by shutil.which, but as a fallback
+        except FileNotFoundError:
             console.print("[warning]fzf command not found during execution. Ctrl-R history search disabled.[/warning]")
         except Exception as e:
             console.print(f"[error]Error during fzf history search: {e}[/error]")
 
     prompt_message_html = HTML('<style fg="ansicyan" bold="true">Q⏵ </style>')
     
-    # Use PromptSession for history and key bindings
     session = PromptSession(
         history=history,
         key_bindings=kb,
-        # enable_history_search=True, # Standard Ctrl-R, conflicts if we define our own
     )
 
-    # prompt_toolkit's prompt is synchronous, run in a thread.
     user_input = await asyncio.to_thread(
         session.prompt,
         prompt_message_html,
@@ -98,20 +121,24 @@ async def get_user_input(console: RichConsole) -> str:
     return user_input
 
 if __name__ == '__main__':
-    # Example of how to test this module directly
     async def main_test():
         console_for_test = RichConsole()
         print("Testing qprompt. Type Ctrl-R for fzf history (if fzf is installed).")
         print(f"History file will be: {Q_HISTORY_FILE}")
-        # Ensure history dir exists for test
         Q_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
         
-        # Add some dummy history for testing fzf
+        # Add some dummy history for testing fzf, including timestamped entries
+        # Note: FileHistory adds its own timestamps. This is for simulating an existing file.
         if not Q_HISTORY_FILE.exists() or Q_HISTORY_FILE.stat().st_size == 0:
              with open(Q_HISTORY_FILE, "w", encoding="utf-8") as f:
+                # Simulating FileHistory format
+                ts1 = int(datetime.now().timestamp()) - 3600 # An hour ago
+                ts2 = int(datetime.now().timestamp()) - 7200 # Two hours ago
+                f.write(f"+{ts1}\\n")
                 f.write("ls -la\\n")
-                f.write('echo "hello world"\\n') # Corrected line
-                f.write("git status\\n")
+                f.write(f"+{ts2}\\n")
+                f.write('echo "hello world"\\n')
+                f.write("git status # No timestamp for this one\\n") # Older entry without timestamp
                 f.write("python script.py --arg value\\n")
         
         while True:
