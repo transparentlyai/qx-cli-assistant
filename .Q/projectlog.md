@@ -478,3 +478,34 @@ Using absolute imports throughout the package (`from qx.module...`) enhances cla
 
 *   Commit changes.
 *   Continue with other development tasks.
+---
+
+## Sprint 14: Implement Dynamic System Prompt with Environment Variable Substitution (Done)
+
+**Date:** 2024-07-19
+
+**Objective:** Load the system prompt from `src/qx/prompts/system-prompt.md` and substitute placeholders (`{user_context}`, `{project_context}`, `{project_files}`) with corresponding environment variables (`QX_USER_CONTEXT`, `QX_PROJECT_CONTEXT`, `QX_PROJECT_FILES`).
+
+**Tasks Completed:**
+
+1.  **Reviewed `src/qx/prompts/system-prompt.md`**:
+    *   Confirmed placeholders are `{user_context}`, `{project_context}`, and `{project_files}`.
+2.  **Modified `src/qx/core/llm.py`**:
+    *   Created `load_and_format_system_prompt()` function:
+        *   Defines `SYSTEM_PROMPT_TEMPLATE_PATH` relative to `llm.py` to locate `src/qx/prompts/system-prompt.md`.
+        *   Reads the template file.
+        *   Retrieves `QX_USER_CONTEXT`, `QX_PROJECT_CONTEXT`, `QX_PROJECT_FILES` from `os.environ.get()`, defaulting to empty strings if not found.
+        *   Formats the template content by replacing placeholders with the environment variable values.
+        *   Includes error handling for file not found or unreadable, returning a basic default prompt in such cases.
+    *   Updated `initialize_llm_agent()`:
+        *   Calls `load_and_format_system_prompt()` to get the system prompt.
+        *   Passes the formatted system prompt to `pydantic_ai.Agent(system_prompt=...)`.
+        *   Updated success console message to reflect dynamic system prompt loading.
+
+**Rationale:**
+This change allows the system prompt to be dynamically configured with user-specific, project-specific, and file-system-specific information at runtime, providing richer context to the LLM. The environment variables are already populated by `config_manager.py`.
+
+**Next Steps:**
+
+*   Commit changes.
+*   Thoroughly test the application to ensure the system prompt is correctly loaded and formatted.
