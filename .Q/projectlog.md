@@ -18,20 +18,22 @@
     *   Fixed by changing `f.write("echo \\"hello world\\"\\n")` to `f.write('echo "hello world"\\n')`.
 6.  **Commit `SyntaxError` Fix:**
     *   Committed changes with hash `33d1ab2`.
-7.  **Refine `fzf` History Display based on Reference:**
+7.  **Refine `fzf` History Display based on Reference (Attempt 1):**
     *   User feedback: `fzf` display should show dates (from `+<timestamp>` lines in history file) and not the `+` prefix itself.
-    *   Modified the `Ctrl-R` handler in `src/qx/cli/qprompt.py`:
-        *   Reads the raw history file.
-        *   Parses lines starting with `+<timestamp>` to extract the timestamp and the following command line.
-        *   Formats the timestamp into a "YYYY-MM-DD HH:MM:SS" string.
-        *   Constructs a list of strings for `fzf` input, each formatted as `"{date_str}  {command}"` or `"{spaces_placeholder}  {command}"` if no timestamp.
-        *   Pipes this processed list to `fzf`.
-        *   When a line is selected from `fzf`, strips the 21-character prefix (date/spaces + two spaces) to get the actual command for the prompt buffer.
+    *   Modified the `Ctrl-R` handler in `src/qx/cli/qprompt.py` to parse timestamps, format as "YYYY-MM-DD HH:MM:SS", and strip this prefix.
+8.  **Commit Refined `fzf` History (Attempt 1):**
+    *   Committed changes with hash `4347377`.
+9.  **Correct `fzf` History Date Formatting and Stripping:**
+    *   User feedback: Date format in `fzf` should be `[DD Mon HH:MM]` (e.g., `[15 May 18:08]`) and the `+` prefix should not be shown.
+    *   Modified the `Ctrl-R` handler in `src/qx/cli/qprompt.py` again:
+        *   Timestamps are now formatted as `[%d %b %H:%M]`.
+        *   Placeholder for non-timestamped entries is 15 spaces (length of the new date format).
+        *   Prefix stripping from `fzf` selection now correctly removes 17 characters (15 for date/placeholder + 2 spaces).
 
 **Next Steps:**
 
-*   Commit the refined `fzf` history processing logic.
-*   Thoroughly test history persistence, `fzf` invocation (`Ctrl-R`) with date display, selection, and behavior with mixed (timestamped/non-timestamped) history entries.
+*   Commit the corrected `fzf` history date formatting and stripping logic.
+*   Thoroughly test history persistence, `fzf` invocation (`Ctrl-R`) with the new date display, selection, and behavior with mixed history entries.
 
 ---
 ## Previous Sessions
