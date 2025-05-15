@@ -7,8 +7,17 @@ requires-python = ">=3.13"
 dependencies = [
     "pydantic-ai>=0.2.3",
     "python-dotenv>=1.1.0",
-    "prompt-toolkit>=3.0.0", # Added prompt-toolkit
+    "prompt-toolkit>=3.0.0",
 ]
 
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project.scripts]
-qx = "src.main:main"
+qx = "qx.main:main"  # Corrected: points to 'qx.main'
+
+# Add this section to tell setuptools to look for packages in the 'src' directory.
+# It will find the 'qx' package there.
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -4,8 +4,8 @@ import os
 from dotenv import load_dotenv
 from rich.console import Console
 
-from cli.qprompt import get_user_input
-from core.llm import initialize_llm_agent, query_llm
+from .cli.qprompt import get_user_input  # Updated import
+from .core.llm import initialize_llm_agent, query_llm  # Updated import
 
 # Load environment variables from .env file
 load_dotenv()
@@ -97,4 +97,3 @@ if __name__ == "__main__":
         console.print("\n[yellow]QX terminated by user.[/yellow]")
     except Exception as e:
         console.print(f"[bold red]Critical error starting QX: {e}[/bold red]")
-
