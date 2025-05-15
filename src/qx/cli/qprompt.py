@@ -53,6 +53,11 @@ async def get_user_input(console: RichConsole) -> str:
             raw_history_lines = Q_HISTORY_FILE.read_text(encoding='utf-8').splitlines()
             processed_history_for_fzf = []
             
+            # Date format: [DD Mon HH:MM] (e.g., [15 May 18:08]) - length 15
+            date_format_str = "[%d %b %H:%M]"
+            date_placeholder_len = 15 # len("[DD Mon HH:MM]")
+            prefix_strip_len = date_placeholder_len + 2 # 15 for date/placeholder + 2 spaces
+
             i = 0
             while i < len(raw_history_lines):
                 line = raw_history_lines[i]
@@ -60,25 +65,23 @@ async def get_user_input(console: RichConsole) -> str:
                     try:
                         timestamp = int(line[1:])
                         dt_object = datetime.fromtimestamp(timestamp)
-                        date_str = dt_object.strftime("%Y-%m-%d %H:%M:%S")
+                        date_str = dt_object.strftime(date_format_str)
                         if i + 1 < len(raw_history_lines):
                             command = raw_history_lines[i+1]
                             processed_history_for_fzf.append(f"{date_str}  {command}")
                             i += 1 # Skip the command line as it's processed
-                        else: # Timestamp without a command, unlikely but handle
+                        else: 
                             processed_history_for_fzf.append(f"{date_str}  ")
-                    except ValueError: # Not a valid timestamp after '+'
-                        # Treat as a normal command line if it wasn't a valid timestamp line
-                        date_placeholder = ' ' * 19 # Length of "YYYY-MM-DD HH:MM:SS"
+                    except ValueError: 
+                        date_placeholder = ' ' * date_placeholder_len
                         processed_history_for_fzf.append(f"{date_placeholder}  {line}")
                 else:
-                    # Line is a command without a preceding timestamp (e.g. older history or manually edited)
-                    date_placeholder = ' ' * 19 
+                    date_placeholder = ' ' * date_placeholder_len
                     processed_history_for_fzf.append(f"{date_placeholder}  {line}")
                 i += 1
             
             fzf_input = "\\n".join(processed_history_for_fzf)
-            if not fzf_input.strip(): # No processable history entries
+            if not fzf_input.strip(): 
                 return
 
             process = subprocess.run(
@@ -91,11 +94,9 @@ async def get_user_input(console: RichConsole) -> str:
 
             if process.returncode == 0 and process.stdout:
                 selected_line_from_fzf = process.stdout.strip()
-                # Strip the date prefix (19 chars for date + 2 spaces = 21 chars)
-                # Ensure the line is long enough before stripping
-                if len(selected_line_from_fzf) > 21:
-                    actual_command = selected_line_from_fzf[21:]
-                else: # Should not happen if formatting is correct, but as a fallback
+                if len(selected_line_from_fzf) > prefix_strip_len:
+                    actual_command = selected_line_from_fzf[prefix_strip_len:]
+                else: 
                     actual_command = selected_line_from_fzf 
                 event.app.current_buffer.text = actual_command
                 event.app.current_buffer.cursor_position = len(actual_command)
@@ -127,18 +128,15 @@ if __name__ == '__main__':
         print(f"History file will be: {Q_HISTORY_FILE}")
         Q_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
         
-        # Add some dummy history for testing fzf, including timestamped entries
-        # Note: FileHistory adds its own timestamps. This is for simulating an existing file.
         if not Q_HISTORY_FILE.exists() or Q_HISTORY_FILE.stat().st_size == 0:
              with open(Q_HISTORY_FILE, "w", encoding="utf-8") as f:
-                # Simulating FileHistory format
-                ts1 = int(datetime.now().timestamp()) - 3600 # An hour ago
-                ts2 = int(datetime.now().timestamp()) - 7200 # Two hours ago
+                ts1 = int(datetime.now().timestamp()) - 3600 
+                ts2 = int(datetime.now().timestamp()) - 7200 
                 f.write(f"+{ts1}\\n")
                 f.write("ls -la\\n")
                 f.write(f"+{ts2}\\n")
                 f.write('echo "hello world"\\n')
-                f.write("git status # No timestamp for this one\\n") # Older entry without timestamp
+                f.write("git status # No timestamp for this one\\n") 
                 f.write("python script.py --arg value\\n")
         
         while True:
