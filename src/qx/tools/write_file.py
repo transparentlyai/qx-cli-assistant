@@ -1,99 +1,84 @@
+import logging
 import os
 from pathlib import Path
-from typing import Optional 
+from typing import Optional
 
+from qx.core.paths import USER_HOME_DIR, _find_project_root
 from qx.tools.file_operations_base import is_path_allowed
-from qx.core.paths import USER_HOME_DIR, _find_project_root # Updated import
 
-def write_file(path_str: str, content: str) -> bool:
+# Configure logging for this module
+logger = logging.getLogger(__name__)
+
+
+def write_file_impl(path_str: str, content: str) -> bool:
     """
-    Writes content to a file at the specified path,
-    after checking if the path is allowed.
+    Writes content to a file after path validation.
+    This is the core implementation, intended to be called after approval.
 
     Args:
-        path_str: The path to the file (relative or absolute).
+        path_str: The relative or absolute path to the file.
         content: The string content to write to the file.
 
     Returns:
-        True if the file was written successfully, False otherwise.
+        True if the write was successful, False otherwise.
     """
     try:
-        absolute_path = Path(path_str).resolve()
-        # _find_project_root is now imported from qx.core.paths
         project_root = _find_project_root(str(Path.cwd()))
-        parent_dir = absolute_path.parent
+        absolute_path = Path(path_str).resolve()
 
-        # Check if the parent directory is allowed for writing/creation
-        if not is_path_allowed(parent_dir, project_root, USER_HOME_DIR):
-            print(f"Error: Path not allowed for writing (directory creation restricted): {parent_dir}")
-            return False
-
-        # Check if the file path itself is allowed (even if parent is, file might be special)
+        # Check if the target path (and its parent for directory creation) is allowed
         if not is_path_allowed(absolute_path, project_root, USER_HOME_DIR):
-            print(f"Error: Path not allowed for writing: {absolute_path}")
-            return False
+            logger.error(
+                f"Write access denied by policy for path: {absolute_path}. "
+                f"Project root: {project_root}, User home: {USER_HOME_DIR}"
+            )
+            # Consider returning a more descriptive error message if the LLM needs it
+            return False # Or raise an exception / return error string
+
+        # Also check if creating the parent directory is allowed, if it doesn't exist
+        parent_dir = absolute_path.parent
+        if not parent_dir.exists():
+            if not is_path_allowed(parent_dir, project_root, USER_HOME_DIR):
+                logger.error(
+                    f"Write access denied by policy for creating parent directory: {parent_dir}."
+                )
+                return False
 
         # Create parent directories if they don't exist
-        os.makedirs(parent_dir, exist_ok=True)
+        # This check is now implicitly covered by is_path_allowed(parent_dir, ...)
+        # if the parent_dir itself is outside allowed scope.
+        # os.makedirs will fail if it tries to create a dir where it's not allowed.
+        parent_dir.mkdir(parents=True, exist_ok=True)
 
-        with open(absolute_path, 'w', encoding='utf-8') as f:
-            f.write(content)
+        absolute_path.write_text(content, encoding="utf-8")
+        logger.info(f"Successfully wrote to file: {absolute_path}")
         return True
-    except IOError as e:
-        print(f"Error writing file at path {absolute_path}: {e}")
-        return False
+
+    except PermissionError:
+        logger.error(f"Permission denied writing to file: {path_str}")
+    except IsADirectoryError:
+        logger.error(f"Path is a directory, cannot write file: {path_str}")
     except Exception as e:
-        # Catch any other unexpected errors
-        print(f"An unexpected error occurred in write_file: {e}")
-        return False
+        logger.error(f"Error writing file '{path_str}': {e}", exc_info=True)
 
-if __name__ == '__main__':
-    # Example Usage (for testing this module directly)
-    test_project_dir = Path("./temp_test_project_write")
-    test_project_dir.mkdir(exist_ok=True)
-    (test_project_dir / ".git").mkdir(exist_ok=True) # Simulate project root
+    return False
 
-    allowed_file_to_write = test_project_dir / "new_allowed_file.txt"
-    allowed_subdir = test_project_dir / "subdir"
-    allowed_file_in_subdir = allowed_subdir / "another_file.txt"
+if __name__ == "__main__":
+    # Example usage for direct testing
+    # Ensure you have appropriate permissions in /tmp or a test directory
+    # current_dir = Path("/tmp/qx_test_project_write")
+    # current_dir.mkdir(parents=True, exist_ok=True)
+    # (current_dir / ".Q").mkdir(exist_ok=True) # Simulate a project
 
-    dot_q_dir = test_project_dir / ".Q"
-    allowed_file_in_dot_q = dot_q_dir / "q_config.txt"
+    # print(f"Testing write_file_impl from {current_dir}")
+    # test_file_path = current_dir / "test_write.txt"
+    # content_to_write = "Hello from write_file_impl test."
 
+    # print(f"Writing to '{test_file_path}': {write_file_impl(str(test_file_path), content_to_write)}")
+    # if test_file_path.exists():
+    #     print(f"Content of '{test_file_path}': {test_file_path.read_text()}")
+    # else:
+    #     print(f"File '{test_file_path}' was not created.")
 
-    print(f"Current CWD for test: {Path.cwd()}")
-    print(f"USER_HOME_DIR: {USER_HOME_DIR}")
-
-    # Test case 1: Write file within project
-    success1 = write_file(str(allowed_file_to_write), "Content for allowed file.")
-    print(f"Writing {allowed_file_to_write}: {'Success' if success1 else 'Failed'}")
-    if success1 and allowed_file_to_write.exists():
-        print(f"  Content: {allowed_file_to_write.read_text(encoding='utf-8')}")
-
-    # Test case 2: Write file in a new subdirectory within project
-    success2 = write_file(str(allowed_file_in_subdir), "Content for file in subdir.")
-    print(f"Writing {allowed_file_in_subdir}: {'Success' if success2 else 'Failed'}")
-    if success2 and allowed_file_in_subdir.exists():
-        print(f"  Content: {allowed_file_in_subdir.read_text(encoding='utf-8')}")
-
-    # Test case 3: Write file within .Q directory
-    success3 = write_file(str(allowed_file_in_dot_q), "Content for .Q file.")
-    print(f"Writing {allowed_file_in_dot_q}: {'Success' if success3 else 'Failed'}")
-    if success3 and allowed_file_in_dot_q.exists():
-        print(f"  Content: {allowed_file_in_dot_q.read_text(encoding='utf-8')}")
-
-
-    # Test case 4: Attempt to write to a restricted path (e.g., /etc/new_file.txt)
-    restricted_path_write = "/etc/test_qx_write.txt"
-    success4 = write_file(restricted_path_write, "Attempting to write to /etc.")
-    print(f"Writing {restricted_path_write}: {'Success (unexpected)' if success4 else 'Failed (expected)'}")
-
-
-    # Clean up dummy files and directories
-    if allowed_file_to_write.exists(): allowed_file_to_write.unlink()
-    if allowed_file_in_subdir.exists(): allowed_file_in_subdir.unlink()
-    if allowed_subdir.exists(): allowed_subdir.rmdir()
-    if allowed_file_in_dot_q.exists(): allowed_file_in_dot_q.unlink()
-    if dot_q_dir.exists(): dot_q_dir.rmdir() 
-    if (test_project_dir / ".git").exists(): (test_project_dir / ".git").rmdir()
-    if test_project_dir.exists(): test_project_dir.rmdir()
+    # print(f"Attempting to write to a restricted path (e.g., /etc/test_write.txt - should fail): {write_file_impl('/etc/test_write.txt', 'restricted content')}")
+    pass

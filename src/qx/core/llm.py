@@ -1,105 +1,157 @@
+import asyncio
+import functools
+import logging
 import os
-from typing import List, Optional
 from pathlib import Path
+from typing import List, Optional, Any, Dict
+
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage
-from pydantic_ai.agent import AgentRunResult
-from rich.console import Console
+from pydantic_ai.models.gemini import GeminiModel
+from pydantic_ai.providers.google_vertex import GoogleVertexProvider
+from rich.console import Console as RichConsole
 
-from qx.tools.read_file import read_file
-from qx.tools.write_file import write_file
-from qx.tools.execute_shell import execute_shell # New tool import
-from qx.core.paths import _find_project_root
+from qx.core.approvals import ApprovalManager
+from qx.core.config_manager import load_runtime_configurations
+from qx.tools.execute_shell import execute_shell_impl
+from qx.tools.read_file import read_file_impl
+from qx.tools.write_file import write_file_impl
 
-console = Console()
+# Configure logging for this module
+logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT_TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "prompts" / "system-prompt.md"
+# Use a global console instance for this module
+q_console = RichConsole()
+
 
 def load_and_format_system_prompt() -> str:
     """
-    Loads the system prompt template, substitutes placeholders with environment variables,
-    and returns the formatted system prompt.
+    Loads the system prompt from the markdown file and formats it with
+    environment variables.
     """
     try:
-        template_content = SYSTEM_PROMPT_TEMPLATE_PATH.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        console.print(f"[bold red]LLM Error: System prompt template not found at {SYSTEM_PROMPT_TEMPLATE_PATH}[/bold red]")
-        console.print("[bold yellow]LLM Warning: Using a basic default system prompt.[/bold yellow]")
-        return "You are a helpful AI assistant."
+        current_dir = Path(__file__).parent
+        prompt_path = current_dir.parent / "prompts" / "system-prompt.md"
+
+        if not prompt_path.exists():
+            logger.error(f"System prompt file not found at {prompt_path}")
+            return "You are a helpful AI assistant."
+
+        template = prompt_path.read_text(encoding="utf-8")
+        user_context = os.environ.get("QX_USER_CONTEXT", "")
+        project_context = os.environ.get("QX_PROJECT_CONTEXT", "")
+        project_files = os.environ.get("QX_PROJECT_FILES", "")
+
+        formatted_prompt = template.replace("{user_context}", user_context)
+        formatted_prompt = formatted_prompt.replace("{project_context}", project_context)
+        formatted_prompt = formatted_prompt.replace("{project_files}", project_files)
+        return formatted_prompt
     except Exception as e:
-        console.print(f"[bold red]LLM Error: Could not read system prompt template: {e}[/bold red]")
-        console.print("[bold yellow]LLM Warning: Using a basic default system prompt.[/bold yellow]")
+        logger.error(f"Failed to load or format system prompt: {e}", exc_info=True)
         return "You are a helpful AI assistant."
 
-    user_context = os.environ.get("QX_USER_CONTEXT", "")
-    project_context = os.environ.get("QX_PROJECT_CONTEXT", "")
-    project_files = os.environ.get("QX_PROJECT_FILES", "")
 
-    formatted_prompt = template_content.replace("{user_context}", user_context)
-    formatted_prompt = formatted_prompt.replace("{project_context}", project_context)
-    formatted_prompt = formatted_prompt.replace("{project_files}", project_files)
-
-    return formatted_prompt
-
-def initialize_llm_agent():
+def initialize_llm_agent(
+    model_name_str: str,
+    project_id: Optional[str],
+    location: Optional[str], # Changed back to 'location' to match call site
+) -> Optional[Agent]:
     """
-    Initializes the PydanticAI LLM agent.
-
-    Retrieves model configuration from environment variables, loads and formats
-    the system prompt, and registers tools.
-
-    Returns:
-        An initialized Agent instance or None if initialization fails.
+    Initializes the Pydantic-AI Agent.
+    The 'location' parameter is used as 'region' for GoogleVertexProvider.
     """
-    model_name = os.getenv("QX_MODEL_NAME")
-    vertex_project_id = os.getenv("QX_VERTEX_PROJECT_ID")
-    vertex_location = os.getenv("QX_VERTEX_LOCATION")
-
-    if not model_name:
-        console.print("[bold red]LLM Error: QX_MODEL_NAME environment variable not set.[/bold red]")
-        return None
-
-    if not vertex_project_id:
-        console.print("[bold yellow]LLM Warning: QX_VERTEX_PROJECT_ID not found, relying on PydanticAI/gcloud defaults.[/bold yellow]")
-    if not vertex_location:
-        console.print("[bold yellow]LLM Warning: QX_VERTEX_LOCATION not found, relying on PydanticAI/gcloud defaults.[/bold yellow]")
-
+    q_console.print("Initializing LLM Agent...", style="blue")
+    load_runtime_configurations()
     system_prompt_content = load_and_format_system_prompt()
+    approval_manager = ApprovalManager(console=q_console)
+
+    def approved_read_file_tool(path: str) -> Optional[str]:
+        approved, final_path = approval_manager.request_approval(
+            "Read file", path, allow_modify=False
+        )
+        if not approved:
+            q_console.print(f"File read denied: {final_path}", style="yellow")
+            return f"Error: File read operation denied by user for: {final_path}"
+        return read_file_impl(final_path)
+
+    def approved_write_file_tool(path: str, content: str) -> bool:
+        approved, final_path = approval_manager.request_approval(
+            "Write file", path, content_preview=content, allow_modify=False
+        )
+        if not approved:
+            q_console.print(f"File write denied: {final_path}", style="yellow")
+            return False
+        return write_file_impl(final_path, content)
+
+    def approved_execute_shell_tool(command: str) -> Dict[str, Any]:
+        approved, final_command = approval_manager.request_approval(
+            "Execute shell command", command, allow_modify=True
+        )
+        if not approved:
+            q_console.print(f"Shell execution denied: {final_command}", style="yellow")
+            return {
+                "stdout": "", "stderr": "Operation denied by user.",
+                "returncode": -1, "error": "Operation denied by user.",
+            }
+        return execute_shell_impl(final_command)
+
+    registered_tools = [
+        approved_read_file_tool,
+        approved_write_file_tool,
+        approved_execute_shell_tool,
+    ]
 
     try:
-        agent = Agent(
-            model_name,
-            tools=[read_file, write_file, execute_shell], # Added execute_shell
-            system_prompt=system_prompt_content
+        actual_model_name = model_name_str
+        if model_name_str.startswith("google-vertex:"):
+            actual_model_name = model_name_str.split(":", 1)[1]
+        
+        provider_config = {}
+        if project_id:
+            provider_config['project_id'] = project_id
+        if location: # Use the 'location' parameter here
+            provider_config['region'] = location # Pass 'location' as 'region' to the provider
+
+        gemini_model_instance = GeminiModel(
+            model_name=actual_model_name,
+            provider=GoogleVertexProvider(**provider_config) if provider_config else GoogleVertexProvider()
         )
-        console.print("[green]LLM Agent initialized successfully with read_file, write_file, execute_shell tools and dynamic system prompt.[/green]")
+
+        agent = Agent(
+            model=gemini_model_instance,
+            system_prompt=system_prompt_content,
+            tools=registered_tools,
+        )
+        
+        tool_names = [tool.__name__ for tool in registered_tools]
+        q_console.print(
+            f"LLM Agent initialized: [bold cyan]{model_name_str}[/bold cyan] "
+            f"Tools: [bold cyan]{', '.join(tool_names)}[/bold cyan].",
+            style="green",
+        )
         return agent
     except Exception as e:
-        console.print(f"[bold red]LLM Error initializing PydanticAI Agent: {e}[/bold red]")
+        logger.error(f"Failed to initialize Pydantic-AI Agent: {e}", exc_info=True)
+        q_console.print(f"[bold red]Error:[/bold red] Init LLM Agent: {e}")
         return None
+
 
 async def query_llm(
     agent: Agent,
     user_input: str,
-    message_history: Optional[List[ModelMessage]] = None
-) -> Optional[AgentRunResult]:
+    message_history: Optional[List[ModelMessage]] = None,
+) -> Optional[Any]:
     """
-    Asynchronously queries the LLM agent with the user's input and conversation history.
-
-    Args:
-        agent: The initialized PydanticAI Agent instance.
-        user_input: The input string from the user.
-        message_history: Optional list of previous messages for context.
-
-    Returns:
-        The AgentRunResult object from the agent, or None if an error occurs or agent is not initialized.
+    Queries the LLM agent. Assumes agent.run() is a coroutine.
     """
-    if not agent:
-        console.print("[bold red]LLM Error: Agent not initialized. Cannot process query.[/bold red]")
-        return None
+    q_console.print("\nQX is thinking...", style="italic green")
     try:
-        result: AgentRunResult = await agent.run(user_input, message_history=message_history)
+        if message_history:
+            result = await agent.run(user_input, message_history=message_history)
+        else:
+            result = await agent.run(user_input)
         return result
     except Exception as e:
-        console.print(f"[bold red]LLM Error during agent execution: {e}[/bold red]")
+        logger.error(f"Error during LLM query: {e}", exc_info=True)
+        q_console.print(f"[bold red]Error:[/bold red] LLM query: {e}")
         return None

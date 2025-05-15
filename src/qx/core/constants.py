@@ -1,589 +1,229 @@
-"""Constants used throughout the application."""
+# qx/core/constants.py
 
-import os
+# Default model name if not specified by the user
+DEFAULT_MODEL = "gemini-1.5-flash-001" # Example, adjust as needed
 
-# default MARKER !!DO NOT TOUCH!!
-OPERATION_MARKER = "OPERATION"
-
-# Default number of conversation turns to save for session recovery
-DEFAULT_SESSION_TURNS = 10
-
-# Paths
-HOME_DIR = os.path.expanduser("~")
-Q_DIR = os.path.join(HOME_DIR, ".q")
-Q_CONFIG_FILE = os.path.join(Q_DIR, "config.py")
-Q_HISTORY_FILE = os.path.join(Q_DIR, "history.json")
-Q_CONTEXT_FILE = os.path.join(Q_DIR, "context.json")
-
-# Default provider
-DEFAULT_PROVIDER = "anthropic"
-
-# Default model
-DEFAULT_MODEL = "claude-3-7-sonnet-latest"
-
-# Provider-specific defaults
-DEFAULT_OPENAI_MODEL = "gpt-4"
-DEFAULT_OPENAI_TEMPERATURE = 0.1
-DEFAULT_OPENAI_MAX_TOKENS = 8192
-DEFAULT_OPENAI_TOKENS_PER_MIN = 90000  # Default token rate limit for OpenAI
-
-DEFAULT_ANTHROPIC_MODEL = "claude-3-7-sonnet-latest"
-DEFAULT_ANTHROPIC_TEMPERATURE = 0.1
-DEFAULT_ANTHROPIC_MAX_TOKENS = 8192
-DEFAULT_ANTHROPIC_TOKENS_PER_MIN = 100000  # Default token rate limit for Anthropic
-
-DEFAULT_VERTEXAI_MODEL = "gemini-2.5-flash-preview-04-17"
-DEFAULT_VERTEXAI_LOCATION = "us-central1"
-DEFAULT_VERTEXAI_TEMPERATURE = 0.1
-DEFAULT_VERTEXAI_MAX_TOKENS = 65000
-DEFAULT_VERTEXAI_TOKENS_PER_MIN = 2000000  # Default token rate limit for VertexAI
-VERTEXAI_THINKING_BUDGET = 12288 # Does not contain DEFAULT, so remains unchanged
-
-DEFAULT_GROQ_MODEL = "llama3-70b-8192"
-DEFAULT_GROQ_TEMPERATURE = 0.1
-DEFAULT_GROQ_MAX_TOKENS = 8192
-DEFAULT_GROQ_TOKENS_PER_MIN = 200000  # Default token rate limit for Groq
-
-# General LLM defaults
-DEFAULT_TEMPERATURE = 0.1
-DEFAULT_MAX_TOKENS = 8192
-DEFAULT_SYSTEM_PROMPT = ""
-DEFAULT_TOKENS_PER_MIN = 90000  # Default general token rate limit
-
-# Retry settings for LLM calls
-LLM_RETRY_ATTEMPTS = 5
-LLM_RETRY_INITIAL_DELAY = 2
-LLM_RETRY_BACKOFF_FACTOR = 2
-LLM_RETRY_JITTER_MIN = 0.1
-LLM_RETRY_JITTER_MAX = 0.5
-
-# LiteLLM retry settings
-LITELLM_NUM_RETRIES = 5
-LITELLM_RETRY_AFTER = 30
-
-# Default system prompt
-DEFAULT_SYSTEM_PROMPT_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "prompts",
-    "system-prompt.md",
-)
-
-# Shell results prompt
-SHELL_RESULTS_PROMPT_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "prompts",
-    "shell-results.md",
-)
-
-# Import logging constants
-
-# UI colors
-OPEARION_SPINNER_MESSAGE_COLOR = "#9B870C"
-OPEARION_SPINNER_COMMAND_COLOR = "purple"
-
-# Console padding settings
-CONSOLE_LEFT_PADDING = 1
-CONSOLE_RIGHT_PADDING = 1
-
-DEFAULT_PROHIBITED_COMMANDS = [
-    "sudo *",  # General privilege escalation
-    "su *",  # General privilege escalation
-    "chmod 777 *",  # Excessive permissions
-    "chmod -R 777 *",  # Recursive excessive permissions
-    "rm -rf /*",  # Deleting root filesystem
-    "dd if=/dev/zero of=/dev/*",  # Overwriting block devices
-    "> /dev/sda",  # Overwriting specific block device (example)
-    "mkfs.*",  # Formatting filesystems
-    ":(){:|:&};:",  # Fork bomb (resource exhaustion)
-    "mv /* /dev/null",  # Moving root filesystem contents to null
-    "wget * | bash",  # Downloading and executing scripts
-    "curl * | bash",  # Downloading and executing scripts
-    "wget * | sh",  # Downloading and executing scripts
-    "curl * | sh",  # Downloading and executing scripts
-    "*(){ :;};*",  # Shellshock vulnerability pattern
-    "echo * > /etc/passwd",  # Overwriting password file
-    "echo * > /etc/shadow",  # Overwriting shadow password file
-    "rm -rf ~",  # Deleting user's home directory
-    "rm -rf .",  # Deleting current directory (dangerous if in critical path)
-    "find / -delete",  # Find and delete everything from root
-    "find . -delete",  # Find and delete everything from current dir
-    "shred * /dev/*",  # Securely wiping block devices
-    "wipe /dev/*",  # Wiping block devices
-    "fdisk /dev/*",  # Disk partitioning tool (interactive)
-    "parted /dev/*",  # Disk partitioning tool (interactive/scriptable)
-    "gparted /dev/*",  # GUI Disk partitioning tool (can be scripted)
-    "userdel root",  # Attempting to delete root user
-    "groupdel root",  # Attempting to delete root group
-    "passwd -d root",  # Removing root password (security risk)
-    "passwd -l root",  # Locking root account
-    "chown root* /*",  # Changing ownership of root files (potential breakage)
-    "chown -R * /*",  # Recursively changing ownership from root
-    "chattr -i *",  # Removing immutable flag (could allow modification of protected files)
-    "chattr +i /*",  # Making critical files immutable (could break updates/recovery)
-    "reboot",  # System reboot
-    "shutdown *",  # System shutdown/reboot/halt
-    "halt",  # Halting the system
-    "poweroff",  # Powering off the system
-    "init 0",  # Halting the system (runlevel)
-    "init 6",  # Rebooting the system (runlevel)
-    "iptables -F",  # Flushing all firewall rules
-    "iptables -X",  # Deleting all non-default firewall chains
-    "iptables -P INPUT DROP",  # Setting default input policy to DROP (can lock out)
-    "iptables -P FORWARD DROP",  # Setting default forward policy to DROP
-    "iptables -P OUTPUT DROP",  # Setting default output policy to DROP (can break connectivity)
-    "ufw disable",  # Disabling Uncomplicated Firewall
-    "systemctl stop firewalld",  # Stopping firewalld service
-    "systemctl disable firewalld",  # Disabling firewalld service
-    "insmod *",  # Inserting kernel modules
-    "rmmod *",  # Removing kernel modules
-    "modprobe *",  # Kernel module management (loading/unloading)
-    "sysctl *",  # Modifying kernel parameters at runtime
-    "echo * > /proc/sys/*",  # Writing directly to kernel parameters
-    "* | base64 -d | bash",  # Pattern for executing base64 encoded scripts
-    "* | base64 -d | sh",  # Pattern for executing base64 encoded scripts
-    "history -c",  # Clearing command history
-    "echo > ~/.bash_history",  # Clearing bash history file
-    "kill -9 1",  # Attempting to kill init process (PID 1)
-    "pkill init",  # Attempting to kill init process by name
-    "mount -o remount,ro /",  # Remounting root filesystem as read-only (can cause issues)
-    "mount /dev/sd* /mnt; rm -rf /mnt/*",  # Mounting and deleting files
-]
-
-DEFAULT_APPROVED_COMMANDS = [
-    # Basic commands without arguments
-    "ls",  # List directory contents (no args)
-    "ls *",  # List directory contents (with args)
-    "cd",  # Change to home directory (no args)
-    "cd *",  # Change directory (with args)
-    "pwd",  # Print working directory
-    "echo",  # Display empty line (no args)
-    "echo *",  # Display text (with args)
-    "cat",  # Wait for stdin (no args)
-    "cat *",  # Concatenate and display files
-    "head",  # Wait for stdin (no args)
-    "head *",  # Display first part of files
-    "tail",  # Wait for stdin (no args)
-    "tail *",  # Display last part of files
-    "grep",  # Wait for stdin (no args)
-    "grep *",  # Search text using patterns
-    "find",  # Find in current directory (no args)
-    "find *",  # Search for files
-    "mkdir",  # Error but harmless (no args)
-    "mkdir *",  # Create directories
-    "touch",  # Error but harmless (no args)
-    "touch *",  # Change file timestamps / create empty files
-    "cp",  # Error but harmless (no args)
-    "cp *",  # Copy files and directories
-    "mv",  # Error but harmless (no args)
-    "mv *",  # Move/rename files and directories
-    "python --version",  # Check Python version
-    "python -m *",  # Run Python module
-    "python3 --version",  # Check Python 3 version
-    "python3 -m *",  # Run Python 3 module
-    "pip list",  # List installed Python packages
-    "pip show *",  # Show details about Python packages
-    "pip freeze",  # Output installed packages in requirements format
-    "uv list",  # List installed Python packages (using uv)
-    "uv pip list",  # List installed Python packages (using uv)
-    "uv pip show *",  # Show details about Python packages (using uv)
-    "uv pip freeze",  # Output installed packages (using uv)
-    "cloc",  # Count lines of code (current dir)
-    "cloc *",  # Count lines of code
-    "git",  # Show git help (no args)
-    "git *",  # Git version control commands
-    "date",  # Display current date and time
-    "cal",  # Display calendar
-    "uptime",  # Show how long system has been running
-    "whoami",  # Display current user ID
-    "id",  # Display user and group IDs
-    "uname",  # Print system information (no args)
-    "uname *",  # Print system information
-    "df",  # Report file system disk space usage (no args)
-    "df *",  # Report file system disk space usage
-    "du",  # Estimate file space usage (current dir)
-    "du *",  # Estimate file space usage
-    "wc",  # Wait for stdin (no args)
-    "wc *",  # Print newline, word, and byte counts for files
-    "less",  # Wait for stdin (no args)
-    "less *",  # Pager for viewing files (interactive)
-    "more",  # Wait for stdin (no args)
-    "more *",  # Pager for viewing files (interactive)
-    "diff",  # Error but harmless (no args)
-    "diff *",  # Compare files line by line
-    "comm",  # Error but harmless (no args)
-    "comm *",  # Compare two sorted files line by line
-    "sort",  # Wait for stdin (no args)
-    "sort *",  # Sort lines of text files
-    "uniq",  # Wait for stdin (no args)
-    "uniq *",  # Report or omit repeated lines
-    "ps",  # Report process status (no args)
-    "ps *",  # Report process status
-    "top",  # Display system processes (interactive)
-    "env",  # Display environment variables
-    "printenv",  # Print all environment variables (no args)
-    "printenv *",  # Print environment variables
-    "export -p",  # List exported environment variables
-    "man",  # Error but harmless (no args)
-    "man *",  # Display manual pages
-    "info",  # Show info directory (no args)
-    "info *",  # Display command information (GNU)
-    "tldr",  # Show tldr pages index (no args)
-    "tldr *",  # Simplified man pages
-    "* --help",  # Common pattern for command help
-    "stat",  # Error but harmless (no args)
-    "stat *",  # Display file or file system status
-    "which",  # Error but harmless (no args)
-    "which *",  # Locate a command
-    "whereis",  # Error but harmless (no args)
-    "whereis *",  # Locate binary, source, and manual page for command
-    "type",  # Error but harmless (no args)
-    "type *",  # Describe how a command name would be interpreted
-    "history",  # Display command history
-    "clear",  # Clear the terminal screen
-    "ping",  # Error but harmless (no args)
-    "ping *",  # Check network connectivity to a host
-    "ip",  # Show IP commands (no args)
-    "ip *",  # Show / manipulate routing, network devices, interfaces (read-only use like 'ip addr')
-    "ifconfig",  # Show network interfaces (no args)
-    "ifconfig *",  # Configure network interfaces (often used read-only)
-    "netstat",  # Print network connections (no args)
-    "netstat *",  # Print network connections, routing tables, interface stats (read-only options often safe)
-    "ss",  # Display socket statistics (no args)
-    "ss *",  # Socket statistics (modern replacement for netstat, read-only options safe)
-    "host",  # Error but harmless (no args)
-    "host *",  # DNS lookup utility
-    "dig",  # Show dig help (no args)
-    "dig *",  # DNS lookup utility (more detailed)
-    "nslookup",  # Interactive mode (no args)
-    "nslookup *",  # DNS lookup utility (interactive/non-interactive)
-    "tar -tvf *",  # List contents of a tar archive
-    "zipinfo *",  # List detailed information about a ZIP archive
-    "unzip -l *",  # List contents of a ZIP archive
-    "gzip -l *",  # Display compression statistics for gzip files
-    "gunzip -l *",  # Display compression statistics for gzip files (same as gzip -l)
-    "zcat *",  # Display contents of gzipped files
-    "bzcat *",  # Display contents of bzip2 compressed files
-    "xzcat *",  # Display contents of xz compressed files
-    "basename *",  # Strip directory and suffix from filenames
-    "dirname *",  # Strip last component from file name
-    "readlink *",  # Read value of a symbolic link
-    "test *",  # Check file types and compare values (shell builtin)
-    "[ * ]",  # Alternate syntax for 'test' (shell builtin)
-    "alias",  # List defined aliases
-    "jobs",  # List active jobs
-    "file",  # Error but harmless (no args)
-    "file *",  # Determine file type
-]
-
-# File approvals
-DEFAULT_RESTRICTED_PATHS = [
-    # Core System & Configuration
-    "/",  # Root directory itself (access often needed, modification restricted)
-    "/etc/*",  # System-wide configuration files
-    "/boot/*",  # Bootloader files, kernel images
-    "/root/*",  # Home directory of the root user
-    "/sbin/*",  # Essential system binaries (usually admin-only execution)
-    "/usr/sbin/*",  # Non-essential system binaries (usually admin-only execution)
-    "/usr/local/sbin/*",  # Local system binaries (usually admin-only execution)
-    "/var/log/*",  # System logs (often read-only for users, write-restricted)
-    "/var/spool/*",  # System spool directories (mail, cron, print jobs)
-    "/var/lib/*",  # System state information (databases, package manager data)
-    "/var/run/*",  # Runtime variable data (often symlinked to /run)
-    "/run/*",  # Runtime variable data
-    # Libraries & Binaries (Modification restriction)
-    "/bin/*",  # Essential user binaries
-    "/lib/*",  # Essential shared libraries
-    "/lib64/*",  # Essential 64-bit shared libraries
-    "/usr/bin/*",  # Non-essential user binaries
-    "/usr/lib/*",  # Non-essential shared libraries
-    "/usr/lib64/*",  # Non-essential 64-bit shared libraries
-    "/usr/include/*",  # Standard C include files
-    "/usr/local/bin/*",  # Local binaries (often admin-managed)
-    "/usr/local/lib/*",  # Local libraries (often admin-managed)
-    "/usr/local/include/*",  # Local include files (often admin-managed)
-    "/opt/*",  # Optional application software packages (often admin-managed)
-    # Devices & Kernel Interfaces
-    "/dev/*",  # Device files (highly sensitive)
-    "/proc/*",  # Process information virtual filesystem (read-only generally okay, write dangerous)
-    "/sys/*",  # System/kernel information virtual filesystem (read-only generally okay, write dangerous)
-    # Specific Sensitive Files & Directories
-    "/etc/passwd",  # User account information
-    "/etc/shadow",  # Encrypted password information
-    "/etc/gshadow",  # Encrypted group password information
-    "/etc/group",  # Group information
-    "/etc/sudoers",  # Sudoers configuration
-    "/etc/sudoers.d/*",  # Sudoers configuration directory
-    "/etc/ssh/*",  # SSH server configuration
-    "/etc/fstab",  # Filesystem table
-    "/etc/crontab",  # System-wide cron table
-    "/etc/cron.*/*",  # System cron job directories
-    "/etc/modprobe.d/*",  # Kernel module configuration
-    "/etc/sysctl.conf",  # Kernel parameters
-    "/etc/sysctl.d/*",  # Kernel parameter configuration directory
-    "/lost+found/*",  # Recovered filesystem fragments
-]
-
-DEFAULT_ALWAYS_APPROVED_FILE_PATTERNS = [
-    "*.c",  # C source
-    "*.cpp",  # C++ source
-    "*.cs",  # C# source
-    "*.css",  # Cascading Style Sheets
-    "*.dart",  # Dart source
-    "*.go",  # Go source
-    "*.h",  # C/C++/Objective-C header
-    "*.hpp",  # C++ header
-    "*.htm",  # HTML
-    "*.html",  # HyperText Markup Language
-    "*.java",  # Java source
-    "*.js",  # JavaScript
-    "*.json",  # Original: JavaScript Object Notation
-    "*.jsx",  # JavaScript XML (React)
-    "*.kt",  # Kotlin source
-    "*.kts",  # Kotlin Script
-    "*.md",  # Original: Markdown
-    "*.php",  # PHP script
-    "*.pl",  # Perl script
-    "*.pm",  # Perl module
-    "*.ps1",  # PowerShell script
-    "*.py",  # Original: Python script
-    "*.r",  # R script
-    "*.R",  # R script
-    "*.rb",  # Ruby script
-    "*.rs",  # Rust source
-    "*.scala",  # Scala source
-    "*.scss",  # Sassy CSS
-    "*.sh",  # Shell script
-    "*.sql",  # Structured Query Language
-    "*.swift",  # Swift source
-    "*.ts",  # TypeScript
-    "*.tsx",  # TypeScript XML (React)
-    "*.txt",  # Original: Text file
-    "*.vb",  # Visual Basic source
-    "*.xml",  # Extensible Markup Language
-    "*.yaml",  # Original: YAML Ain't Markup Language
-    "*.yml",  # Original: YAML Ain't Markup Language
-]
-
-# Write file approvals
-DEFAULT_PROHIBITED_WRITE_PATTERNS = [
-    # Core System & Configuration
-    "/",  # Root directory itself (access often needed, modification restricted)
-    "/etc/*",  # System-wide configuration files
-    "/boot/*",  # Bootloader files, kernel images
-    "/root/*",  # Home directory of the root user
-    "/sbin/*",  # Essential system binaries (usually admin-only execution)
-    "/usr/sbin/*",  # Non-essential system binaries (usually admin-only execution)
-    "/usr/local/sbin/*",  # Local system binaries (usually admin-only execution)
-    "/var/log/*",  # System logs (often read-only for users, write-restricted)
-    "/var/spool/*",  # System spool directories (mail, cron, print jobs)
-    "/var/lib/*",  # System state information (databases, package manager data)
-    "/var/run/*",  # Runtime variable data (often symlinked to /run)
-    "/run/*",  # Runtime variable data
-    # Libraries & Binaries (Modification restriction)
-    "/bin/*",  # Essential user binaries
-    "/lib/*",  # Essential shared libraries
-    "/lib64/*",  # Essential 64-bit shared libraries
-    "/usr/bin/*",  # Non-essential user binaries
-    "/usr/lib/*",  # Non-essential shared libraries
-    "/usr/lib64/*",  # Non-essential 64-bit shared libraries
-    "/usr/include/*",  # Standard C include files
-    "/usr/local/bin/*",  # Local binaries (often admin-managed)
-    "/usr/local/lib/*",  # Local libraries (often admin-managed)
-    "/usr/local/include/*",  # Local include files (often admin-managed)
-    "/opt/*",  # Optional application software packages (often admin-managed)
-    # Devices & Kernel Interfaces
-    "/dev/*",  # Device files (highly sensitive)
-    "/proc/*",  # Process information virtual filesystem (read-only generally okay, write dangerous)
-    "/sys/*",  # System/kernel information virtual filesystem (read-only generally okay, write dangerous)
-    # Specific Sensitive Files & Directories
-    "/etc/passwd",  # User account information
-    "/etc/shadow",  # Encrypted password information
-    "/etc/gshadow",  # Encrypted group password information
-    "/etc/group",  # Group information
-    "/etc/sudoers",  # Sudoers configuration
-    "/etc/sudoers.d/*",  # Sudoers configuration directory
-    "/etc/ssh/*",  # SSH server configuration
-    "/etc/fstab",  # Filesystem table
-    "/etc/crontab",  # System-wide cron table
-    "/etc/cron.*/*",  # System cron job directories
-    "/etc/modprobe.d/*",  # Kernel module configuration
-    "/etc/sysctl.conf",  # Kernel parameters
-    "/etc/sysctl.d/*",  # Kernel parameter configuration directory
-    "/lost+found/*",  # Recovered filesystem fragments
-]
-
-DEFAULT_ALWAYS_APPROVED_WRITE_PATTERNS = []
-
-# Maximum file size for read operations (in bytes)
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
-
-MODELS = (
-    {
-        "provider": "anthropic",
-        "model": "claude-3-7-sonnet-latest",
-        "description": "Production-ready - 120K tokens CW, Large/slow model - oversubscribed",
-    },
-    {
-        "provider": "vertexai",
-        "model": "gemini-2.5-pro-preview-05-06",
-        "description": "Experimental - Large/slow model, 1M tokens CW - oversubscribed",
-    },
-    {
-        "provider": "vertexai",
-        "model": "gemini-2.5-flash-preview-04-17",
-        "description": "Experimental - Small/fast model, 1M tokens CW - oversubscribed",
-        "accepts": ("thinking"),
-    },
-    {
-        "provider": "openai",
-        "model": "o4-mini",
-        "description": "Not tested - need API keys",
-    },
-    {
-        "provider": "groq",
-        "model": "llama3-70b-8192",
-        "description": "Not tested - need API keys",
-    },
-)
-
-# Default patterns to ignore for the 'tree' command when generating QX_PROJECT_FILES
+# Default tree ignore patterns
 DEFAULT_TREE_IGNORE_PATTERNS = [
-    # Version Control
     ".git",
-    ".gitignore",
-    ".gitattributes",
-    ".gitmodules",
-    ".svn",
-    ".hg",
-    # Python
     ".venv",
     "venv",
-    "ENV",
+    ".env",
     "env",
+    "node_modules",
+    "__pycache__",
     "*.pyc",
     "*.pyo",
-    "*.pyd",
-    "__pycache__",
-    ".pytest_cache",
     "*.egg-info",
-    "dist",
-    "build",
-    "wheels",
-    "*.egg",
-    ".Python",
-    "pip-wheel-metadata",
-    # Node.js
-    "node_modules",
-    "npm-debug.log*",
-    "yarn-debug.log*",
-    "yarn-error.log*",
-    "package-lock.json", # Often included, but can be noisy for tree view
-    ".npm",
-    # Java
-    "*.class",
-    "*.jar",
-    "*.war",
-    "*.ear",
-    "target",
-    ".gradle",
-    "build/libs/",
-    # C/C++
-    "*.o",
-    "*.obj",
-    "*.so",
-    "*.dll",
-    "*.exe",
-    "*.out",
-    "*.a",
-    "*.lib",
-    "CMakeCache.txt",
-    "CMakeFiles",
-    "cmake_install.cmake",
-    "Makefile", # Can be useful, but often generated
-    # Ruby
-    ".bundle",
-    "vendor/bundle",
-    "log",
-    "tmp",
-    "*.gem",
-    ".irb_history",
-    # Go
-    "*.exe",
-    "*.exe~",
-    "*.dll",
-    "*.so",
-    "*.dylib",
-    "bin", # Often for compiled binaries
-    "pkg", # Often for compiled packages
-    # Rust
-    "target",
-    "Cargo.lock", # Often included, but can be noisy
-    # PHP / Composer
-    "vendor",
-    "composer.lock", # Often included, but can be noisy
-    # .NET
-    "bin",
-    "obj",
-    "*.suo",
-    "*.user",
-    "*.userosscache",
-    "*.sln.docstates",
-    # IDEs
-    ".idea",
-    ".vscode",
-    "*.sublime-project",
-    "*.sublime-workspace",
-    ".project",
-    ".classpath",
-    ".settings",
-    "nbproject",
-    # OS specific
     ".DS_Store",
-    "Thumbs.db",
-    "ehthumbs.db",
-    "Desktop.ini",
-    # Logs & Temp
+    "build",
+    "dist",
+    "target",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".hypothesis",
+    ".tox",
     "*.log",
     "*.tmp",
-    "*.temp",
     "*.swp",
     "*.swo",
-    "*.swn",
-    # R specific
-    ".Rproj.user",
-    ".Rhistory",
-    ".RData",
-    ".Ruserdata",
-    "*.Rout", # R output files
-    "*.Rcheck", # R check directories
-    "vignettes/*.html", # Compiled vignettes
-    "vignettes/*.pdf", # Compiled vignettes
-    "packrat/", # Packrat dependency management
-    "renv/", # renv dependency management
-    "rsconnect/", # RStudio Connect publishing data
-    # Archives
-    "*.zip",
-    "*.tar.gz",
-    "*.tgz",
-    "*.rar",
-    "*.7z",
-    # Cloud / Terraform
-    ".terraform",
-    "terraform.tfstate",
-    "terraform.tfstate.backup",
-    ".serverless",
-    # Jupyter Notebook
-    ".ipynb_checkpoints",
-    # Docker
-    "Dockerfile", # Often useful, but can be excluded if too common
-    ".dockerignore",
-    # Misc
-    "coverage",
-    ".cache",
-    "logs",
-    "temp",
-    "tmp",
-    "*.bak",
-    "*.old",
-    "*.orig",
+    ".idea",
+    ".vscode",
+    "coverage_reports",
+    "htmlcov",
+    ".coverage",
 ]
+
+# Default prohibited commands for the execute_shell tool
+# Uses fnmatch patterns
+DEFAULT_PROHIBITED_COMMANDS = [
+    "sudo*",
+    "su",
+    "rm -rf /",
+    "mkfs*",
+    "fdisk*",
+    "dd*",
+    "shutdown*",
+    "reboot*",
+    "halt*",
+    "poweroff*",
+    "passwd*",
+    "useradd*",
+    "userdel*",
+    "groupadd*",
+    "groupdel*",
+    "chown -R * /", # Overly broad chown
+    "chmod -R * /", # Overly broad chmod
+    "iptables*",
+    "ufw*",
+    "firewall-cmd*",
+    # Network commands that should use the 'fetch' tool or are risky
+    "curl*",
+    "wget*",
+    "ping*",
+    "ssh*",
+    "scp*",
+    "ftp*",
+    "telnet*",
+    "nc*",
+    "netcat*",
+    # Process management that could be disruptive
+    "killall*",
+    "pkill*",
+    # Specific dangerous constructs
+    ":(){:|:&};:", # Fork bomb
+    "* > /dev/sda*", # Direct disk write
+    "mv / /dev/null", # Moving critical directories
+    "mv * /dev/null", # Moving all files in cwd to /dev/null
+    # Git commands that could alter remote state without explicit multi-step approval
+    # "git push*", # Consider if this should be allowed with approval or a dedicated tool
+    # "git fetch*", # Generally safe, but could be noisy
+    # "git pull*", # Can have merge conflicts, might be better handled
+]
+
+# Shell command execution timeout in seconds
+SHELL_COMMAND_TIMEOUT = 60
+
+# --- Default LLM Provider Settings (Example values, primarily for reference) ---
+# These are not directly used by QX core logic if PydanticAI handles defaults,
+# but can be useful for documentation or future direct API integrations.
+
+# OpenAI
+DEFAULT_OPENAI_MODEL = "gpt-4-turbo"
+DEFAULT_OPENAI_TEMPERATURE = 0.7
+DEFAULT_OPENAI_MAX_TOKENS = 2048
+DEFAULT_OPENAI_TOKENS_PER_MIN = 40000  # Example TPM for some models
+
+# Anthropic
+DEFAULT_ANTHROPIC_MODEL = "claude-3-opus-20240229"
+DEFAULT_ANTHROPIC_TEMPERATURE = 0.7
+DEFAULT_ANTHROPIC_MAX_TOKENS = 4096
+DEFAULT_ANTHROPIC_TOKENS_PER_MIN = 25000 # Example TPM
+
+# Google Vertex AI
+DEFAULT_VERTEXAI_MODEL = "gemini-1.5-pro-001" # Or "gemini-1.0-pro"
+DEFAULT_VERTEXAI_LOCATION = "us-central1" # Example location
+DEFAULT_VERTEXAI_TEMPERATURE = 0.7
+DEFAULT_VERTEXAI_MAX_TOKENS = 8192
+DEFAULT_VERTEXAI_TOKENS_PER_MIN = 60000 # Example TPM
+
+# Groq
+DEFAULT_GROQ_MODEL = "llama3-70b-8192"
+DEFAULT_GROQ_TEMPERATURE = 0.7
+DEFAULT_GROQ_MAX_TOKENS = 8192
+DEFAULT_GROQ_TOKENS_PER_MIN = 300000 # Example TPM (Groq is fast)
+
+
+# --- Rich CLI Themes ---
+# These themes can be used with Rich Console for consistent styling.
+# Add more themes or customize existing ones as needed.
+CLI_THEMES = {
+    "dark": {
+        "default": "bright_white on default",
+        "info": "bright_cyan on default",
+        "warning": "bright_yellow on default",
+        "error": "bold bright_red on default",
+        "success": "bright_green on default",
+        "debug": "dim white on default",
+        "prompt": "bold bright_blue on default",
+        "user_input": "white on default",
+        "title": "bold bright_magenta on default",
+        "path": "bright_blue underline on default",
+        "code": "bright_yellow on default",
+        "highlight": "black on bright_yellow",
+        "table.header": "bold bright_white on blue",
+        "table.cell": "bright_white on default", # General cell style
+        "table.row.odd": "bright_white on grey19",
+        "table.row.even": "bright_white on grey23",
+        "table.border": "bright_blue",
+        "log.time": "dim cyan on default",
+        "log.path": "dim blue on default",
+        "log.level.debug": "dim white on default",
+        "log.level.info": "bright_cyan on default",
+        "log.level.warning": "bright_yellow on default",
+        "log.level.error": "bold bright_red on default",
+        "log.level.critical": "bold white on red",
+        "progress.bar": "bright_green",
+        "progress.text": "bright_white on default", # For text within progress context
+        "progress.description": "bright_white on default",
+        "progress.percentage": "bright_magenta on default",
+        "progress.remaining": "dim bright_cyan on default",
+        "repr.str": "bright_green on default",
+        "repr.number": "bright_cyan on default",
+        "repr.bool_true": "bold bright_green on default",
+        "repr.bool_false": "bold bright_red on default",
+        "repr.none": "dim bright_magenta on default",
+        "repr.url": "underline bright_blue on default",
+        "repr.tag_name": "dim bright_white on default",
+        "repr.tag_value": "bright_cyan on default",
+        "rule.line": "dim white",
+        "rule.text": "bright_white on default",
+        "markdown.h1": "bold bright_magenta underline on default",
+        "markdown.h2": "bold bright_magenta on default",
+        "markdown.h3": "bold bright_blue on default",
+        "markdown.paragraph": "bright_white on default",
+        "markdown.block_quote": "italic bright_cyan on grey23",
+        "markdown.list": "bright_white on default",
+        "markdown.code": "bright_yellow on grey23",
+        "markdown.code_block": "bright_yellow on grey19",
+        "markdown.link": "underline bright_blue on default",
+        "markdown.link_url": "dim bright_blue on default",
+        "markdown.strong": "bold bright_white on default",
+        "markdown.emphasis": "italic bright_white on default",
+        "markdown.hr": "dim white",
+    },
+    "light": {
+        "default": "black on default",
+        "info": "blue on default",
+        "warning": "orange3 on default",
+        "error": "bold red on default",
+        "success": "green on default",
+        "debug": "dim black on default",
+        "prompt": "bold dark_blue on default",
+        "user_input": "black on default",
+        "title": "bold magenta on default",
+        "path": "dark_blue underline on default",
+        "code": "purple4 on default",
+        "highlight": "white on dark_slate_gray2",
+        "table.header": "bold black on bright_cyan",
+        "table.cell": "black on default", # General cell style
+        "table.row.odd": "black on grey93",
+        "table.row.even": "black on grey89",
+        "table.border": "blue",
+        "log.time": "dim blue_violet on default",
+        "log.path": "dim dark_blue on default",
+        "log.level.debug": "dim black on default",
+        "log.level.info": "blue on default",
+        "log.level.warning": "orange3 on default",
+        "log.level.error": "bold red on default",
+        "log.level.critical": "bold white on red",
+        "progress.bar": "green",
+        "progress.text": "black on default", # For text within progress context
+        "progress.description": "black on default",
+        "progress.percentage": "magenta on default",
+        "progress.remaining": "dim blue_violet on default",
+        "repr.str": "green4 on default",
+        "repr.number": "cyan on default",
+        "repr.bool_true": "bold green on default",
+        "repr.bool_false": "bold red on default",
+        "repr.none": "dim magenta on default",
+        "repr.url": "underline blue on default",
+        "repr.tag_name": "dim black on default",
+        "repr.tag_value": "blue on default",
+        "rule.line": "dim black",
+        "rule.text": "black on default",
+        "markdown.h1": "bold magenta underline on default",
+        "markdown.h2": "bold magenta on default",
+        "markdown.h3": "bold blue on default",
+        "markdown.paragraph": "black on default",
+        "markdown.block_quote": "italic blue on grey93",
+        "markdown.list": "black on default",
+        "markdown.code": "purple4 on grey93",
+        "markdown.code_block": "purple4 on grey89",
+        "markdown.link": "underline blue on default",
+        "markdown.link_url": "dim blue on default",
+        "markdown.strong": "bold black on default",
+        "markdown.emphasis": "italic black on default",
+        "markdown.hr": "dim black",
+    }
+}
