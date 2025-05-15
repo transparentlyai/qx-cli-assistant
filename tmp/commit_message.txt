@@ -1,0 +1,9 @@
+Refactor: Improve fzf history display for multiline entries
+
+- Refactored history parsing logic to correctly group multiline commands starting with '+' in `_show_history_fzf_event`.
+- Added logic to parse timestamps from both `strftime` and `prompt_toolkit` formats.
+- Replaced newline characters in `fzf` display with ' ↵ '.
+- Ensured original command with newlines is inserted into prompt buffer.
+- Handled cases without timestamps or manual history entries.
+- Removed unused `shlex` import.
+- Updated `if __name__ == '__main__':` with comprehensive test history data.
