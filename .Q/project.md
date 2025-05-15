@@ -1,6 +1,7 @@
 # Prject QX Directives
 
--project shhould be modulear and extensible. no module should be more than 1000 lines of code. if a module is more than 650 lines of code, break it down into smaller modules.
+- this project is a re-write of the q project found at ~/projects/q - use the original q project as a reference
+- project shhould be modulear and extensible. no module should be more than 1000 lines of code. if a module is more than 650 lines of code, break it down into smaller modules.
 - QX is a coding cli agent built by Transparently.AI
 - QX is writen in python using the PydaticAI framework as it core
 - prioritize using packages over writing custom code 
@@ -17,3 +18,4 @@
 - at the start of every session read the .Q/projectlog.md file for the latest updates and context.
 - if you need to create temporary scirpts, files, ad other artifacts,use the tmp directory.
 - do not use relative imports 
+

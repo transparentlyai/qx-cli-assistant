@@ -1,65 +1,49 @@
-# Project QX Log
+# QX Project Log
 
-## Session 2024-07-20
-**Goal:** Implement fzf-based command history, aligning with reference, and fix related errors.
+## Session: 2024-07-16
+**Goal:** Apply custom color styles to the QX input prompt.
 
-**Activities:**
+**Sprint 1:**
+- **Task:** Modify `src/qx/cli/qprompt.py` to use new color styles.
+    - Read `src/qx/cli/qprompt.py`.
+    - Added `from prompt_toolkit.styles import Style`.
+    - Removed `from prompt_toolkit.formatted_text import HTML`.
+    - Defined `prompt_style = Style.from_dict(...)` with the following colors:
+        - `"": "#ff0066"` (default text)
+        - `"prompt": "#FF4500"` (prompt marker "Q⏵ ")
+        - `"prompt.multiline": "#0066CC"` (multiline continuation)
+        - `"hint": "#888888"` (hints)
+    - Updated `PromptSession` initialization to `PromptSession(history=q_history, style=prompt_style)`.
+    - Changed `prompt_message` from an `HTML` object to `[("class:prompt", "Q⏵ ")]` to use the "prompt" style class.
+    - Wrote the updated `src/qx/cli/qprompt.py`.
+- **Commit:** Staged and committed the changes with a detailed message.
+    - Commit SHA (abbreviated): `25dc838`
+    - Message:
+      ```
+      Refactor: Apply custom color styles to qprompt input
 
-1.  **Define History File Path:**
-    *   Modified `src/qx/core/paths.py` to define `Q_CONFIG_DIR` (`~/.config/q`) and `Q_HISTORY_FILE` (`~/.config/q/history`).
-2.  **Ensure Config Directory Exists:**
-    *   Modified `src/qx/core/config_manager.py` to create `Q_CONFIG_DIR` if it doesn't exist.
-3.  **Implement `fzf` History Search in `qprompt.py` (Initial):**
-    *   Overhauled `get_user_input` to use `PromptSession` with `FileHistory` and custom `KeyBindings` for `Ctrl-R` to invoke `fzf` via `subprocess`.
-4.  **Commit `fzf` History Implementation (Initial):**
-    *   Committed changes with hash `a3b8dfd`.
-5.  **Identify and Diagnose `SyntaxError` in `qprompt.py` Test Code:**
-    *   User ran `qx` and encountered `SyntaxError`.
-    *   Fixed by changing `f.write("echo \\"hello world\\"\\n")` to `f.write('echo "hello world"\\n')`.
-6.  **Commit `SyntaxError` Fix:**
-    *   Committed changes with hash `33d1ab2`.
-7.  **Refine `fzf` History Display based on Reference (Attempt 1 - YYYY-MM-DD format):**
-    *   Modified `Ctrl-R` handler in `src/qx/cli/qprompt.py` to parse `+<unix_timestamp>` lines, format as "YYYY-MM-DD HH:MM:SS", and strip this prefix.
-8.  **Commit Refined `fzf` History (Attempt 1):**
-    *   Committed changes with hash `4347377`.
-9.  **Correct `fzf` History Date Formatting (Attempt 2 - [DD Mon HH:MM] format):**
-    *   Modified `Ctrl-R` handler for `[DD Mon HH:MM]` format and correct prefix stripping.
-10. **Commit Corrected `fzf` History (Attempt 2):**
-    *   Committed changes with hash `ac7ae27`.
-11. **Replicate Reference `fzf` Implementation (using `pyfzf` and `# timestamp` parsing):**
-    *   User provided reference `~/projects/q/q/cli/qprompt.py`.
-    *   Added `pyfzf` dependency to `pyproject.toml` and installed it.
-    *   Rewrote the `Ctrl-R` handler in `src/qx/cli/qprompt.py`:
-        *   Parses history file lines looking for `# <timestamp_str>` followed by `+<command_str>`.
-        *   Formats timestamps as `[DD Mon HH:MM]`.
-        *   Uses `pyfzf.FzfPrompt().prompt(...)` for `fzf` interaction.
-        *   Maps selected display strings back to original commands.
-12. **Fix `ImportError` for `Document`:**
-    *   Corrected import in `src/qx/cli/qprompt.py` to `from prompt_toolkit.document import Document` and ensured usage of `Document(...)`.
-13. **Fix `TypeError` in `fzf.prompt` call:**
-    *   Corrected `fzf.prompt(options=...)` to `fzf.prompt(display_options, ...)` in `src/qx/cli/qprompt.py`.
+      - Imported `Style` from `prompt_toolkit.styles` for prompt styling.
+      - Removed unused `HTML` import from `prompt_toolkit.formatted_text`.
+      - Defined a `prompt_style` dictionary with custom colors for prompt elements (default text, prompt marker, multiline, hint).
+      - Updated `PromptSession` in `get_user_input` to utilize the new `prompt_style`.
+      - Modified the prompt message format from `HTML` to a list of `(style_class, text)` tuples to enable styling via `prompt_style` classes.
+      ```
+**Status:** Completed.
 
-**Session End State:**
-*   `fzf` history search implemented in `qx.cli.qprompt` using `pyfzf`, parsing `# timestamp` and `+command` lines from `~/.config/q/history`, and displaying dates as `[DD Mon HH:MM]`.
-*   Associated import and runtime errors resolved.
+## Session: 2024-07-17
+**Goal:** Improve `fzf` history search display for multiline entries in `src/qx/cli/qprompt.py`.
 
----
-## Previous Sessions
-
-<details>
-<summary>Session 2024-07-19</summary>
-**Goal:** Implement selectable Rich CLI themes and fix related style errors.
-(Details omitted for brevity)
-</details>
-
-<details>
-<summary>Session 2024-07-16</summary>
-**Goal:** Add Rich CLI themes to constants.
-(Details omitted for brevity)
-</details>
-
-<details>
-<summary>Session 2024-07-15</summary>
-**Goal:** Initialize project and set up core files.
-(Details omitted for brevity)
-</details>
+**Sprint 1:**
+- **Task:** Modify `src/qx/cli/qprompt.py` to correctly handle and display multiline history entries in `fzf`.
+    - Read `src/qx/cli/qprompt.py` for context.
+    - Refactored history parsing logic within `_show_history_fzf_event`:
+        - Removed the `_parse_history_entry_for_fzf` helper function.
+        - Implemented a new loop to iterate through history lines, correctly grouping lines for single commands (including multiline commands starting with `+`).
+        - Added logic to parse timestamps from both `strftime` format (`%Y-%m-%d %H:%M:%S.%f` and `%Y-%m-%d %H:%M:%S`) and `prompt_toolkit`'s float timestamp format.
+        - For display in `fzf`, newline characters (`\n`) within commands are now replaced with ` ↵ `.
+        - Ensured the original command (with actual newlines) is retrieved and inserted into the prompt buffer upon selection from `fzf`.
+        - Handled cases where commands might not have preceding timestamps or are manually entered into the history file.
+        - Removed unused `shlex` import.
+    - Updated the `if __name__ == '__main__':` block with more comprehensive test history data, including multiline commands and different timestamp formats.
+    - Wrote the updated `src/qx/cli/qprompt.py`.
+**Status:** Code updated. Awaiting commit.
