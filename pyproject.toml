@@ -5,7 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "pydantic-ai[vertexai]>=0.2.3",
+    "pydantic-ai>=0.2.3",
     "python-dotenv>=1.1.0",
     "prompt-toolkit>=3.0.0", # Added prompt-toolkit
 ]
