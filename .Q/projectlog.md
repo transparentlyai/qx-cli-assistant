@@ -545,3 +545,42 @@ The `execute_shell` tool relies on a denylist (`DEFAULT_PROHIBITED_COMMANDS`) an
 
 *   Commit changes.
 *   Thoroughly test the `execute_shell` tool with various safe and prohibited commands.
+---
+
+## Sprint 16: Refactor Constant Names in `constants.py` (Done)
+
+**Date:** 2024-07-19
+
+**Objective:** Standardize constant naming in `src/qx/core/constants.py` by ensuring all constants containing "DEFAULT" start with "DEFAULT_".
+
+**Tasks Completed:**
+
+1.  **Renamed Constants in `src/qx/core/constants.py`**:
+    *   `OPENAI_DEFAULT_MODEL` to `DEFAULT_OPENAI_MODEL`
+    *   `OPENAI_DEFAULT_TEMPERATURE` to `DEFAULT_OPENAI_TEMPERATURE`
+    *   `OPENAI_DEFAULT_MAX_TOKENS` to `DEFAULT_OPENAI_MAX_TOKENS`
+    *   `OPENAI_DEFAULT_TOKENS_PER_MIN` to `DEFAULT_OPENAI_TOKENS_PER_MIN`
+    *   `ANTHROPIC_DEFAULT_MODEL` to `DEFAULT_ANTHROPIC_MODEL`
+    *   `ANTHROPIC_DEFAULT_TEMPERATURE` to `DEFAULT_ANTHROPIC_TEMPERATURE`
+    *   `ANTHROPIC_DEFAULT_MAX_TOKENS` to `DEFAULT_ANTHROPIC_MAX_TOKENS`
+    *   `ANTHROPIC_DEFAULT_TOKENS_PER_MIN` to `DEFAULT_ANTHROPIC_TOKENS_PER_MIN`
+    *   `VERTEXAI_DEFAULT_MODEL` to `DEFAULT_VERTEXAI_MODEL`
+    *   `VERTEXAI_DEFAULT_LOCATION` to `DEFAULT_VERTEXAI_LOCATION`
+    *   `VERTEXAI_DEFAULT_TEMPERATURE` to `DEFAULT_VERTEXAI_TEMPERATURE`
+    *   `VERTEXAI_DEFAULT_MAX_TOKENS` to `DEFAULT_VERTEXAI_MAX_TOKENS`
+    *   `VERTEXAI_DEFAULT_TOKENS_PER_MIN` to `DEFAULT_VERTEXAI_TOKENS_PER_MIN`
+    *   `GROQ_DEFAULT_MODEL` to `DEFAULT_GROQ_MODEL`
+    *   `GROQ_DEFAULT_TEMPERATURE` to `DEFAULT_GROQ_TEMPERATURE`
+    *   `GROQ_DEFAULT_MAX_TOKENS` to `DEFAULT_GROQ_MAX_TOKENS`
+    *   `GROQ_DEFAULT_TOKENS_PER_MIN` to `DEFAULT_GROQ_TOKENS_PER_MIN`
+    *   Other constants already conforming (e.g., `DEFAULT_MODEL`, `DEFAULT_TREE_IGNORE_PATTERNS`) were unchanged.
+2.  **Verified Usage**:
+    *   Checked `src/qx/core/config_manager.py` and `src/qx/tools/execute_shell.py`. No changes were needed in these files as the constants they use (`DEFAULT_TREE_IGNORE_PATTERNS`, `DEFAULT_PROHIBITED_COMMANDS`) already followed the naming convention.
+    *   Confirmed that the renamed constants are not currently used elsewhere in the `src/qx` codebase.
+
+**Rationale:**
+This refactoring improves consistency in constant naming, making the codebase easier to read and maintain.
+
+**Next Steps:**
+
+*   Commit changes.
