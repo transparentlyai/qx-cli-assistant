@@ -1,9 +1,18 @@
-Refactor: Improve fzf history display for multiline entries
+feat: Implement multiline input and enhance prompt interactivity
 
-- Refactored history parsing logic to correctly group multiline commands starting with '+' in `_show_history_fzf_event`.
-- Added logic to parse timestamps from both `strftime` and `prompt_toolkit` formats.
-- Replaced newline characters in `fzf` display with ' ↵ '.
-- Ensured original command with newlines is inserted into prompt buffer.
-- Handled cases without timestamps or manual history entries.
-- Removed unused `shlex` import.
-- Updated `if __name__ == '__main__':` with comprehensive test history data.
+Implemented multiline input mode in `src/qx/cli/qprompt.py`, enabling users to enter commands spanning multiple lines.
+
+Key changes include:
+- Added key bindings:
+    - Alt+Enter: Toggles multiline input mode. Submits input when exiting multiline.
+    - Enter: Inserts a newline in multiline mode; otherwise, submits the command.
+    - Ctrl+C: Exits the prompt session cleanly.
+- Introduced dynamic prompt display:
+    - Standard prompt: `Q⏵ `
+    - Auto-approve prompt: `QA⏵ `
+    - Multiline prompt: `M⏵ [Alt+Enter to submit]`
+    - Prompt updates based on current input mode and approval status.
+- Defined new constants and `FormattedText` objects for prompt variations.
+- Updated history parsing in `_show_history_fzf_event` to correctly handle commands without explicit timestamps or `+` prefixes.
+- Enhanced the `__main__` test block in `qprompt.py` to demonstrate and test multiline input and dynamic prompt features.
+- Updated `.Q/projectlog.md` with details of this development session.
