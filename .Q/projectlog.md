@@ -68,9 +68,63 @@
 **Files Modified:**
 
 *   `src/qx/main.py`: Added `asyncio.CancelledError` handling to the main loop.
+*   `src/qx/cli/qprompt.py`: Minor refactoring and formatting changes.
+*   `src/qx/core/paths.py`: Minor refactoring and formatting changes.
+*   `.Q/projectlog.md`: Updated with session activities.
+
+**Commit:** `a9f1698` - fix: Ensure Ctrl+C during async operations returns to prompt
+
+## Session 2024-07-30
+
+**Goal:** Implement a robust shell command permission system and configurable logging.
+
+**Key Activities:**
+
+1.  **Shell Command Permission System:**
+    *   **Constants:** Added `DEFAULT_APPROVED_COMMANDS` to `src/qx/core/constants.py`. `DEFAULT_PROHIBITED_COMMANDS` was already present.
+    *   **ApprovalManager Enhancement (`src/qx/core/approvals.py`):**
+        *   Added `fnmatch` for pattern matching.
+        *   Defined `CommandPermissionStatus` and `ApprovalDecision` Literal types.
+        *   Implemented `get_command_permission_status(command: str)` method to check commands against `DEFAULT_PROHIBITED_COMMANDS` and `DEFAULT_APPROVED_COMMANDS`.
+        *   Modified `request_approval` method:
+            *   Added `operation_type` parameter (e.g., "shell_command").
+            *   Changed return type to `Tuple[ApprovalDecision, str, Optional[str]]` (decision, item, optional_modification_reason).
+            *   Integrated `get_command_permission_status` for shell commands to allow/deny/prompt.
+            *   Handles "Modify" (`m`) choice, prompting for a new command and reason.
+    *   **ExecuteShellTool Implementation (`src/qx/tools/execute_shell.py`):**
+        *   Created `ShellCommandInput` and `ShellCommandOutput` Pydantic models.
+        *   Implemented `ExecuteShellTool` class:
+            *   Takes `ApprovalManager` in constructor.
+            *   `run` method orchestrates approval using `ApprovalManager.request_approval`.
+            *   Handles the loop for command modification.
+            *   Calls private `_execute_subprocess` for actual command execution via `subprocess.run`.
+            *   Returns `ShellCommandOutput` with detailed results, including modification info.
+    *   **Integration and Fixes:**
+        *   Updated `src/qx/tools/__init__.py` to export `ExecuteShellTool`.
+        *   Modified `src/qx/core/llm.py` (`initialize_llm_agent`):
+            *   Instantiated `ExecuteShellTool`.
+            *   Created `approved_execute_shell_tool_wrapper` to interface `ExecuteShellTool` with PydanticAI agent, handling input/output conversion (string for LLM).
+            *   Updated `approved_read_file_tool` and `approved_write_file_tool` for consistent return types and approval decisions.
+            *   Corrected `query_llm` to directly `await agent.run()` as it's an async method, removing incorrect `run_in_executor` usage.
+
+2.  **Configurable Logging:**
+    *   Modified `src/qx/main.py` to:
+        *   Read the `QX_LOG_LEVEL` environment variable.
+        *   Map string log level names (DEBUG, INFO, WARNING, ERROR, CRITICAL) to `logging` module equivalents.
+        *   Default to `logging.ERROR` if the environment variable is not set or invalid.
+        *   Apply the determined level in `logging.basicConfig()`.
+
+**Files Modified:**
+
+*   `src/qx/core/constants.py`: Added `DEFAULT_APPROVED_COMMANDS`.
+*   `src/qx/core/approvals.py`: Enhanced with shell command permission logic and modified `request_approval`.
+*   `src/qx/tools/execute_shell.py`: Implemented `ExecuteShellTool` with approval workflow.
+*   `src/qx/tools/__init__.py`: Updated exports.
+*   `src/qx/core/llm.py`: Integrated `ExecuteShellTool`, updated tool wrappers, fixed `query_llm` async call.
+*   `src/qx/main.py`: Implemented configurable logging via `QX_LOG_LEVEL` env var.
 *   `.Q/projectlog.md`: Updated with session activities.
 
 **Next Steps:**
 
 *   Commit the changes.
-*   Thorough testing of `KeyboardInterrupt` behavior, especially during long-running asynchronous operations (e.g., LLM "thinking" time).
+*   Thorough testing of shell command execution (prohibited, approved, user prompt, modification flow) and log level configuration.
