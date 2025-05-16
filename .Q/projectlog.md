@@ -308,10 +308,31 @@
         *   Imported `Group` from `rich.console`.
         *   When constructing the panel content, `panel_content_renderables` (which is a `List[RenderableType]`) is now passed to `Group(*panel_content_renderables)` if it contains multiple items. This `Group` (or the single renderable if only one) is then used as the content for the `Panel`. This ensures Rich handles the layout of multiple renderables (like Syntax + Text) correctly.
     *   Updated the `__main__` block with more specific test cases for new file previews, including unknown extensions.
+    *   Commit `c5876d9` for these changes was successful, despite some benign stderr messages from the shell.
 
 **Files Modified:**
 
 *   `src/qx/core/approvals.py`: Improved new file preview logic, lexer handling, and panel content assembly using `Group`.
+*   `.Q/projectlog.md`: Updated with session activities.
+
+**Commit:** `c5876d9` - fix: Correct new file preview rendering in ApprovalManager
+
+## Session 2025-05-18 (Continued)
+
+**Goal:** Fix `NameError: name 'content_preview' is not defined` in `ApprovalManager._get_file_preview_renderables`.
+
+**Key Activities:**
+
+1.  **Identified Error:** The `NameError` occurred because `_get_file_preview_renderables` was trying to access `content_preview` in its `elif operation_type == "generic"` block, but `content_preview` was not a parameter of this internal method. The actual content for generic previews is passed as the second argument to `_get_file_preview_renderables`.
+
+2.  **Corrected `ApprovalManager` (`src/qx/core/approvals.py`):**
+    *   Renamed the second parameter of `_get_file_preview_renderables` from `new_content` to `operation_content_for_preview` to better reflect its dual role (new file content for "write_file", or generic preview string for "generic").
+    *   Updated the logic within `_get_file_preview_renderables` to use this `operation_content_for_preview` parameter consistently for both "write_file" (as new content) and "generic" (as the preview string) operation types.
+    *   In `request_approval`, when calling `_get_file_preview_renderables`, the `content_preview` (from `request_approval`'s parameters) is now correctly passed as the second argument (`operation_content_for_preview`) to `_get_file_preview_renderables`.
+
+**Files Modified:**
+
+*   `src/qx/core/approvals.py`: Corrected parameter handling in `_get_file_preview_renderables` to resolve the `NameError`.
 *   `.Q/projectlog.md`: Updated with session activities.
 
 **Next Steps:**
