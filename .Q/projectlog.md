@@ -378,3 +378,24 @@
 **Next Steps:**
 
 *   Commit the changes.
+
+## Session 2025-05-18 (Continued)
+
+**Goal:** Align LLM tool wrapper names with system prompt references.
+
+**Key Activities:**
+
+1.  **Identified Issue:** The system prompt refers to tools by their base names (e.g., `read_file`, `write_file`, `execute_shell`), but the wrapper functions in `llm.py` had `approved_` prefixes and `_wrapper` suffixes.
+
+2.  **Modified `src/qx/core/llm.py`:**
+    *   Renamed `approved_read_file_tool_wrapper` to `read_file`.
+    *   Renamed `approved_write_file_tool` to `write_file`.
+    *   Renamed `approved_execute_shell_tool_wrapper` to `execute_shell`.
+    *   Updated the `registered_tools` list to use these new function names. This ensures that the Pydantic-AI agent registers the tools with names the LLM expects based on the system prompt.
+
+**Files Modified:**
+
+*   `src/qx/core/llm.py`: Renamed tool wrapper functions to match system prompt references.
+*   `.Q/projectlog.md`: Updated with session activities.
+
+**Commit:** `7fb6393` - Refactor: Rename LLM tool wrappers for prompt compatibility
