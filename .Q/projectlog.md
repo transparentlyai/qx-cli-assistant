@@ -280,11 +280,38 @@
 
 3.  **Updated `main.py` (`src/qx/main.py`):**
     *   When `ApprovalManager` is instantiated in `_async_main`, the `code_theme_to_use` (already determined from `QX_SYNTAX_HIGHLIGHT_THEME` or `DEFAULT_SYNTAX_HIGHLIGHT_THEME`) is passed to the `ApprovalManager`'s `syntax_highlight_theme` parameter.
+    *   Commit `412d168` for these changes was successful, despite some benign stderr messages from the shell.
 
 **Files Modified:**
 
 *   `src/qx/core/approvals.py`: Implemented diff and truncated new content previews for write operations.
 *   `src/qx/main.py`: Passed configured syntax theme to `ApprovalManager`.
+*   `.Q/projectlog.md`: Updated with session activities.
+
+**Commit:** `412d168` - feat: Enhance write approval with diff and truncation previews
+
+## Session 2025-05-18 (Continued)
+
+**Goal:** Refine new file preview in `ApprovalManager` to correctly display truncated, syntax-highlighted content.
+
+**Key Activities:**
+
+1.  **Reviewed `src/qx/core/approvals.py`:**
+    *   Examined `_get_file_preview_renderables` and its usage in `request_approval`.
+
+2.  **Refined `ApprovalManager` (`src/qx/core/approvals.py`):**
+    *   **In `_get_file_preview_renderables` (for new files):**
+        *   Ensured `lexer_name` defaults to "text" if the file extension is empty or the lexer is not found (using `pygments.lexers.get_lexer_by_name` and `pygments.util.ClassNotFound`).
+        *   Modified the method to return a `List[RenderableType]` instead of `Optional[Syntax | Text]`. This list will contain the `Syntax` object for the code and, if truncated, a separate `Text` object for the truncation message.
+        *   The truncation message itself was slightly restyled for clarity (e.g., `[dim i]... X more lines ...[/dim i]`).
+    *   **In `request_approval`:**
+        *   Imported `Group` from `rich.console`.
+        *   When constructing the panel content, `panel_content_renderables` (which is a `List[RenderableType]`) is now passed to `Group(*panel_content_renderables)` if it contains multiple items. This `Group` (or the single renderable if only one) is then used as the content for the `Panel`. This ensures Rich handles the layout of multiple renderables (like Syntax + Text) correctly.
+    *   Updated the `__main__` block with more specific test cases for new file previews, including unknown extensions.
+
+**Files Modified:**
+
+*   `src/qx/core/approvals.py`: Improved new file preview logic, lexer handling, and panel content assembly using `Group`.
 *   `.Q/projectlog.md`: Updated with session activities.
 
 **Next Steps:**
