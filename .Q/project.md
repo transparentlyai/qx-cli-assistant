@@ -8,7 +8,7 @@
 - read documentation .Q/documentation for latest libraries and packages documentation
 - when you are not sure about something, ask 
 - always consult the .Q/technical-specs.md 
-- keep a detail log of activities and sprints in .Q/projectlog.md - keep enough context to ensure a new session can pick up where you left off.
+- keep a detail log of activities and sprints in .Q/projectlog.md - the log should be compact but with enough context to ensure a new session can pick up where you left off.
 - keep the documentation up to date 
 - keep the code simple. avoid unnecessary complexity. use libraries and packages when possible. avoid deeply nested code.
 - use version control (git) for all code.
