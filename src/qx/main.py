@@ -164,7 +164,6 @@ async def _async_main():
                 continue
 
             if user_input.lower() in ["exit", "quit"]:
-                qx_console.print("Exiting QX. Goodbye!", style="info")
                 break
             if not user_input.strip():
                 continue
@@ -185,7 +184,6 @@ async def _async_main():
 
             if run_result:
                 if hasattr(run_result, "output"):
-                    qx_console.print("\n")
                     markdown_output = Markdown(
                         run_result.output, code_theme=code_theme_to_use
                     )
