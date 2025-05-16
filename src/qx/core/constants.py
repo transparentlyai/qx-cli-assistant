@@ -263,6 +263,7 @@ DEFAULT_GROQ_TOKENS_PER_MIN = 300000  # Example TPM (Groq is fast)
 
 # --- Rich CLI Theme Configuration ---
 DEFAULT_CLI_THEME = "dark"  # Default theme if CLI_THEME env var is not set
+DEFAULT_SYNTAX_HIGHLIGHT_THEME = "vim" # Default theme for syntax highlighting in Markdown code blocks
 
 # --- Rich CLI Themes ---
 # These themes can be used with Rich Console for consistent styling.
@@ -282,7 +283,7 @@ CLI_THEMES = {
         "user_input": "white on default",
         "title": "bold bright_magenta on default",
         "path": "bright_blue underline on default",
-        "code": "bright_yellow on default",
+        "code": "bright_yellow on default", # General code style, not for Markdown fenced blocks
         "highlight": "black on bright_yellow",
         "table.header": "bold bright_white on blue",
         "table.cell": "bright_white on default",  # General cell style
@@ -317,8 +318,8 @@ CLI_THEMES = {
         "markdown.paragraph": "bright_white on default",
         "markdown.block_quote": "italic bright_cyan on grey23",
         "markdown.list": "bright_white on default",
-        "markdown.code": "bright_yellow on grey23",
-        "markdown.code_block": "bright_yellow on grey19",
+        "markdown.code": "bright_yellow on grey23", # For inline markdown code
+        "markdown.code_block": "bright_yellow on grey19", # For Markdown code blocks if not overridden by code_theme
         "markdown.link": "underline bright_blue on default",
         "markdown.link_url": "dim bright_blue on default",
         "markdown.strong": "bold bright_white on default",
@@ -339,7 +340,7 @@ CLI_THEMES = {
         "user_input": "black on default",
         "title": "bold magenta on default",
         "path": "dark_blue underline on default",
-        "code": "purple4 on default",
+        "code": "purple4 on default", # General code style, not for Markdown fenced blocks
         "highlight": "white on dark_slate_gray2",
         "table.header": "bold black on bright_cyan",
         "table.cell": "black on default",  # General cell style
@@ -374,8 +375,8 @@ CLI_THEMES = {
         "markdown.paragraph": "black on default",
         "markdown.block_quote": "italic blue on grey93",
         "markdown.list": "black on default",
-        "markdown.code": "purple4 on grey93",
-        "markdown.code_block": "purple4 on grey89",
+        "markdown.code": "purple4 on grey93", # For inline markdown code
+        "markdown.code_block": "purple4 on grey89", # For Markdown code blocks if not overridden by code_theme
         "markdown.link": "underline blue on default",
         "markdown.link_url": "dim blue on default",
         "markdown.strong": "bold black on default",
