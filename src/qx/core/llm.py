@@ -1,5 +1,5 @@
 import asyncio
-import functools
+# import functools # No longer needed
 import logging
 import os
 from pathlib import Path
@@ -13,7 +13,7 @@ from rich.console import Console as RichConsole
 
 from qx.core.approvals import ApprovalManager
 from qx.core.config_manager import load_runtime_configurations
-from qx.tools.execute_shell import execute_shell_impl
+from qx.tools.execute_shell import ExecuteShellTool, ShellCommandInput, ShellCommandOutput
 from qx.tools.read_file import read_file_impl
 from qx.tools.write_file import write_file_impl
 
@@ -61,42 +61,68 @@ def initialize_llm_agent(
     """
     console.print("Initializing LLM Agent...", style="info")
     system_prompt_content = load_and_format_system_prompt()
-    # approval_manager is now passed in, no need to create it here.
 
-    def approved_read_file_tool(path: str) -> Optional[str]:
-        approved, final_path = approval_manager.request_approval(
-            "Read file", path, allow_modify=False
-        )
-        if not approved:
-            console.print(f"File read denied: {final_path}", style="warning")
-            return f"Error: File read operation denied by user for: {final_path}"
-        return read_file_impl(final_path)
+    shell_tool_instance = ExecuteShellTool(approval_manager=approval_manager)
 
-    def approved_write_file_tool(path: str, content: str) -> bool:
-        approved, final_path = approval_manager.request_approval(
-            "Write file", path, content_preview=content, allow_modify=False
+    def approved_read_file_tool(path: str) -> str:
+        decision, final_path, _ = approval_manager.request_approval(
+            operation_description="Read file",
+            item_to_approve=path,
+            allow_modify=False,
+            operation_type="generic"
         )
-        if not approved:
-            console.print(f"File write denied: {final_path}", style="warning")
-            return False
-        return write_file_impl(final_path, content)
+        if decision not in ["AUTO_APPROVED", "SESSION_APPROVED", "USER_APPROVED"]:
+            denial_reason = f"File read operation for '{final_path}' was {decision.lower().replace('_', ' ')}."
+            console.print(denial_reason, style="warning")
+            return f"Error: {denial_reason}"
+        
+        file_content = read_file_impl(final_path)
+        if file_content is None:
+            return f"Error: Could not read file at '{final_path}'. File may not exist or an error occurred."
+        return file_content
 
-    def approved_execute_shell_tool(command: str) -> Dict[str, Any]:
-        approved, final_command = approval_manager.request_approval(
-            "Execute shell command", command, allow_modify=True
+    def approved_write_file_tool(path: str, content: str) -> str:
+        decision, final_path, _ = approval_manager.request_approval(
+            operation_description="Write file",
+            item_to_approve=path,
+            content_preview=content,
+            allow_modify=False,
+            operation_type="generic"
         )
-        if not approved:
-            console.print(f"Shell execution denied: {final_command}", style="warning")
-            return {
-                "stdout": "", "stderr": "Operation denied by user.",
-                "returncode": -1, "error": "Operation denied by user.",
-            }
-        return execute_shell_impl(final_command)
+        if decision not in ["AUTO_APPROVED", "SESSION_APPROVED", "USER_APPROVED"]:
+            denial_reason = f"File write operation for '{final_path}' was {decision.lower().replace('_', ' ')}."
+            console.print(denial_reason, style="warning")
+            return f"Error: {denial_reason}"
+
+        success = write_file_impl(final_path, content)
+        if success:
+            return f"Successfully wrote to file: {final_path}"
+        else:
+            return f"Error: Failed to write to file: {final_path}"
+
+    def approved_execute_shell_tool_wrapper(command: str) -> str:
+        tool_input = ShellCommandInput(command=command)
+        output: ShellCommandOutput = shell_tool_instance.run(tool_input)
+
+        if output.error:
+            return f"Error executing command '{output.command}': {output.error}. Stderr: {output.stderr or '<empty>'}"
+        elif output.exit_code != 0:
+            return (
+                f"Command '{output.command}' executed with exit code {output.exit_code}.\n"
+                f"Stdout: {output.stdout or '<empty>'}\n"
+                f"Stderr: {output.stderr or '<empty>'}"
+            )
+        else:
+            return (
+                f"Command '{output.command}' executed successfully.\n"
+                f"Stdout: {output.stdout or '<empty>'}\n"
+                f"Stderr: {output.stderr or '<empty>'}"
+            )
 
     registered_tools = [
         approved_read_file_tool,
         approved_write_file_tool,
-        approved_execute_shell_tool,
+        approved_execute_shell_tool_wrapper,
     ]
 
     try:
@@ -146,6 +172,7 @@ async def query_llm(
     console.print("\nQX is thinking...", style="info")
     try:
         if message_history:
+            # agent.run() is an async method, so it should be awaited directly.
             result = await agent.run(user_input, message_history=message_history)
         else:
             result = await agent.run(user_input)

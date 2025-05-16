@@ -21,11 +21,27 @@ from qx.core.approvals import ApprovalManager # Import ApprovalManager
 from pydantic_ai.messages import ModelMessage
 from typing import List, Optional, Any
 
-# Configure logging for the application
+# --- Configure logging for the application ---
+# Determine log level from environment variable QX_LOG_LEVEL
+# Defaults to ERROR if not set or invalid.
+log_level_name = os.getenv("QX_LOG_LEVEL", "ERROR").upper()
+LOG_LEVELS = {
+    "DEBUG": logging.DEBUG,
+    "INFO": logging.INFO,
+    "WARNING": logging.WARNING,
+    "ERROR": logging.ERROR,
+    "CRITICAL": logging.CRITICAL,
+}
+effective_log_level = LOG_LEVELS.get(log_level_name, logging.ERROR)
+
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=effective_log_level, 
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger("qx")
+logger.info(f"QX application log level set to: {logging.getLevelName(effective_log_level)} ({effective_log_level})")
+# --- End logging configuration ---
+
 
 # Global console instance - will be themed and potentially reassigned in _async_main
 q_console = RichConsole()
@@ -45,7 +61,9 @@ async def _async_main():
             selected_theme_name = theme_name_from_env
             logger.info(f"Using CLI theme from environment variable: {selected_theme_name}")
         else:
-            q_console.print(
+            # Use a basic console for this warning if q_console isn't themed yet
+            temp_console = RichConsole()
+            temp_console.print(
                 f"[yellow]Warning:[/yellow] CLI_THEME environment variable '{theme_name_from_env}' is invalid. "
                 f"Available themes: {list(CLI_THEMES.keys())}. "
                 f"Falling back to default theme: {DEFAULT_CLI_THEME}.",
@@ -59,7 +77,9 @@ async def _async_main():
 
     final_theme_dict = CLI_THEMES.get(selected_theme_name)
     if not final_theme_dict:
-        q_console.print(
+        # Use a basic console for this error if q_console isn't themed yet
+        temp_console = RichConsole()
+        temp_console.print(
             f"[bold red]Error:[/bold red] Selected theme '{selected_theme_name}' not found in CLI_THEMES. "
             f"Using a basic console without full custom theming."
         )
@@ -73,7 +93,9 @@ async def _async_main():
             q_console = RichConsole(theme=rich_theme_obj)
             logger.info(f"Successfully applied CLI theme: {selected_theme_name}")
         except Exception as e:
-            q_console.print(f"[bold red]Error applying theme '{selected_theme_name}': {e}. Using basic console.[/bold red]")
+            # Use a basic console for this error
+            temp_console = RichConsole()
+            temp_console.print(f"[bold red]Error applying theme '{selected_theme_name}': {e}. Using basic console.[/bold red]")
             logger.error(f"Error applying theme '{selected_theme_name}': {e}. Using basic console.", exc_info=True)
 
     # Instantiate ApprovalManager after the console is potentially themed
@@ -83,7 +105,7 @@ async def _async_main():
         Panel(
             Text("Welcome to QX - Your AI Coding Agent by Transparently.AI", justify="center"),
             title="QX Agent",
-            border_style="title",
+            border_style="title", # This style should be in the theme
         )
     )
 
@@ -114,7 +136,7 @@ async def _async_main():
         project_id=project_id,
         location=location,
         console=q_console,
-        approval_manager=approval_manager # Pass approval_manager to agent initialization
+        approval_manager=approval_manager
     )
 
     if agent is None:
@@ -129,7 +151,7 @@ async def _async_main():
         try:
             user_input = await get_user_input(q_console, approval_manager)
             
-            if user_input == "" and not approval_manager.is_globally_approved():
+            if user_input == "" and not approval_manager.is_globally_approved(): # Check if Ctrl+C in prompt
                 continue
 
             if user_input.lower() in ["exit", "quit"]:
@@ -159,14 +181,10 @@ async def _async_main():
                 )
 
         except KeyboardInterrupt:
-            # Handles Ctrl+C if it occurs during query_llm or other processing
-            # within this try block (but not during get_user_input itself).
             q_console.print("\nOperation cancelled by Ctrl+C. Returning to prompt.", style="warning")
             current_message_history = None 
             continue 
         except asyncio.CancelledError:
-            # Handles task cancellation, which can be triggered by asyncio.run()
-            # when a KeyboardInterrupt occurs. We want to continue the loop.
             q_console.print("\nOperation cancelled (async). Returning to prompt.", style="warning")
             current_message_history = None
             continue
@@ -181,14 +199,15 @@ def main():
     try:
         asyncio.run(_async_main())
     except KeyboardInterrupt:
-        # This should now only be reached if Ctrl+C occurs during asyncio.run()
-        # setup/teardown, or if _async_main somehow exits due to KI without
-        # its internal handlers catching it (which they should).
         console_to_use = q_console if 'q_console' in globals() and q_console else RichConsole()
         console_to_use.print("\nQX terminated by user.", style="info")
         sys.exit(0)
     except Exception as e:
-        logger.critical(f"Critical error running QX: {e}", exc_info=True)
+        # Ensure logger is available at this stage, even if basicConfig failed somehow
+        # (though it's unlikely if the script reaches here)
+        fallback_logger = logging.getLogger("qx.critical")
+        fallback_logger.critical(f"Critical error running QX: {e}", exc_info=True)
+        
         console_to_use = q_console if 'q_console' in globals() and q_console else RichConsole()
         console_to_use.print(f"[bold red]Critical error running QX:[/bold red] {e}")
         sys.exit(1)
