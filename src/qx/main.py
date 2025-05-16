@@ -151,9 +151,8 @@ async def _async_main():
         sys.exit(1)
 
     # Display QX version and model information
-    info_text = f"QX ver: {QX_VERSION} - brain: {model_name_from_env}"
+    info_text = f"QX ver:{QX_VERSION} - {model_name_from_env}"
     qx_console.print(Text(info_text, style="dim"))
-    qx_console.print() # Add a blank line for spacing
 
     current_message_history: Optional[List[ModelMessage]] = None
 
@@ -248,3 +247,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
