@@ -206,6 +206,52 @@
 *   `src/qx/cli/console.py`: Added `print_syntax` method and test cases.
 *   `.Q/projectlog.md`: Updated with session activities.
 
+**Commit:** `fc019a8` - feat: Implement syntax highlighting in QXConsole
+
+## Session 2025-05-17 (Continued)
+
+**Goal:** Format Q Agent's responses using Rich Markdown, with "vim" theme for code blocks.
+
+**Key Activities:**
+
+1.  **Imported `Markdown`:**
+    *   Added `from rich.markdown import Markdown` to `src/qx/main.py`.
+
+2.  **Modified Response Printing in `_async_main`:**
+    *   In `src/qx/main.py`, within the `_async_main` function, when printing the agent's response (`run_result.output`), the text is now wrapped with `Markdown(run_result.output, code_theme="vim")`.
+    *   This ensures that the agent's textual responses are rendered as Markdown, and any fenced code blocks within the Markdown will be syntax-highlighted using the "vim" theme.
+    *   A previous commit attempt for this failed due to shell quoting issues.
+
+**Files Modified:**
+
+*   `src/qx/main.py`: Imported `Markdown` and updated response printing logic.
+*   `.Q/projectlog.md`: Updated with session activities.
+
+**Next Steps:**
+
+*   Commit the changes (attempting again with corrected commit message handling if necessary).
+
+## Session 2025-05-17 (Continued)
+
+**Goal:** Make Markdown code block theme configurable via `QX_SYNTAX_HIGHLIGHT_THEME` environment variable.
+
+**Key Activities:**
+
+1.  **Added Default Constant:**
+    *   Added `DEFAULT_SYNTAX_HIGHLIGHT_THEME = "vim"` to `src/qx/core/constants.py`.
+
+2.  **Updated `main.py` for Configurable Theme:**
+    *   Imported `DEFAULT_SYNTAX_HIGHLIGHT_THEME` in `src/qx/main.py`.
+    *   In `_async_main`, read the `QX_SYNTAX_HIGHLIGHT_THEME` environment variable.
+    *   Determined `code_theme_to_use` by using the environment variable if set, otherwise falling back to `DEFAULT_SYNTAX_HIGHLIGHT_THEME`.
+    *   Passed `code_theme_to_use` to the `Markdown(..., code_theme=code_theme_to_use)` constructor when rendering agent responses.
+
+**Files Modified:**
+
+*   `src/qx/core/constants.py`: Added `DEFAULT_SYNTAX_HIGHLIGHT_THEME`.
+*   `src/qx/main.py`: Implemented configurable Markdown code block theme.
+*   `.Q/projectlog.md`: Updated with session activities.
+
 **Next Steps:**
 
 *   Commit the changes.
