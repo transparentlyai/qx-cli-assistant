@@ -16,14 +16,20 @@ from qx.cli.console import QXConsole, qx_console, show_spinner
 from qx.cli.qprompt import get_user_input
 from qx.core.approvals import ApprovalManager
 from qx.core.config_manager import load_runtime_configurations
-from qx.core.constants import DEFAULT_SYNTAX_HIGHLIGHT_THEME
 from qx.core.constants import (
     CLI_THEMES,
     DEFAULT_CLI_THEME,
     DEFAULT_MODEL,
+    DEFAULT_SYNTAX_HIGHLIGHT_THEME,
     DEFAULT_VERTEXAI_LOCATION,
 )
 from qx.core.llm import initialize_llm_agent, query_llm
+
+# --- QX Version ---
+# This should ideally be sourced from the package itself, e.g., qx.__version__
+# For now, using the version from pyproject.toml
+QX_VERSION = "0.3.2"
+# --- End QX Version ---
 
 # --- Configure logging for the application ---
 log_level_name = os.getenv("QX_LOG_LEVEL", "ERROR").upper()
@@ -109,18 +115,8 @@ async def _async_main():
     )
 
     # Pass the determined theme to ApprovalManager
-    approval_manager = ApprovalManager(console=qx_console, syntax_highlight_theme=code_theme_to_use)
-
-
-    qx_console.print(
-        Panel(
-            Text(
-                "Welcome to QX - Your AI Coding Agent by Transparently.AI",
-                justify="center",
-            ),
-            title="QX Agent",
-            border_style="title",
-        )
+    approval_manager = ApprovalManager(
+        console=qx_console, syntax_highlight_theme=code_theme_to_use
     )
 
     model_name_from_env = os.environ.get("QX_MODEL_NAME", DEFAULT_MODEL)
@@ -140,11 +136,6 @@ async def _async_main():
         )
         location = DEFAULT_VERTEXAI_LOCATION
 
-    qx_console.print(f"Using Model: [info]{model_name_from_env}[/]")
-    if project_id:
-        qx_console.print(f"Vertex AI Project ID: [info]{project_id}[/]")
-        qx_console.print(f"Vertex AI Location: [info]{location}[/]")
-
     agent = initialize_llm_agent(
         model_name_str=model_name_from_env,
         project_id=project_id,
@@ -158,6 +149,11 @@ async def _async_main():
             "[error]Critical Error:[/] Failed to initialize LLM agent. Exiting."
         )
         sys.exit(1)
+
+    # Display QX version and model information
+    info_text = f"QX ver: {QX_VERSION} - brain: {model_name_from_env}"
+    qx_console.print(Text(info_text, style="dim"))
+    qx_console.print() # Add a blank line for spacing
 
     current_message_history: Optional[List[ModelMessage]] = None
 

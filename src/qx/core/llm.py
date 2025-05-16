@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 from pathlib import Path
-from typing import List, Optional, Any, Dict
+from typing import Any, Dict, List, Optional
 
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage
@@ -12,13 +12,21 @@ from rich.console import Console as RichConsole
 
 from qx.core.approvals import ApprovalManager
 from qx.core.config_manager import load_runtime_configurations
-from qx.tools.execute_shell import ExecuteShellTool, ShellCommandInput, ShellCommandOutput
+from qx.tools.execute_shell import (
+    ExecuteShellTool,
+    ShellCommandInput,
+    ShellCommandOutput,
+)
+
 # Import the new ReadFileTool and its Pydantic models
-from qx.tools.read_file import ReadFileTool, ReadFileInput, ReadFileOutput
-from qx.tools.write_file import write_file_impl # write_file_impl is still used directly in its wrapper
+from qx.tools.read_file import ReadFileInput, ReadFileOutput, ReadFileTool
+from qx.tools.write_file import (
+    write_file_impl,
+)  # write_file_impl is still used directly in its wrapper
 
 # Configure logging for this module
 logger = logging.getLogger(__name__)
+
 
 def load_and_format_system_prompt() -> str:
     """
@@ -39,7 +47,9 @@ def load_and_format_system_prompt() -> str:
         project_files = os.environ.get("QX_PROJECT_FILES", "")
 
         formatted_prompt = template.replace("{user_context}", user_context)
-        formatted_prompt = formatted_prompt.replace("{project_context}", project_context)
+        formatted_prompt = formatted_prompt.replace(
+            "{project_context}", project_context
+        )
         formatted_prompt = formatted_prompt.replace("{project_files}", project_files)
         return formatted_prompt
     except Exception as e:
@@ -57,7 +67,6 @@ def initialize_llm_agent(
     """
     Initializes the Pydantic-AI Agent.
     """
-    console.print("Initializing LLM Agent...", style="info")
     system_prompt_content = load_and_format_system_prompt()
 
     # Instantiate tools
@@ -77,7 +86,9 @@ def initialize_llm_agent(
         else:
             # This case should ideally not be reached if output.error covers all failures
             # and output.content is present on success.
-            logger.warning(f"ReadFileTool returned no content and no error for path: {path}")
+            logger.warning(
+                f"ReadFileTool returned no content and no error for path: {path}"
+            )
             return f"Error: An unexpected issue occurred while reading file '{path}'. No content or error reported by tool."
 
     # Wrapper for write_file_impl, now named 'write_file'
@@ -85,17 +96,22 @@ def initialize_llm_agent(
         decision, final_path, _ = approval_manager.request_approval(
             operation_description="Write file",
             item_to_approve=path,
-            content_preview=content, # This is the full new content
-            allow_modify=True, # Allow modifying the path
-            operation_type="write_file" # Use "write_file" type for specific preview
+            content_preview=content,  # This is the full new content
+            allow_modify=True,  # Allow modifying the path
+            operation_type="write_file",  # Use "write_file" type for specific preview
         )
-        if decision not in ["AUTO_APPROVED", "SESSION_APPROVED", "USER_APPROVED", "USER_MODIFIED"]:
+        if decision not in [
+            "AUTO_APPROVED",
+            "SESSION_APPROVED",
+            "USER_APPROVED",
+            "USER_MODIFIED",
+        ]:
             denial_reason = f"File write operation for '{final_path}' was {decision.lower().replace('_', ' ')}."
             # If USER_MODIFIED, final_path is already the modified path.
             # If denied/cancelled, final_path is the original or last considered path.
             console.print(denial_reason, style="warning")
             return f"Error: {denial_reason}"
-        
+
         # If USER_MODIFIED, final_path is the new path to write to.
         # Content remains the original 'content' argument passed to this tool function.
         success = write_file_impl(final_path, content)
@@ -134,16 +150,18 @@ def initialize_llm_agent(
         actual_model_name = model_name_str
         if model_name_str.startswith("google-vertex:"):
             actual_model_name = model_name_str.split(":", 1)[1]
-        
+
         provider_config = {}
         if project_id:
-            provider_config['project_id'] = project_id
+            provider_config["project_id"] = project_id
         if location:
-            provider_config['region'] = location
+            provider_config["region"] = location
 
         gemini_model_instance = GeminiModel(
             model_name=actual_model_name,
-            provider=GoogleVertexProvider(**provider_config) if provider_config else GoogleVertexProvider()
+            provider=GoogleVertexProvider(**provider_config)
+            if provider_config
+            else GoogleVertexProvider(),
         )
 
         agent = Agent(
@@ -151,13 +169,7 @@ def initialize_llm_agent(
             system_prompt=system_prompt_content,
             tools=registered_tools,
         )
-        
-        tool_names = [tool.__name__ for tool in registered_tools] # type: ignore
-        console.print(
-            f"LLM Agent initialized: [info]{model_name_str}[/] "
-            f"Tools: [info]{', '.join(tool_names)}[/].",
-            style="success",
-        )
+
         return agent
     except Exception as e:
         logger.error(f"Failed to initialize Pydantic-AI Agent: {e}", exc_info=True)
@@ -168,7 +180,7 @@ def initialize_llm_agent(
 async def query_llm(
     agent: Agent,
     user_input: str,
-    console: RichConsole, 
+    console: RichConsole,
     message_history: Optional[List[ModelMessage]] = None,
 ) -> Optional[Any]:
     """
@@ -185,3 +197,4 @@ async def query_llm(
         logger.error(f"Error during LLM query: {e}", exc_info=True)
         console.print(f"[error]Error:[/] LLM query: {e}")
         return None
+
