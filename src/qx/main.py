@@ -5,11 +5,11 @@ import sys
 
 from rich.panel import Panel
 from rich.text import Text
-from rich.theme import Theme as RichTheme # Keep for creating theme objects
+from rich.theme import Theme as RichTheme
 
 # QX imports
 from qx.cli.qprompt import get_user_input
-from qx.cli.console import qx_console, show_spinner # Import global console and spinner
+from qx.cli.console import qx_console, show_spinner, QXConsole # Import QXConsole for set_active_status
 from qx.core.config_manager import load_runtime_configurations
 from qx.core.constants import (
     DEFAULT_MODEL,
@@ -44,8 +44,6 @@ logger.info(f"QX application log level set to: {logging.getLevelName(effective_l
 
 async def _async_main():
     """Asynchronous main function to handle the QX agent logic."""
-    # qx_console is now imported and globally available
-
     load_runtime_configurations()
 
     theme_name_from_env = os.getenv("CLI_THEME")
@@ -56,7 +54,7 @@ async def _async_main():
             selected_theme_name = theme_name_from_env
             logger.info(f"Using CLI theme from environment variable: {selected_theme_name}")
         else:
-            qx_console.print( # Use qx_console directly
+            qx_console.print(
                 f"[yellow]Warning:[/yellow] CLI_THEME environment variable '{theme_name_from_env}' is invalid. "
                 f"Available themes: {list(CLI_THEMES.keys())}. "
                 f"Falling back to default theme: {DEFAULT_CLI_THEME}.",
@@ -70,7 +68,7 @@ async def _async_main():
 
     final_theme_dict = CLI_THEMES.get(selected_theme_name)
     if not final_theme_dict:
-        qx_console.print( # Use qx_console directly
+        qx_console.print(
             f"[bold red]Error:[/bold red] Selected theme '{selected_theme_name}' not found in CLI_THEMES. "
             f"Using a basic console without full custom theming."
         )
@@ -81,20 +79,19 @@ async def _async_main():
     else:
         try:
             rich_theme_obj = RichTheme(final_theme_dict)
-            qx_console.apply_theme(rich_theme_obj) # Apply theme to the global qx_console
+            qx_console.apply_theme(rich_theme_obj)
             logger.info(f"Successfully applied CLI theme: {selected_theme_name}")
         except Exception as e:
             qx_console.print(f"[bold red]Error applying theme '{selected_theme_name}': {e}. Using basic console.[/bold red]")
             logger.error(f"Error applying theme '{selected_theme_name}': {e}. Using basic console.", exc_info=True)
 
-    # Instantiate ApprovalManager with the (now potentially themed) global qx_console
     approval_manager = ApprovalManager(console=qx_console)
 
     qx_console.print(
         Panel(
             Text("Welcome to QX - Your AI Coding Agent by Transparently.AI", justify="center"),
             title="QX Agent",
-            border_style="title", # This style should be in the theme
+            border_style="title",
         )
     )
 
@@ -103,9 +100,7 @@ async def _async_main():
     location = os.environ.get("QX_VERTEX_LOCATION", DEFAULT_VERTEXAI_LOCATION if project_id else None)
 
     if not model_name_from_env:
-        qx_console.print(
-            "[error]Critical Error:[/] QX_MODEL_NAME missing."
-        )
+        qx_console.print("[error]Critical Error:[/] QX_MODEL_NAME missing.")
         sys.exit(1)
 
     if project_id and not location:
@@ -124,14 +119,12 @@ async def _async_main():
         model_name_str=model_name_from_env,
         project_id=project_id,
         location=location,
-        console=qx_console, # Pass the global qx_console
+        console=qx_console,
         approval_manager=approval_manager
     )
 
     if agent is None:
-        qx_console.print(
-            "[error]Critical Error:[/] Failed to initialize LLM agent. Exiting."
-        )
+        qx_console.print("[error]Critical Error:[/] Failed to initialize LLM agent. Exiting.")
         sys.exit(1)
 
     current_message_history: Optional[List[ModelMessage]] = None
@@ -150,10 +143,15 @@ async def _async_main():
                 continue
 
             run_result: Optional[Any] = None
-            with show_spinner("QX is thinking..."): # Use the spinner
-                run_result = await query_llm(
-                    agent, user_input, message_history=current_message_history, console=qx_console
-                )
+            spinner_status = show_spinner("QX is thinking...")
+            QXConsole.set_active_status(spinner_status) # Register the spinner
+            try:
+                with spinner_status: # Use context manager for the spinner
+                    run_result = await query_llm(
+                        agent, user_input, message_history=current_message_history, console=qx_console
+                    )
+            finally:
+                QXConsole.set_active_status(None) # Unregister the spinner
 
             if run_result:
                 qx_console.print("\n[title]QX:[/]")
@@ -167,9 +165,7 @@ async def _async_main():
                     logger.error(f"run_result is missing 'output' attribute. run_result type: {type(run_result)}, value: {run_result}")
                     qx_console.print("[error]Error:[/] Unexpected response structure from LLM.")
             else:
-                qx_console.print(
-                    "[warning]Info:[/] No response generated or an error occurred.",
-                )
+                qx_console.print("[warning]Info:[/] No response generated or an error occurred.")
 
         except KeyboardInterrupt:
             qx_console.print("\nOperation cancelled by Ctrl+C. Returning to prompt.", style="warning")
@@ -190,14 +186,11 @@ def main():
     try:
         asyncio.run(_async_main())
     except KeyboardInterrupt:
-        # qx_console is imported and globally available
         qx_console.print("\nQX terminated by user.", style="info")
         sys.exit(0)
     except Exception as e:
         fallback_logger = logging.getLogger("qx.critical")
         fallback_logger.critical(f"Critical error running QX: {e}", exc_info=True)
-        
-        # qx_console is imported and globally available
         qx_console.print(f"[bold red]Critical error running QX:[/bold red] {e}")
         sys.exit(1)
 
