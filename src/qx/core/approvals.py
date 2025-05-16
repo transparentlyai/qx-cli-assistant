@@ -62,7 +62,6 @@ class ApprovalManager:
         self.syntax_highlight_theme = syntax_highlight_theme
 
     def _is_approve_all_active(self) -> bool:
-        # ... (same as before)
         if self._approve_all_until:
             if datetime.datetime.now() < self._approve_all_until:
                 logger.info(
@@ -78,7 +77,6 @@ class ApprovalManager:
         return False
 
     def get_command_permission_status(self, command: str) -> CommandPermissionStatus:
-        # ... (same as before)
         for pattern in DEFAULT_PROHIBITED_COMMANDS:
             if fnmatch.fnmatch(command, pattern):
                 logger.warning(f"Command '{command}' matches prohibited pattern '{pattern}'. Denying.")
@@ -95,7 +93,6 @@ class ApprovalManager:
     def _ask_confirmation(
         self, prompt_message: str, available_choices: List[Tuple[str, str, str]]
     ) -> str:
-        # ... (same as before)
         choice_map = {key: key for key, _, _ in available_choices}
         for key, _, full_word in available_choices:
             choice_map[full_word.lower()] = key
@@ -138,7 +135,6 @@ class ApprovalManager:
                 return "c"
 
     def _ask_duration(self, prompt_message: str, default: int) -> int:
-        # ... (same as before)
         while True:
             try:
                 duration_str = Prompt.ask(
@@ -168,39 +164,35 @@ class ApprovalManager:
                 return default
 
     def _get_file_preview_renderables(
-        self, file_path_str: str, new_content: str, operation_type: OperationType
+        self, file_path_str: str, # For write_file, this is the target path. For generic, might be less relevant.
+        operation_content: str, # For write_file, this is the new full content. For generic, this is the content_preview.
+        operation_type: OperationType
     ) -> List[RenderableType]:
-        """
-        Generates a list of Rich renderables for file content preview (diff or new content).
-        """
         renderables: List[RenderableType] = []
-        file_path = Path(file_path_str)
-        file_exists = file_path.exists() and file_path.is_file()
+        file_path = Path(file_path_str) # Used for lexer determination and checking existence for write_file
         
-        # Determine lexer, defaulting to 'text' if extension is unknown or invalid
         file_ext = file_path.suffix.lstrip(".").lower()
         lexer_name = file_ext
         try:
-            if not lexer_name: # handle empty extension
+            if not lexer_name: 
                 lexer_name = "text"
-            get_lexer_by_name(lexer_name) # Check if lexer is valid
+            get_lexer_by_name(lexer_name)
         except ClassNotFound:
-            logger.warning(f"Lexer for extension '{file_ext}' not found. Defaulting to 'text'.")
+            logger.warning(f"Lexer for extension '{file_ext}' not found. Defaulting to 'text' for preview.")
             lexer_name = "text"
 
-
         if operation_type == "write_file":
+            file_exists = file_path.exists() and file_path.is_file()
             if file_exists:
                 try:
                     with open(file_path, "r", encoding="utf-8") as f:
                         old_content = f.read()
-
-                    if old_content == new_content:
+                    if old_content == operation_content: # operation_content is new_content here
                         renderables.append(Text("[bold yellow]No changes detected - file content is identical[/bold yellow]"))
                         return renderables
 
                     old_lines = old_content.splitlines()
-                    new_lines = new_content.splitlines()
+                    new_lines = operation_content.splitlines()
                     diff_lines = list(
                         difflib.unified_diff(
                             old_lines, new_lines,
@@ -214,18 +206,17 @@ class ApprovalManager:
                         renderables.append(Syntax(
                             diff_text, "diff",
                             theme=self.syntax_highlight_theme,
-                            line_numbers=False,
-                            word_wrap=True # Diffs can have long lines
+                            line_numbers=False, word_wrap=True
                         ))
                     else:
                         renderables.append(Text("[bold yellow]No changes detected in diff (content might be identical after normalization)[/bold yellow]"))
                 except Exception as e:
                     logger.error(f"Error generating diff preview for {file_path_str}: {e}", exc_info=True)
                     renderables.append(Text(f"[red]Error generating diff: {e}[/red]\nDisplaying new content instead:", style="error"))
-                    file_exists = False # Treat as new file for preview logic below
+                    file_exists = False 
             
-            if not file_exists: # New file or diff failed
-                lines = new_content.splitlines()
+            if not file_exists: 
+                lines = operation_content.splitlines() # operation_content is new_content here
                 line_count = len(lines)
                 display_content: str
                 
@@ -234,101 +225,85 @@ class ApprovalManager:
                     display_content += f"\n\n[dim i]... {line_count - HEAD_LINES - TAIL_LINES} more lines ...[/dim i]\n\n"
                     display_content += "\n".join(lines[-TAIL_LINES:])
                     renderables.append(Syntax(
-                        display_content,
-                        lexer_name=lexer_name,
+                        display_content, lexer_name=lexer_name,
                         theme=self.syntax_highlight_theme,
-                        line_numbers=True,
-                        word_wrap=False
+                        line_numbers=True, word_wrap=False
                     ))
                     renderables.append(Text(f"[dim](Showing head and tail of {line_count} total lines)[/dim]", justify="center"))
                 else:
-                    display_content = new_content
+                    display_content = operation_content
                     renderables.append(Syntax(
-                        display_content,
-                        lexer_name=lexer_name,
+                        display_content, lexer_name=lexer_name,
                         theme=self.syntax_highlight_theme,
-                        line_numbers=True,
-                        word_wrap=False
+                        line_numbers=True, word_wrap=False
                     ))
 
-        elif operation_type == "generic" and content_preview is not None:
+        elif operation_type == "generic" and operation_content is not None: # operation_content is content_preview here
             preview_limit = 200 
-            if len(content_preview) > preview_limit:
-                renderables.append(Text(content_preview[:preview_limit] + "...", style="code"))
+            if len(operation_content) > preview_limit:
+                renderables.append(Text(operation_content[:preview_limit] + "...", style="code"))
             else:
-                renderables.append(Text(content_preview, style="code"))
+                renderables.append(Text(operation_content, style="code"))
         
         return renderables
-
 
     def request_approval(
         self,
         operation_description: str,
         item_to_approve: str,
         allow_modify: bool = False,
-        content_preview: Optional[str] = None,
+        content_preview: Optional[str] = None, # For "write_file", this is the new full content. For "generic", it's the preview string.
         operation_type: OperationType = "generic",
     ) -> Tuple[ApprovalDecision, str, Optional[str]]:
         modification_reason: Optional[str] = None
 
         if operation_type == "read_file":
-            # ... (same as before)
             if self._is_approve_all_active():
-                self._console.print(
-                    f"[success]AUTO-APPROVED (SESSION):[/] {operation_description}: [info]{item_to_approve}[/]",
-                )
+                self._console.print(f"[success]AUTO-APPROVED (SESSION):[/] {operation_description}: [info]{item_to_approve}[/]")
                 return "SESSION_APPROVED", item_to_approve, None
             else:
                 logger.info(f"File read operation auto-approved: {operation_description} for '{item_to_approve}'")
-                self._console.print(
-                    f"[success]AUTO-APPROVED (READ):[/] {operation_description}: [info]{item_to_approve}[/]",
-                )
+                self._console.print(f"[success]AUTO-APPROVED (READ):[/] {operation_description}: [info]{item_to_approve}[/]")
                 return "AUTO_APPROVED", item_to_approve, None
 
-
         if operation_type == "shell_command":
-            # ... (same as before)
             permission_status = self.get_command_permission_status(item_to_approve)
             if permission_status == "PROHIBITED":
-                self._console.print(
-                    f"[error]COMMAND DENIED (PROHIBITED):[/] {item_to_approve}"
-                )
+                self._console.print(f"[error]COMMAND DENIED (PROHIBITED):[/] {item_to_approve}")
                 return "PROHIBITED", item_to_approve, None
             if permission_status == "AUTO_APPROVED":
-                self._console.print(
-                    f"[success]COMMAND AUTO-APPROVED:[/] {item_to_approve}"
-                )
+                self._console.print(f"[success]COMMAND AUTO-APPROVED:[/] {item_to_approve}")
                 return "AUTO_APPROVED", item_to_approve, None
 
         if self._is_approve_all_active():
-            # ... (same as before)
-            self._console.print(
-                f"[success]AUTO-APPROVED (SESSION):[/] {operation_description}: [info]{item_to_approve}[/]",
-            )
+            self._console.print(f"[success]AUTO-APPROVED (SESSION):[/] {operation_description}: [info]{item_to_approve}[/]")
             return "SESSION_APPROVED", item_to_approve, None
-
 
         panel_title_text = Text(f"{operation_description}: ", style="title")
         panel_title_text.append(item_to_approve, style="info")
         
         panel_content_renderables: List[RenderableType] = []
 
-        if (operation_type == "write_file" or operation_type == "generic") and content_preview is not None:
-            preview_header = Text("\nContent Preview (Diff or New):\n" if operation_type == "write_file" else "\nContent Preview:\n", style="highlight")
-            panel_content_renderables.append(preview_header)
+        if content_preview is not None: # Only proceed if there's actually content to preview
+            preview_header_text = "\nContent Preview (Diff or New):\n" if operation_type == "write_file" else "\nContent Preview:\n"
+            panel_content_renderables.append(Text(preview_header_text, style="highlight"))
             
-            file_preview_items = self._get_file_preview_renderables(item_to_approve, content_preview, operation_type)
-            panel_content_renderables.extend(file_preview_items)
+            # For "write_file", item_to_approve is the path, content_preview is the new full content.
+            # For "generic", item_to_approve is the item, content_preview is the preview string.
+            # _get_file_preview_renderables expects the path for lexer/existence check, and the content to process.
+            path_for_preview = item_to_approve if operation_type == "write_file" else "generic_item" # Dummy path for generic
+            content_for_preview_method = content_preview
+            
+            preview_items = self._get_file_preview_renderables(path_for_preview, content_for_preview_method, operation_type)
+            panel_content_renderables.extend(preview_items)
 
-        # Display the panel
-        # Use Group for multiple renderables, or the single renderable directly
         panel_display_content: RenderableType
         if len(panel_content_renderables) > 1:
             panel_display_content = Group(*panel_content_renderables)
         elif len(panel_content_renderables) == 1:
             panel_display_content = panel_content_renderables[0]
         else:
-            panel_display_content = Text("") # Empty if no preview
+            panel_display_content = Text("") 
 
         self._console.print(Panel(panel_display_content, title=panel_title_text, border_style="prompt.border"))
 
@@ -340,7 +315,6 @@ class ApprovalManager:
 
         user_choice_key = self._ask_confirmation("Proceed?", current_choices)
 
-        # ... (rest of the decision logic remains the same as before)
         if user_choice_key == "y":
             logger.info(f"User approved: {operation_description} for '{item_to_approve}'")
             return "USER_APPROVED", item_to_approve, None
@@ -353,31 +327,20 @@ class ApprovalManager:
             self._console.print(f"[warning]Cancelled by user:[/] {operation_description}")
             return "USER_CANCELLED", item_to_approve, None
         elif user_choice_key == "a":
-            logger.info(
-                f"User chose 'Approve All' for: {operation_description} on '{item_to_approve}'"
-            )
+            logger.info(f"User chose 'Approve All' for: {operation_description} on '{item_to_approve}'")
             duration_minutes = self._ask_duration(
                 "Approve all subsequent operations for how many minutes?",
                 default=self.default_approve_all_duration_minutes,
             )
             if duration_minutes > 0:
-                self._approve_all_until = datetime.datetime.now() + datetime.timedelta(
-                    minutes=duration_minutes
-                )
+                self._approve_all_until = datetime.datetime.now() + datetime.timedelta(minutes=duration_minutes)
                 logger.info(f"'Approve All' activated until {self._approve_all_until}")
-                self._console.print(
-                    f"\n[success]▶▶▶ Auto-approval enabled for {duration_minutes} minutes.[/]\n"
-                )
+                self._console.print(f"\n[success]▶▶▶ Auto-approval enabled for {duration_minutes} minutes.[/]\n")
                 return "SESSION_APPROVED", item_to_approve, None
             else:
-                logger.info(
-                    "User entered 0 or negative duration for 'Approve All'. Not activating. Current operation denied."
-                )
-                self._console.print(
-                    "[warning]Auto-approval not enabled (duration was 0 or less). Current operation denied.[/]"
-                )
+                logger.info("User entered 0 or negative duration for 'Approve All'. Not activating. Current operation denied.")
+                self._console.print("[warning]Auto-approval not enabled (duration was 0 or less). Current operation denied.[/]")
                 return "USER_DENIED", item_to_approve, None
-
         elif user_choice_key == "m" and effective_allow_modify:
             prompt_text = "Enter the modified value"
             if operation_type == "write_file":
@@ -397,8 +360,7 @@ class ApprovalManager:
             if operation_type == "shell_command" and modified_item != item_to_approve:
                 modification_reason = Prompt.ask(
                     Text("Reason for modification (optional)", style="prompt"),
-                    default="",
-                    console=self._console,
+                    default="", console=self._console,
                 ).strip() or None
             
             self._console.print(f"[success]Value to be processed:[/] [info]{modified_item}[/]")
@@ -408,9 +370,7 @@ class ApprovalManager:
         self._console.print(f"[error]An unexpected error occurred in approval. Operation cancelled.[/]")
         return "USER_CANCELLED", item_to_approve, None
 
-
     def is_globally_approved(self) -> bool:
-        """Public method to check if 'Approve All' is active."""
         return self._is_approve_all_active()
 
 if __name__ == "__main__":
@@ -418,21 +378,17 @@ if __name__ == "__main__":
     console = RichConsole()
     approval_manager = ApprovalManager(console=console, syntax_highlight_theme=DEFAULT_SYNTAX_HIGHLIGHT_THEME)
 
-    # ... (existing __main__ tests, ensure they are still relevant or update them)
-    # It's good to add specific tests for the new preview logic here.
     console.rule("[bold bright_magenta]Test 1: Generic Operation (User Approves)[/]")
-    decision, item, reason = approval_manager.request_approval(
-        "Some generic task", "generic_item_abc", operation_type="generic"
+    approval_manager.request_approval(
+        "Some generic task", "generic_item_abc", operation_type="generic", content_preview="This is a short generic preview."
     )
-    console.print(f"Decision: {decision}, Item: {item}, Reason: {reason}\n")
-
+    
     console.rule("[bold bright_magenta]Test 2: Read File Operation (Auto-Approved)[/]")
-    decision, item, reason = approval_manager.request_approval(
+    approval_manager.request_approval(
         "Read file content", "/path/to/example.txt", operation_type="read_file"
     )
-    console.print(f"Decision: {decision}, Item: {item}, Reason: {reason}\n")
-    
-    test_dir = Path("/tmp/qx_approval_tests_v2")
+        
+    test_dir = Path("/tmp/qx_approval_tests_v3")
     test_dir.mkdir(exist_ok=True)
     existing_file_py = test_dir / "existing_test.py"
     new_file_txt = test_dir / "new_test_file.txt"
@@ -469,6 +425,4 @@ if __name__ == "__main__":
         "Create new file with unknown extension", str(new_file_unknown_ext),
         content_preview=new_content_unknown, operation_type="write_file", allow_modify=True
     )
-
-    # Clean up (optional, for manual review)
     console.print(f"\n[dim]Test files created in {test_dir}. Review or delete manually.[/dim]")
