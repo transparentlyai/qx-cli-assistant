@@ -64,8 +64,8 @@ def initialize_llm_agent(
     shell_tool_instance = ExecuteShellTool(approval_manager=approval_manager)
     read_file_tool_instance = ReadFileTool(approval_manager=approval_manager)
 
-    # Wrapper for ReadFileTool
-    def approved_read_file_tool_wrapper(path: str) -> str:
+    # Wrapper for ReadFileTool, now named 'read_file'
+    def read_file(path: str) -> str:
         tool_input = ReadFileInput(path=path)
         output: ReadFileOutput = read_file_tool_instance.run(tool_input)
 
@@ -80,8 +80,8 @@ def initialize_llm_agent(
             logger.warning(f"ReadFileTool returned no content and no error for path: {path}")
             return f"Error: An unexpected issue occurred while reading file '{path}'. No content or error reported by tool."
 
-    # Wrapper for write_file_impl
-    def approved_write_file_tool(path: str, content: str) -> str:
+    # Wrapper for write_file_impl, now named 'write_file'
+    def write_file(path: str, content: str) -> str:
         decision, final_path, _ = approval_manager.request_approval(
             operation_description="Write file",
             item_to_approve=path,
@@ -104,8 +104,8 @@ def initialize_llm_agent(
         else:
             return f"Error: Failed to write to file: {final_path}"
 
-    # Wrapper for ExecuteShellTool
-    def approved_execute_shell_tool_wrapper(command: str) -> str:
+    # Wrapper for ExecuteShellTool, now named 'execute_shell'
+    def execute_shell(command: str) -> str:
         tool_input = ShellCommandInput(command=command)
         output: ShellCommandOutput = shell_tool_instance.run(tool_input)
 
@@ -125,9 +125,9 @@ def initialize_llm_agent(
             )
 
     registered_tools = [
-        approved_read_file_tool_wrapper,
-        approved_write_file_tool,
-        approved_execute_shell_tool_wrapper,
+        read_file,
+        write_file,
+        execute_shell,
     ]
 
     try:
