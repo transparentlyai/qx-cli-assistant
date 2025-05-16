@@ -164,12 +164,12 @@ class ApprovalManager:
                 return default
 
     def _get_file_preview_renderables(
-        self, file_path_str: str, # For write_file, this is the target path. For generic, might be less relevant.
-        operation_content: str, # For write_file, this is the new full content. For generic, this is the content_preview.
+        self, file_path_str: str, 
+        operation_content_for_preview: str, # Renamed from new_content
         operation_type: OperationType
     ) -> List[RenderableType]:
         renderables: List[RenderableType] = []
-        file_path = Path(file_path_str) # Used for lexer determination and checking existence for write_file
+        file_path = Path(file_path_str)
         
         file_ext = file_path.suffix.lstrip(".").lower()
         lexer_name = file_ext
@@ -177,8 +177,9 @@ class ApprovalManager:
             if not lexer_name: 
                 lexer_name = "text"
             get_lexer_by_name(lexer_name)
+            logger.debug(f"Determined lexer: '{lexer_name}' for file '{file_path_str}' with theme '{self.syntax_highlight_theme}'")
         except ClassNotFound:
-            logger.warning(f"Lexer for extension '{file_ext}' not found. Defaulting to 'text' for preview.")
+            logger.warning(f"Lexer for extension '{file_ext}' not found. Defaulting to 'text' for preview of '{file_path_str}'.")
             lexer_name = "text"
 
         if operation_type == "write_file":
@@ -187,12 +188,12 @@ class ApprovalManager:
                 try:
                     with open(file_path, "r", encoding="utf-8") as f:
                         old_content = f.read()
-                    if old_content == operation_content: # operation_content is new_content here
+                    if old_content == operation_content_for_preview:
                         renderables.append(Text("[bold yellow]No changes detected - file content is identical[/bold yellow]"))
                         return renderables
 
                     old_lines = old_content.splitlines()
-                    new_lines = operation_content.splitlines()
+                    new_lines = operation_content_for_preview.splitlines()
                     diff_lines = list(
                         difflib.unified_diff(
                             old_lines, new_lines,
@@ -204,7 +205,7 @@ class ApprovalManager:
                     if diff_lines:
                         diff_text = "\n".join(diff_lines)
                         renderables.append(Syntax(
-                            diff_text, "diff",
+                            diff_text, "diff", # Lexer is 'diff' for diffs
                             theme=self.syntax_highlight_theme,
                             line_numbers=False, word_wrap=True
                         ))
@@ -216,7 +217,7 @@ class ApprovalManager:
                     file_exists = False 
             
             if not file_exists: 
-                lines = operation_content.splitlines() # operation_content is new_content here
+                lines = operation_content_for_preview.splitlines()
                 line_count = len(lines)
                 display_content: str
                 
@@ -225,25 +226,25 @@ class ApprovalManager:
                     display_content += f"\n\n[dim i]... {line_count - HEAD_LINES - TAIL_LINES} more lines ...[/dim i]\n\n"
                     display_content += "\n".join(lines[-TAIL_LINES:])
                     renderables.append(Syntax(
-                        display_content, lexer_name=lexer_name,
+                        display_content, lexer_name, # Use determined lexer_name
                         theme=self.syntax_highlight_theme,
                         line_numbers=True, word_wrap=False
                     ))
                     renderables.append(Text(f"[dim](Showing head and tail of {line_count} total lines)[/dim]", justify="center"))
                 else:
-                    display_content = operation_content
+                    display_content = operation_content_for_preview
                     renderables.append(Syntax(
-                        display_content, lexer_name=lexer_name,
+                        display_content, lexer_name, # Use determined lexer_name
                         theme=self.syntax_highlight_theme,
                         line_numbers=True, word_wrap=False
                     ))
 
-        elif operation_type == "generic" and operation_content is not None: # operation_content is content_preview here
+        elif operation_type == "generic" and operation_content_for_preview is not None:
             preview_limit = 200 
-            if len(operation_content) > preview_limit:
-                renderables.append(Text(operation_content[:preview_limit] + "...", style="code"))
+            if len(operation_content_for_preview) > preview_limit:
+                renderables.append(Text(operation_content_for_preview[:preview_limit] + "...", style="code"))
             else:
-                renderables.append(Text(operation_content, style="code"))
+                renderables.append(Text(operation_content_for_preview, style="code"))
         
         return renderables
 
@@ -252,7 +253,7 @@ class ApprovalManager:
         operation_description: str,
         item_to_approve: str,
         allow_modify: bool = False,
-        content_preview: Optional[str] = None, # For "write_file", this is the new full content. For "generic", it's the preview string.
+        content_preview: Optional[str] = None, 
         operation_type: OperationType = "generic",
     ) -> Tuple[ApprovalDecision, str, Optional[str]]:
         modification_reason: Optional[str] = None
@@ -284,17 +285,13 @@ class ApprovalManager:
         
         panel_content_renderables: List[RenderableType] = []
 
-        if content_preview is not None: # Only proceed if there's actually content to preview
+        if content_preview is not None: 
             preview_header_text = "\nContent Preview (Diff or New):\n" if operation_type == "write_file" else "\nContent Preview:\n"
             panel_content_renderables.append(Text(preview_header_text, style="highlight"))
             
-            # For "write_file", item_to_approve is the path, content_preview is the new full content.
-            # For "generic", item_to_approve is the item, content_preview is the preview string.
-            # _get_file_preview_renderables expects the path for lexer/existence check, and the content to process.
-            path_for_preview = item_to_approve if operation_type == "write_file" else "generic_item" # Dummy path for generic
-            content_for_preview_method = content_preview
+            path_for_preview = item_to_approve if operation_type == "write_file" else "generic_item.txt" # Provide a dummy ext for generic
             
-            preview_items = self._get_file_preview_renderables(path_for_preview, content_for_preview_method, operation_type)
+            preview_items = self._get_file_preview_renderables(path_for_preview, content_preview, operation_type)
             panel_content_renderables.extend(preview_items)
 
         panel_display_content: RenderableType
