@@ -1,11 +1,13 @@
 # src/qx/cli/console.py
 # This module handles rich text output using the rich library.
 
+import logging # Added for logging within QXConsole
 from typing import Optional, Any
 from rich.console import Console
 from rich.status import Status
 from rich.theme import Theme as RichTheme
 from rich.console import RenderableType # For input prompt type hint
+from rich.syntax import Syntax # Added for syntax highlighting
 
 # Create a standard Rich Console - this will be the base for qx_console
 _initial_rich_console = Console(force_terminal=True)
@@ -58,26 +60,21 @@ class QXConsole:
         Gets input from the user, stopping the global spinner if active and restarting it afterwards.
         Signature matches rich.console.Console.input.
         """
-        # Check if there's an active status object.
-        # The status object's own context manager in main.py handles its primary start/stop.
-        # Here, we only intervene if it's currently "active" from QXConsole's perspective.
+        spinner_needs_restart = False
         if QXConsole._active_status is not None and not QXConsole._spinner_was_stopped_by_input:
             try:
                 QXConsole._active_status.stop()
                 QXConsole._spinner_was_stopped_by_input = True
-                # Attempt to clear the line where the spinner might have been.
-                # This can be tricky. A simple newline might be sufficient.
-                self._console.line()
+                spinner_needs_restart = True # Mark that we stopped it
+                # self._console.line() # Attempt to clear spinner line - might not be needed / desired
             except Exception as e:
-                # Log this, as it's unexpected behavior if _active_status is set.
-                # For now, we'll proceed without spinner management if stop fails.
                 logging.getLogger(__name__).error(f"Error stopping QXConsole._active_status: {e}")
-                QXConsole._spinner_was_stopped_by_input = False # Ensure it's false if stop failed
+                QXConsole._spinner_was_stopped_by_input = False
 
         try:
             user_response = self._console.input(prompt, password=password, stream=stream)
         finally:
-            if QXConsole._spinner_was_stopped_by_input:
+            if spinner_needs_restart: # Only restart if we explicitly stopped it
                 if QXConsole._active_status is not None:
                     try:
                         QXConsole._active_status.start()
@@ -86,6 +83,39 @@ class QXConsole:
                 QXConsole._spinner_was_stopped_by_input = False # Reset flag
 
         return user_response
+
+    def print_syntax(
+        self,
+        code: str,
+        lexer_name: str,
+        theme: str = "vim",
+        line_numbers: bool = True,
+        word_wrap: bool = False,
+        background_color: Optional[str] = None,
+        **kwargs: Any
+    ):
+        """
+        Prints code with syntax highlighting.
+
+        Args:
+            code (str): The code to highlight.
+            lexer_name (str): The name of the lexer (e.g., "python", "json", "bash").
+            theme (str, optional): The Pygments theme to use. Defaults to "vim".
+            line_numbers (bool, optional): Whether to show line numbers. Defaults to True.
+            word_wrap (bool, optional): Whether to wrap lines. Defaults to False.
+            background_color (Optional[str], optional): Optional background color for the syntax block.
+            **kwargs: Additional arguments to pass to the `Syntax` constructor.
+        """
+        syntax = Syntax(
+            code,
+            lexer_name,
+            theme=theme,
+            line_numbers=line_numbers,
+            word_wrap=word_wrap,
+            background_color=background_color,
+            **kwargs
+        )
+        self._console.print(syntax)
 
     def __getattr__(self, name):
         """Forward all other attribute access to the underlying console."""
@@ -107,8 +137,6 @@ def show_spinner(
     The returned Status object should be managed (e.g., with a context manager)
     to ensure it's properly started and stopped.
     """
-    # This function creates and returns a status.
-    # The QXConsole.set_active_status will be called by the caller (e.g. main.py)
     return qx_console.status(
         message,
         spinner=spinner_name,
@@ -119,7 +147,6 @@ def show_spinner(
 
 if __name__ == "__main__":
     import time
-    import logging
     from rich.theme import Theme as RichThemeExample
     from rich.prompt import Prompt
 
@@ -135,39 +162,55 @@ if __name__ == "__main__":
 
     qx_console.print("[info]Testing spinner and input interaction (fixed)...[/info]")
 
-    # Simulate spinner being active
-    # In real use, show_spinner() returns a Status, which is then started by its context manager
     test_spinner_status_obj = show_spinner("Simulating background task...")
-    QXConsole.set_active_status(test_spinner_status_obj) # Register the spinner
+    QXConsole.set_active_status(test_spinner_status_obj)
 
-    # The `with` statement on the status object calls .start() on enter and .stop() on exit
     with test_spinner_status_obj:
         qx_console.print("Spinner is active. Now asking for input (spinner should stop):")
-        time.sleep(1.5) # Let spinner show
+        time.sleep(1.5)
 
         try:
-            # Prompt.ask uses the console's input method.
-            # We pass our qx_console instance to it.
             age_str = Prompt.ask(
                 "How old are you?",
                 choices=["10", "20", "30"],
                 default="20",
-                console=qx_console # Crucial: use our qx_console
+                console=qx_console
             )
             qx_console.print(f"You said you are {age_str}. Spinner should have restarted.")
         except Exception as e:
             qx_console.print(f"[red]Error during prompt: {e}[/red]")
 
-        time.sleep(2) # Let spinner show again if it restarted
+        time.sleep(2)
         test_spinner_status_obj.update("Background task almost done...")
         time.sleep(1.5)
 
-    QXConsole.set_active_status(None) # Unregister
+    QXConsole.set_active_status(None)
     qx_console.print("[green]Test finished. Spinner should be gone.[/green]")
 
     qx_console.print("\n[info]Testing input without an active global spinner...[/info]")
-    # Ensure _active_status is None
     QXConsole.set_active_status(None)
     name = Prompt.ask("What is your name again (no spinner active)?", console=qx_console)
     qx_console.print(f"Hello again, {name}!")
     qx_console.print("[green]Test finished.[/green]")
+
+    qx_console.print("\n[info]Testing syntax highlighting...[/info]")
+    python_code_example = """
+def hello_world():
+    # This is a comment
+    greeting = "Hello, syntax highlighting!"
+    print(greeting)
+    return 1 + 1
+"""
+    qx_console.print_syntax(python_code_example, "python", theme="vim", line_numbers=True)
+
+    json_example = """
+{
+    "name": "QX Agent",
+    "version": "1.0",
+    "features": ["code generation", "syntax highlighting"],
+    "active": true,
+    "rating": null
+}
+"""
+    qx_console.print_syntax(json_example, "json", theme="monokai", line_numbers=False, word_wrap=True)
+    qx_console.print("[green]Syntax highlighting test finished.[/green]")
