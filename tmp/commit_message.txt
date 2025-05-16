@@ -1,456 +1,1211 @@
-diff --git a/pyproject.toml b/pyproject.toml
-index 82b70b4..df22b96 100644
---- a/pyproject.toml
-+++ b/pyproject.toml
-@@ -9,6 +9,7 @@ dependencies = [
-     "python-dotenv>=1.1.0",
-     "prompt-toolkit>=3.0.0",
-     "pyfzf>=0.2.3", # Added pyfzf
-+    "rich>=14.0.0",
- ]
+diff --git a/src/qx/core/approvals.py b/src/qx/core/approvals.py
+index 73c1024..4b6e9cf 100644
+--- a/src/qx/core/approvals.py
++++ b/src/qx/core/approvals.py
+@@ -1,7 +1,7 @@
+ import datetime
+ import logging
+ import fnmatch # Added for pattern matching
+-from typing import List, Optional, Tuple, Literal # Added Literal
++from typing import List, Optional, Tuple, Literal
  
- [build-system]
-diff --git a/src/qx/cli/console.py b/src/qx/cli/console.py
-new file mode 100644
-index 0000000..18f15d3
---- /dev/null
-+++ b/src/qx/cli/console.py
-@@ -0,0 +1,101 @@
-+# src/qx/cli/console.py
-+# This module handles rich text output using the rich library.
-+
-+from typing import Optional
-+
-+from rich.console import Console
-+from rich.status import Status
-+from rich.theme import Theme as RichTheme # Renamed to avoid conflict
-+
-+# Create a standard Rich Console - this will be the base for qx_console
-+# It can be re-initialized with a theme later.
-+_initial_rich_console = Console(force_terminal=True)
-+
-+
-+class QXConsole:
-+    """
-+    A wrapper around rich.console.Console to provide QX-specific console utilities.
-+    This class manages a single Rich Console instance that can be themed.
-+    """
-+
-+    def __init__(self, initial_console: Console):
-+        self._console = initial_console
-+
-+    def print(self, *args, **kwargs):
-+        """
-+        Prints to the console using the underlying rich Console.
-+        """
-+        return self._console.print(*args, **kwargs)
-+
-+    def status(self, *args, **kwargs) -> Status:
-+        """
-+        Displays a status message with a spinner.
-+        Forwards to the underlying rich Console's status method.
-+        """
-+        return self._console.status(*args, **kwargs)
-+
-+    def apply_theme(self, theme: RichTheme):
-+        """
-+        Applies a new theme to the console.
-+        This re-initializes the internal Rich Console instance.
-+        """
-+        self._console = Console(theme=theme, force_terminal=True)
-+        # Potentially log theme application here if a logger is available/passed
-+
-+    def __getattr__(self, name):
-+        """Forward all other attribute access to the underlying console."""
-+        return getattr(self._console, name)
-+
-+
-+# Create the global QXConsole instance
-+qx_console = QXConsole(_initial_rich_console)
-+
-+
-+def show_spinner(
-+    message: str = "Thinking...",
-+    spinner_name: str = "dots",
-+    speed: float = 1.0,
-+    style: str = "status.spinner",
-+) -> Status:
-+    """
-+    Display a spinner with the given message using the global qx_console.
-+
-+    Args:
-+        message: The message to display alongside the spinner.
-+        spinner_name: The type of spinner to be used (e.g., "dots", "line", "moon").
-+        speed: The speed of the spinner.
-+        style: The style to apply to the spinner.
-+
-+    Returns:
-+        A rich.status.Status object that can be updated or stopped.
-+    """
-+    # Ensure spinner uses the potentially themed qx_console
-+    return qx_console.status(
-+        message,
-+        spinner=spinner_name,
-+        speed=speed,
-+        spinner_style=style,
-+    )
-+
-+
-+if __name__ == "__main__":
-+    # Example usage:
-+    import time
-+    from rich.theme import Theme as RichThemeExample
-+
-+    # Example of applying a theme (optional)
-+    custom_theme = RichThemeExample({"status.spinner": "bold blue", "info": "dim cyan"})
-+    qx_console.apply_theme(custom_theme)
-+
-+    spinner = show_spinner("Processing your request...", style="status.spinner")
-+    with spinner:
-+        time.sleep(3)
-+        spinner.update("Almost done...")
-+        time.sleep(2)
-+    qx_console.print("[green]Done![/green]")
-+
-+    with show_spinner("Another task...", spinner_name="moon") as status:
-+        time.sleep(3)
-+        status.update("Finalizing...")
-+        time.sleep(2)
-+    qx_console.print("Task complete.", style="info")
-diff --git a/src/qx/core/constants.py b/src/qx/core/constants.py
-index 2391da1..26fed2a 100644
---- a/src/qx/core/constants.py
-+++ b/src/qx/core/constants.py
-@@ -32,6 +32,23 @@ DEFAULT_TREE_IGNORE_PATTERNS = [
-     "coverage_reports",
-     "htmlcov",
-     ".coverage",
-+    "package-lock.json",
-+    "yarn.lock",
-+    "yarn-error.log",
-+    "npm-debug.log",
-+    "*.class",
-+    "*.jar",
-+    "*.war",
-+    "*.ear",
-+    ".settings",
-+    ".classpath",
-+    ".project",
-+    # R-specific patterns
-+    ".Rhistory",
-+    ".RData",
-+    "*.Rproj",
-+    ".Ruserdata",  # Simpler form of .Ruserdata/
-+    "renv",  # Simpler form of renv/
- ]
- 
- DEFAULT_PROHIBITED_COMMANDS = [
-@@ -366,4 +383,3 @@ CLI_THEMES = {
-         "markdown.hr": "dim black",
-     },
- }
--
-diff --git a/src/qx/main.py b/src/qx/main.py
-index f8d42d6..b6ed1ee 100644
---- a/src/qx/main.py
-+++ b/src/qx/main.py
-@@ -3,12 +3,13 @@ import logging
- import os
- import sys
- 
--from rich.console import Console as RichConsole
+ from rich.console import Console as RichConsole
  from rich.panel import Panel
- from rich.text import Text
--from rich.theme import Theme
-+from rich.theme import Theme as RichTheme # Keep for creating theme objects
- 
-+# QX imports
- from qx.cli.qprompt import get_user_input
-+from qx.cli.console import qx_console, show_spinner # Import global console and spinner
- from qx.core.config_manager import load_runtime_configurations
- from qx.core.constants import (
-     DEFAULT_MODEL,
-@@ -17,13 +18,11 @@ from qx.core.constants import (
-     DEFAULT_CLI_THEME
- )
- from qx.core.llm import initialize_llm_agent, query_llm
--from qx.core.approvals import ApprovalManager # Import ApprovalManager
-+from qx.core.approvals import ApprovalManager
- from pydantic_ai.messages import ModelMessage
- from typing import List, Optional, Any
- 
- # --- Configure logging for the application ---
--# Determine log level from environment variable QX_LOG_LEVEL
--# Defaults to ERROR if not set or invalid.
- log_level_name = os.getenv("QX_LOG_LEVEL", "ERROR").upper()
- LOG_LEVELS = {
-     "DEBUG": logging.DEBUG,
-@@ -35,7 +34,7 @@ LOG_LEVELS = {
- effective_log_level = LOG_LEVELS.get(log_level_name, logging.ERROR)
- 
- logging.basicConfig(
--    level=effective_log_level, 
-+    level=effective_log_level,
-     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
- )
- logger = logging.getLogger("qx")
-@@ -43,13 +42,9 @@ logger.info(f"QX application log level set to: {logging.getLevelName(effective_l
- # --- End logging configuration ---
+@@ -27,20 +27,22 @@ MODIFY_CHOICE = ("m", "Modify", "modify")
+ # Type definitions for clarity
+ CommandPermissionStatus = Literal["PROHIBITED", "AUTO_APPROVED", "REQUIRES_USER_APPROVAL"]
+ ApprovalDecision = Literal[
+-    "PROHIBITED", 
+-    "AUTO_APPROVED", 
+-    "SESSION_APPROVED", 
+-    "USER_APPROVED", 
+-    "USER_DENIED", 
+-    "USER_CANCELLED", 
++    "PROHIBITED",
++    "AUTO_APPROVED",
++    "SESSION_APPROVED",
++    "USER_APPROVED",
++    "USER_DENIED",
++    "USER_CANCELLED",
+     "USER_MODIFIED"
+ ]
++# Added "read_file" to OperationType
++OperationType = Literal["generic", "shell_command", "read_file"]
  
  
--# Global console instance - will be themed and potentially reassigned in _async_main
--q_console = RichConsole()
--
--
- async def _async_main():
-     """Asynchronous main function to handle the QX agent logic."""
--    global q_console
-+    # qx_console is now imported and globally available
+ class ApprovalManager:
+     """
+     Manages user approval for operations, supporting "approve all", modification,
+-    and specific rules for shell commands.
++    and specific rules for shell commands and file reading.
+     """
  
-     load_runtime_configurations()
- 
-@@ -61,9 +56,7 @@ async def _async_main():
-             selected_theme_name = theme_name_from_env
-             logger.info(f"Using CLI theme from environment variable: {selected_theme_name}")
-         else:
--            # Use a basic console for this warning if q_console isn't themed yet
--            temp_console = RichConsole()
--            temp_console.print(
-+            qx_console.print( # Use qx_console directly
-                 f"[yellow]Warning:[/yellow] CLI_THEME environment variable '{theme_name_from_env}' is invalid. "
-                 f"Available themes: {list(CLI_THEMES.keys())}. "
-                 f"Falling back to default theme: {DEFAULT_CLI_THEME}.",
-@@ -77,9 +70,7 @@ async def _async_main():
- 
-     final_theme_dict = CLI_THEMES.get(selected_theme_name)
-     if not final_theme_dict:
--        # Use a basic console for this error if q_console isn't themed yet
--        temp_console = RichConsole()
--        temp_console.print(
-+        qx_console.print( # Use qx_console directly
-             f"[bold red]Error:[/bold red] Selected theme '{selected_theme_name}' not found in CLI_THEMES. "
-             f"Using a basic console without full custom theming."
-         )
-@@ -89,19 +80,17 @@ async def _async_main():
-         )
-     else:
-         try:
--            rich_theme_obj = Theme(final_theme_dict)
--            q_console = RichConsole(theme=rich_theme_obj)
-+            rich_theme_obj = RichTheme(final_theme_dict)
-+            qx_console.apply_theme(rich_theme_obj) # Apply theme to the global qx_console
-             logger.info(f"Successfully applied CLI theme: {selected_theme_name}")
-         except Exception as e:
--            # Use a basic console for this error
--            temp_console = RichConsole()
--            temp_console.print(f"[bold red]Error applying theme '{selected_theme_name}': {e}. Using basic console.[/bold red]")
-+            qx_console.print(f"[bold red]Error applying theme '{selected_theme_name}': {e}. Using basic console.[/bold red]")
-             logger.error(f"Error applying theme '{selected_theme_name}': {e}. Using basic console.", exc_info=True)
- 
--    # Instantiate ApprovalManager after the console is potentially themed
--    approval_manager = ApprovalManager(console=q_console)
-+    # Instantiate ApprovalManager with the (now potentially themed) global qx_console
-+    approval_manager = ApprovalManager(console=qx_console)
- 
--    q_console.print(
-+    qx_console.print(
-         Panel(
-             Text("Welcome to QX - Your AI Coding Agent by Transparently.AI", justify="center"),
-             title="QX Agent",
-@@ -114,33 +103,33 @@ async def _async_main():
-     location = os.environ.get("QX_VERTEX_LOCATION", DEFAULT_VERTEXAI_LOCATION if project_id else None)
- 
-     if not model_name_from_env:
--        q_console.print(
-+        qx_console.print(
-             "[error]Critical Error:[/] QX_MODEL_NAME missing."
-         )
-         sys.exit(1)
- 
-     if project_id and not location:
--        q_console.print(
-+        qx_console.print(
-             f"[warning]Warning:[/] QX_VERTEX_PROJECT_ID ('{project_id}') set, "
-             f"but QX_VERTEX_LOCATION is not. Using default: '{DEFAULT_VERTEXAI_LOCATION}'.",
-         )
-         location = DEFAULT_VERTEXAI_LOCATION
- 
--    q_console.print(f"Using Model: [info]{model_name_from_env}[/]")
-+    qx_console.print(f"Using Model: [info]{model_name_from_env}[/]")
-     if project_id:
--        q_console.print(f"Vertex AI Project ID: [info]{project_id}[/]")
--        q_console.print(f"Vertex AI Location: [info]{location}[/]")
-+        qx_console.print(f"Vertex AI Project ID: [info]{project_id}[/]")
-+        qx_console.print(f"Vertex AI Location: [info]{location}[/]")
- 
-     agent = initialize_llm_agent(
-         model_name_str=model_name_from_env,
-         project_id=project_id,
-         location=location,
--        console=q_console,
-+        console=qx_console, # Pass the global qx_console
-         approval_manager=approval_manager
-     )
- 
-     if agent is None:
--        q_console.print(
-+        qx_console.print(
-             "[error]Critical Error:[/] Failed to initialize LLM agent. Exiting."
-         )
-         sys.exit(1)
-@@ -149,49 +138,51 @@ async def _async_main():
- 
-     while True:
-         try:
--            user_input = await get_user_input(q_console, approval_manager)
--            
--            if user_input == "" and not approval_manager.is_globally_approved(): # Check if Ctrl+C in prompt
-+            user_input = await get_user_input(qx_console, approval_manager)
+     def __init__(self, console: Optional[RichConsole] = None):
+@@ -79,7 +81,7 @@ class ApprovalManager:
+             if fnmatch.fnmatch(command, pattern):
+                 logger.info(f"Command '{command}' matches approved pattern '{pattern}'. Auto-approving.")
+                 return "AUTO_APPROVED"
+-        
 +
-+            if user_input == "" and not approval_manager.is_globally_approved():
-                 continue
+         logger.debug(f"Command '{command}' requires user approval.")
+         return "REQUIRES_USER_APPROVAL"
  
-             if user_input.lower() in ["exit", "quit"]:
--                q_console.print("Exiting QX. Goodbye!", style="info")
-+                qx_console.print("Exiting QX. Goodbye!", style="info")
-                 break
--            if not user_input.strip(): 
-+            if not user_input.strip():
-                 continue
+@@ -95,7 +97,7 @@ class ApprovalManager:
  
--            run_result: Optional[Any] = await query_llm(
--                agent, user_input, message_history=current_message_history, console=q_console
--            )
-+            run_result: Optional[Any] = None
-+            with show_spinner("QX is thinking..."): # Use the spinner
-+                run_result = await query_llm(
-+                    agent, user_input, message_history=current_message_history, console=qx_console
+         full_prompt_text = Text(prompt_message, style="prompt")
+         full_prompt_text.append(" (")
+-        
++
+         choices_for_display_str_list = []
+         for i, (key, display, _) in enumerate(available_choices):
+             full_prompt_text.append(display)
+@@ -104,7 +106,7 @@ class ApprovalManager:
+             if i < len(available_choices) - 1:
+                 full_prompt_text.append("/")
+         full_prompt_text.append(")")
+-        
++
+         choices_display_str_for_error = "/".join(choices_for_display_str_list)
+ 
+         while True:
+@@ -164,9 +166,9 @@ class ApprovalManager:
+         self,
+         operation_description: str,
+         item_to_approve: str,
+-        allow_modify: bool = False, # For generic operations
++        allow_modify: bool = False,
+         content_preview: Optional[str] = None,
+-        operation_type: Literal["generic", "shell_command"] = "generic",
++        operation_type: OperationType = "generic", # Updated type hint
+     ) -> Tuple[ApprovalDecision, str, Optional[str]]:
+         """
+         Requests user approval for a given operation.
+@@ -174,6 +176,21 @@ class ApprovalManager:
+         """
+         modification_reason: Optional[str] = None
+ 
++        # Handle read_file operations: auto-approve unless "Approve All" is active
++        if operation_type == "read_file":
++            if self._is_approve_all_active():
++                self._console.print(
++                    f"[success]AUTO-APPROVED (SESSION):[/] {operation_description}: [info]{item_to_approve}[/]",
 +                )
++                return "SESSION_APPROVED", item_to_approve, None
++            else:
++                logger.info(f"File read operation auto-approved: {operation_description} for '{item_to_approve}'")
++                self._console.print(
++                    f"[success]AUTO-APPROVED (READ):[/] {operation_description}: [info]{item_to_approve}[/]",
++                )
++                return "AUTO_APPROVED", item_to_approve, None
++
++        # Handle shell_command specific checks
+         if operation_type == "shell_command":
+             permission_status = self.get_command_permission_status(item_to_approve)
+             if permission_status == "PROHIBITED":
+@@ -188,12 +205,14 @@ class ApprovalManager:
+                 return "AUTO_APPROVED", item_to_approve, None
+             # If REQUIRES_USER_APPROVAL, proceed to general checks / user prompt
  
-             if run_result:
--                q_console.print("\n[title]QX:[/]")
-+                qx_console.print("\n[title]QX:[/]")
-                 if hasattr(run_result, 'output'):
--                    q_console.print(run_result.output)
-+                    qx_console.print(run_result.output)
-                     if hasattr(run_result, 'all_messages'):
-                         current_message_history = run_result.all_messages()
-                     else:
-                         logger.warning("run_result is missing 'all_messages' attribute.")
-                 else:
-                     logger.error(f"run_result is missing 'output' attribute. run_result type: {type(run_result)}, value: {run_result}")
--                    q_console.print("[error]Error:[/] Unexpected response structure from LLM.")
-+                    qx_console.print("[error]Error:[/] Unexpected response structure from LLM.")
-             else:
--                q_console.print(
-+                qx_console.print(
-                     "[warning]Info:[/] No response generated or an error occurred.",
++        # General "Approve All" check for other operations (generic, or shell_command needing user approval)
+         if self._is_approve_all_active():
+             self._console.print(
+                 f"[success]AUTO-APPROVED (SESSION):[/] {operation_description}: [info]{item_to_approve}[/]",
+             )
+             return "SESSION_APPROVED", item_to_approve, None
+ 
++        # Proceed to user prompt for generic operations or shell commands requiring it
+         panel_content = Text(f"{operation_description}:\n", style="title")
+         panel_content.append(item_to_approve, style="info")
+ 
+@@ -208,16 +227,11 @@ class ApprovalManager:
+         self._console.print(Panel(panel_content, border_style="prompt.border"))
+ 
+         current_choices = list(BASE_CHOICES)
+-        # For shell commands requiring user approval, modify is always an option.
+-        # For generic, it depends on the allow_modify flag.
+         effective_allow_modify = allow_modify or (operation_type == "shell_command")
+         if effective_allow_modify:
+-            # Ensure Modify is not duplicated if already in BASE_CHOICES (it's not, but good practice)
+             if not any(c[0] == MODIFY_CHOICE[0] for c in current_choices):
+-                 # Insert Modify before "Approve All" and "Cancel" for better flow
+                 current_choices.insert(2, MODIFY_CHOICE)
+ 
+-
+         user_choice_key = self._ask_confirmation("Proceed?", current_choices)
+ 
+         if user_choice_key == "y":
+@@ -247,7 +261,6 @@ class ApprovalManager:
+                 self._console.print(
+                     f"\n[success]▶▶▶ Auto-approval enabled for {duration_minutes} minutes.[/]\n"
                  )
+-                # Current operation is also approved as part of "Approve All"
+                 return "SESSION_APPROVED", item_to_approve, None
+             else:
+                 logger.info(
+@@ -256,7 +269,7 @@ class ApprovalManager:
+                 self._console.print(
+                     "[warning]Auto-approval not enabled (duration was 0 or less). Current operation denied.[/]"
+                 )
+-                return "USER_DENIED", item_to_approve, None # Deny current if "Approve All" is not activated
++                return "USER_DENIED", item_to_approve, None
  
-         except KeyboardInterrupt:
--            q_console.print("\nOperation cancelled by Ctrl+C. Returning to prompt.", style="warning")
--            current_message_history = None 
--            continue 
-+            qx_console.print("\nOperation cancelled by Ctrl+C. Returning to prompt.", style="warning")
-+            current_message_history = None
-+            continue
-         except asyncio.CancelledError:
--            q_console.print("\nOperation cancelled (async). Returning to prompt.", style="warning")
-+            qx_console.print("\nOperation cancelled (async). Returning to prompt.", style="warning")
-             current_message_history = None
-             continue
-         except Exception as e:
-             logger.error(f"An unexpected error occurred in the main loop: {e}", exc_info=True)
--            q_console.print(f"[error]Critical Error:[/] An unexpected error occurred: {e}")
--            q_console.print("Exiting QX due to critical error.", style="error")
-+            qx_console.print(f"[error]Critical Error:[/] An unexpected error occurred: {e}")
-+            qx_console.print("Exiting QX due to critical error.", style="error")
-             break
+         elif user_choice_key == "m" and effective_allow_modify:
+             logger.info(
+@@ -268,74 +281,63 @@ class ApprovalManager:
+                 console=self._console,
+             ).strip()
  
+-            if not modified_item: # If user enters empty string
++            if not modified_item:
+                 self._console.print("[warning]Modification cancelled (empty value entered). Original operation cancelled.[/]")
+                 logger.warning("Modification resulted in empty value. Cancelling operation.")
+                 return "USER_CANCELLED", item_to_approve, None
  
-@@ -199,17 +190,15 @@ def main():
-     try:
-         asyncio.run(_async_main())
-     except KeyboardInterrupt:
--        console_to_use = q_console if 'q_console' in globals() and q_console else RichConsole()
--        console_to_use.print("\nQX terminated by user.", style="info")
-+        # qx_console is imported and globally available
-+        qx_console.print("\nQX terminated by user.", style="info")
-         sys.exit(0)
-     except Exception as e:
--        # Ensure logger is available at this stage, even if basicConfig failed somehow
--        # (though it's unlikely if the script reaches here)
-         fallback_logger = logging.getLogger("qx.critical")
-         fallback_logger.critical(f"Critical error running QX: {e}", exc_info=True)
+-
+             if operation_type == "shell_command" and modified_item != item_to_approve :
+                 modification_reason = Prompt.ask(
+                     Text("Reason for modification (optional)", style="prompt"),
+                     default="",
+                     console=self._console,
+-                ).strip() or None # Ensure None if empty
++                ).strip() or None
+ 
+             self._console.print(f"[success]Value to be processed:[/] [info]{modified_item}[/]")
+             return "USER_MODIFIED", modified_item, modification_reason
+ 
+         logger.error(f"Unexpected choice key '{user_choice_key}' or scenario in request_approval.")
+-        # Fallback, should ideally not be reached if logic is correct
+         self._console.print(f"[error]An unexpected error occurred in approval. Operation cancelled.[/]")
+         return "USER_CANCELLED", item_to_approve, None
+ 
+-
+     def is_globally_approved(self) -> bool:
+         """Public method to check if 'Approve All' is active."""
+         return self._is_approve_all_active()
+ 
+ if __name__ == "__main__":
+-    from rich.theme import Theme
+-    # test_theme_dark = Theme({ ... }) # Keep theme for testing if desired
+-    console = RichConsole() 
+-    
++    console = RichConsole()
+     approval_manager = ApprovalManager(console=console)
+ 
+-    console.rule("[bold bright_magenta]Test 1: Generic Read File Approval (User Approves)[/]")
++    console.rule("[bold bright_magenta]Test 1: Generic Operation (User Approves)[/]")
+     decision, item, reason = approval_manager.request_approval(
+-        "Read file", "/path/to/some/file.txt", operation_type="generic"
++        "Some generic task", "generic_item_abc", operation_type="generic"
+     )
+     console.print(f"Decision: {decision}, Item: {item}, Reason: {reason}\n")
+ 
+-    console.rule("[bold bright_magenta]Test 2: Shell Command - Prohibited (rm -rf /)[/]")
++    console.rule("[bold bright_magenta]Test 2: Read File Operation (Auto-Approved)[/]")
++    decision, item, reason = approval_manager.request_approval(
++        "Read file content", "/path/to/example.txt", operation_type="read_file"
++    )
++    console.print(f"Decision: {decision}, Item: {item}, Reason: {reason}\n")
++
++    console.rule("[bold bright_magenta]Test 3: Shell Command - Prohibited (rm -rf /)[/]")
+     decision, command, reason = approval_manager.request_approval(
+         "Execute shell command", "rm -rf /", operation_type="shell_command"
+     )
+     console.print(f"Decision: {decision}, Command: {command}, Reason: {reason}\n")
+ 
+-    console.rule("[bold bright_magenta]Test 3: Shell Command - Auto-Approved (ls -la)[/]")
++    console.rule("[bold bright_magenta]Test 4: Shell Command - Auto-Approved (ls -la)[/]")
+     # Assuming "ls -la" or "ls *" is in DEFAULT_APPROVED_COMMANDS
+     decision, command, reason = approval_manager.request_approval(
+         "Execute shell command", "ls -la", operation_type="shell_command"
+     )
+     console.print(f"Decision: {decision}, Command: {command}, Reason: {reason}\n")
+ 
+-    console.rule("[bold bright_magenta]Test 4: Shell Command - Requires User Approval (e.g., custom_script.sh)[/]")
++    console.rule("[bold bright_magenta]Test 5: Shell Command - Requires User Approval (e.g., custom_script.sh)[/]")
+     decision, command, reason = approval_manager.request_approval(
+         "Execute shell command", "./my_custom_script.sh --verbose", operation_type="shell_command"
+     )
+     console.print(f"Decision: {decision}, Command: {command}, Reason: {reason}\n")
+-    # Test various inputs: y, n, m (and provide new command + reason), a (and set duration), c
+-
+-    console.rule("[bold bright_magenta]Test 5: Shell Command - User Modifies[/]")
+-    # Simulate a scenario where user input for Test 4 was 'm'
+-    # This test would typically be part of an interactive session.
+-    # Here, we'll just show how a "USER_MODIFIED" result would look.
+-    console.print(
+-        "Imagine user chose 'm' for './my_custom_script.sh --verbose' and entered 'echo hello' with reason 'testing'."
+-    )
+-    console.print(f"Example Decision: USER_MODIFIED, Command: echo hello, Reason: testing\n")
+-
+ 
+     console.rule("[bold bright_magenta]Test 6: Activate 'Approve All' via a shell command[/]")
+     # User would choose 'a' for this command
+@@ -344,25 +346,23 @@ if __name__ == "__main__":
+     )
+     console.print(f"Decision: {decision}, Command: {command}, Reason: {reason}\n")
+ 
+-
+-    console.rule("[bold bright_magenta]Test 7: Check 'Approve All' status and subsequent shell command[/]")
++    console.rule("[bold bright_magenta]Test 7: Read File Operation (SESSION_APPROVED if 'Approve All' active)[/]")
+     if approval_manager.is_globally_approved():
+         console.print("Global approval is ACTIVE.", style="success")
+-        decision, command, reason = approval_manager.request_approval(
+-            "Execute shell command", "cat README.md", operation_type="shell_command"
+-            # This should be SESSION_APPROVED if cat is not in DEFAULT_APPROVED_COMMANDS
+-            # or AUTO_APPROVED if 'cat *' is in DEFAULT_APPROVED_COMMANDS
++        decision, item, reason = approval_manager.request_approval(
++            "Read another file", "/path/to/another.log", operation_type="read_file"
+         )
+-        console.print(f"Decision: {decision}, Command: {command}, Reason: {reason}\n")
++        console.print(f"Decision: {decision}, Item: {item}, Reason: {reason}\n")
+     else:
+-        console.print("Global approval is NOT active.", style="warning")
++        console.print("Global approval is NOT active. Test 7 for read_file under 'Approve All' skipped.", style="warning")
++
+ 
+     console.rule("[bold bright_magenta]Test 8: Generic Write File with Modify (User Modifies)[/]")
+     file_content_preview = "Line 1.\nLine 2."
+     decision, path, mod_reason = approval_manager.request_approval(
+-        "Write file", "/path/to/doc.md", 
+-        allow_modify=True, 
++        "Write file", "/path/to/doc.md",
++        allow_modify=True,
+         content_preview=file_content_preview,
+         operation_type="generic"
+     )
+-    console.print(f"Decision: {decision}, Path: {path}, Reason: {mod_reason}\n")
+\ No newline at end of file
++    console.print(f"Decision: {decision}, Path: {path}, Reason: {mod_reason}\n")
+diff --git a/src/qx/core/llm.py b/src/qx/core/llm.py
+index 578845b..7424305 100644
+--- a/src/qx/core/llm.py
++++ b/src/qx/core/llm.py
+@@ -1,5 +1,4 @@
+ import asyncio
+-# import functools # No longer needed
+ import logging
+ import os
+ from pathlib import Path
+@@ -14,8 +13,9 @@ from rich.console import Console as RichConsole
+ from qx.core.approvals import ApprovalManager
+ from qx.core.config_manager import load_runtime_configurations
+ from qx.tools.execute_shell import ExecuteShellTool, ShellCommandInput, ShellCommandOutput
+-from qx.tools.read_file import read_file_impl
+-from qx.tools.write_file import write_file_impl
++# Import the new ReadFileTool and its Pydantic models
++from qx.tools.read_file import ReadFileTool, ReadFileInput, ReadFileOutput
++from qx.tools.write_file import write_file_impl # write_file_impl is still used directly in its wrapper
+ 
+ # Configure logging for this module
+ logger = logging.getLogger(__name__)
+@@ -52,42 +52,42 @@ def initialize_llm_agent(
+     project_id: Optional[str],
+     location: Optional[str],
+     console: RichConsole,
+-    approval_manager: ApprovalManager, # Accept ApprovalManager instance
++    approval_manager: ApprovalManager,
+ ) -> Optional[Agent]:
+     """
+     Initializes the Pydantic-AI Agent.
+-    The 'location' parameter is used as 'region' for GoogleVertexProvider.
+-    The 'approval_manager' is used for tool approval.
+     """
+     console.print("Initializing LLM Agent...", style="info")
+     system_prompt_content = load_and_format_system_prompt()
+ 
++    # Instantiate tools
+     shell_tool_instance = ExecuteShellTool(approval_manager=approval_manager)
++    read_file_tool_instance = ReadFileTool(approval_manager=approval_manager)
+ 
+-    def approved_read_file_tool(path: str) -> str:
+-        decision, final_path, _ = approval_manager.request_approval(
+-            operation_description="Read file",
+-            item_to_approve=path,
+-            allow_modify=False,
+-            operation_type="generic"
+-        )
+-        if decision not in ["AUTO_APPROVED", "SESSION_APPROVED", "USER_APPROVED"]:
+-            denial_reason = f"File read operation for '{final_path}' was {decision.lower().replace('_', ' ')}."
+-            console.print(denial_reason, style="warning")
+-            return f"Error: {denial_reason}"
+-        
+-        file_content = read_file_impl(final_path)
+-        if file_content is None:
+-            return f"Error: Could not read file at '{final_path}'. File may not exist or an error occurred."
+-        return file_content
++    # Wrapper for ReadFileTool
++    def approved_read_file_tool_wrapper(path: str) -> str:
++        tool_input = ReadFileInput(path=path)
++        output: ReadFileOutput = read_file_tool_instance.run(tool_input)
+ 
++        if output.error:
++            # output.error from ReadFileOutput should be a comprehensive message
++            return output.error
++        elif output.content is not None:
++            return output.content
++        else:
++            # This case should ideally not be reached if output.error covers all failures
++            # and output.content is present on success.
++            logger.warning(f"ReadFileTool returned no content and no error for path: {path}")
++            return f"Error: An unexpected issue occurred while reading file '{path}'. No content or error reported by tool."
++
++    # Wrapper for write_file_impl (remains largely the same, uses "generic" approval)
+     def approved_write_file_tool(path: str, content: str) -> str:
+         decision, final_path, _ = approval_manager.request_approval(
+             operation_description="Write file",
+             item_to_approve=path,
+             content_preview=content,
+-            allow_modify=False,
+-            operation_type="generic"
++            allow_modify=False, # Or True, depending on desired behavior for write
++            operation_type="generic" # Write operations still go through generic approval
+         )
+         if decision not in ["AUTO_APPROVED", "SESSION_APPROVED", "USER_APPROVED"]:
+             denial_reason = f"File write operation for '{final_path}' was {decision.lower().replace('_', ' ')}."
+@@ -98,8 +98,11 @@ def initialize_llm_agent(
+         if success:
+             return f"Successfully wrote to file: {final_path}"
+         else:
++            # write_file_impl itself doesn't return detailed errors, might need enhancement
++            # or rely on logs. For LLM, a simple error is often sufficient.
+             return f"Error: Failed to write to file: {final_path}"
+ 
++    # Wrapper for ExecuteShellTool (remains the same)
+     def approved_execute_shell_tool_wrapper(command: str) -> str:
+         tool_input = ShellCommandInput(command=command)
+         output: ShellCommandOutput = shell_tool_instance.run(tool_input)
+@@ -120,7 +123,7 @@ def initialize_llm_agent(
+             )
+ 
+     registered_tools = [
+-        approved_read_file_tool,
++        approved_read_file_tool_wrapper, # Use the new ReadFileTool wrapper
+         approved_write_file_tool,
+         approved_execute_shell_tool_wrapper,
+     ]
+@@ -147,7 +150,7 @@ def initialize_llm_agent(
+             tools=registered_tools,
+         )
          
--        console_to_use = q_console if 'q_console' in globals() and q_console else RichConsole()
--        console_to_use.print(f"[bold red]Critical error running QX:[/bold red] {e}")
-+        # qx_console is imported and globally available
-+        qx_console.print(f"[bold red]Critical error running QX:[/bold red] {e}")
-         sys.exit(1)
+-        tool_names = [tool.__name__ for tool in registered_tools]
++        tool_names = [tool.__name__ for tool in registered_tools] # type: ignore
+         console.print(
+             f"LLM Agent initialized: [info]{model_name_str}[/] "
+             f"Tools: [info]{', '.join(tool_names)}[/].",
+@@ -163,21 +166,24 @@ def initialize_llm_agent(
+ async def query_llm(
+     agent: Agent,
+     user_input: str,
+-    console: RichConsole,
++    console: RichConsole, # Retained for potential direct use, though spinner is now global
+     message_history: Optional[List[ModelMessage]] = None,
+ ) -> Optional[Any]:
+     """
+     Queries the LLM agent. Assumes agent.run() is a coroutine.
++    Spinner is handled in main.py around this call.
+     """
+-    console.print("\nQX is thinking...", style="info")
++    # console.print("\nQX is thinking...", style="info") # Spinner handles this now
+     try:
+         if message_history:
+-            # agent.run() is an async method, so it should be awaited directly.
+             result = await agent.run(user_input, message_history=message_history)
+         else:
+             result = await agent.run(user_input)
+         return result
+     except Exception as e:
+         logger.error(f"Error during LLM query: {e}", exc_info=True)
++        # The console for printing errors should ideally be the global qx_console
++        # but this function receives one. For consistency, we use the passed one.
++        # If qx_console is desired here, it would need to be imported or passed differently.
+         console.print(f"[error]Error:[/] LLM query: {e}")
+         return None
+\ No newline at end of file
+diff --git a/src/qx/tools/read_file.py b/src/qx/tools/read_file.py
+index b3b9405..7f0515e 100644
+--- a/src/qx/tools/read_file.py
++++ b/src/qx/tools/read_file.py
+@@ -1,15 +1,18 @@
+ import logging
++import os
+ from pathlib import Path
+-from typing import Optional
++from typing import Optional, Type
+ 
+-from qx.core.paths import USER_HOME_DIR, _find_project_root
+-from qx.tools.file_operations_base import is_path_allowed
++from pydantic import BaseModel, Field
++from qx.core.approvals import ApprovalManager
++from qx.core.paths import USER_HOME_DIR, _find_project_root # Used by read_file_impl
++from qx.tools.file_operations_base import is_path_allowed # Used by read_file_impl
+ 
+ # Configure logging for this module
+ logger = logging.getLogger(__name__)
  
  
+-def read_file_impl(path_str: str) -> Optional[str]:
++def read_file_impl(path_str: str) -> str: # Changed Optional[str] to str
+     """
+     Reads the content of a file after path validation.
+     This is the core implementation, intended to be called after approval.
+@@ -18,29 +21,33 @@ def read_file_impl(path_str: str) -> Optional[str]:
+         path_str: The relative or absolute path to the file.
+ 
+     Returns:
+-        The file content as a string, or None if an error occurs or
+-        the path is not allowed.
++        The file content as a string, or an error message string if an error occurs
++        or the path is not allowed.
+     """
+     try:
+-        # Determine project_root based on current working directory at the time of the call
+-        # This ensures context is fresh for each tool invocation if CWD could change.
+-        # However, for QX, CWD is generally stable during a session.
+-        # For simplicity and consistency with how project_root is determined elsewhere (e.g. config_manager)
+-        # we could pass project_root if it's already determined, or re-determine it.
+-        # Here, we re-determine to keep the tool self-contained regarding path validation context.
+-        project_root = _find_project_root(str(Path.cwd()))
+-        absolute_path = Path(path_str).resolve()
++        # project_root determination is crucial for is_path_allowed
++        # Assuming Path.cwd() is the intended base for resolving project_root if path_str is relative
++        # and project_root isn't explicitly passed.
++        current_working_dir = Path.cwd()
++        project_root = _find_project_root(str(current_working_dir))
++        
++        # Resolve path_str. If path_str is absolute, it's used as is.
++        # If path_str is relative, it's resolved against current_working_dir.
++        absolute_path = current_working_dir.joinpath(path_str).resolve()
++        # An alternative for explicit relative-to-project:
++        # if project_root and not Path(path_str).is_absolute():
++        #    absolute_path = project_root.joinpath(path_str).resolve()
++        # else:
++        #    absolute_path = Path(path_str).resolve()
++
+ 
+         if not is_path_allowed(absolute_path, project_root, USER_HOME_DIR):
+             logger.error(
+                 f"Read access denied by policy for path: {absolute_path}. "
+                 f"Project root: {project_root}, User home: {USER_HOME_DIR}"
+             )
+-            # To provide feedback to the LLM, an error message could be returned.
+-            # For now, returning None as per original design for errors.
+             return f"Error: Access denied by policy for path: {absolute_path}"
+ 
+-
+         if not absolute_path.is_file():
+             logger.error(f"File not found or not a file: {absolute_path}")
+             return f"Error: File not found or is not a regular file: {absolute_path}"
+@@ -50,7 +57,8 @@ def read_file_impl(path_str: str) -> Optional[str]:
+         return content
+ 
+     except FileNotFoundError:
+-        logger.error(f"File not found: {path_str}")
++        # This might be redundant if absolute_path.is_file() check is robust
++        logger.error(f"File not found (exception): {path_str}")
+         return f"Error: File not found: {path_str}"
+     except PermissionError:
+         logger.error(f"Permission denied reading file: {path_str}")
+@@ -62,25 +70,188 @@ def read_file_impl(path_str: str) -> Optional[str]:
+         logger.error(f"Error reading file '{path_str}': {e}", exc_info=True)
+         return f"Error reading file '{path_str}': {e}"
+ 
++
++class ReadFileInput(BaseModel):
++    """Input model for the ReadFileTool."""
++    path: str = Field(..., description="The path to the file to be read. Can be relative or absolute.")
++    # Future enhancements:
++    # from_line: Optional[int] = Field(None, description="Optional line number to start reading from (1-indexed).")
++    # to_line: Optional[int] = Field(None, description="Optional line number to end reading at (inclusive).")
++
++class ReadFileOutput(BaseModel):
++    """Output model for the ReadFileTool."""
++    path: str = Field(description="The path of the file attempted to be read.")
++    content: Optional[str] = Field(None, description="The content of the file if successful, otherwise None.")
++    error: Optional[str] = Field(None, description="Error message if the operation was denied, failed, or the file was not found.")
++
++
++class ReadFileTool:
++    """
++    A tool to read the content of a specified file.
++    This operation is automatically approved by the system (logged as AUTO_APPROVED or SESSION_APPROVED)
++    and does not require explicit user confirmation unless 'Approve All' is active.
++    Path validation ensures reads are restricted to the project directory or user's home directory.
++    """
++    name: str = "read_file"
++    description: str = (
++        "Reads the content of a specified file. Provide a relative or absolute path. "
++        "Access is restricted to project files or files within the user's home directory. "
++        "This operation is auto-approved."
++    )
++    input_model: Type[BaseModel] = ReadFileInput
++    output_model: Type[BaseModel] = ReadFileOutput
++
++    def __init__(self, approval_manager: ApprovalManager):
++        self.approval_manager = approval_manager
++
++    def run(self, args: ReadFileInput) -> ReadFileOutput:
++        """
++        Handles the (auto)approval and execution of reading a file.
++        """
++        file_path_arg = args.path
++
++        decision, item_after_approval, _ = \
++            self.approval_manager.request_approval(
++                operation_description="Read file",
++                item_to_approve=file_path_arg,
++                operation_type="read_file"
++            )
++
++        # For "read_file", item_after_approval should be the same as file_path_arg
++        # as modification is not supported for this operation type.
++        if item_after_approval != file_path_arg:
++            logger.warning(
++                f"File path changed during 'read_file' approval from '{file_path_arg}' to '{item_after_approval}'. "
++                "This is unexpected. Using the original path argument."
++            )
++            # Sticking to file_path_arg as modification isn't a feature here.
++
++        if decision in ["AUTO_APPROVED", "SESSION_APPROVED"]:
++            logger.info(f"Read operation for '{file_path_arg}' approved (Decision: {decision}). Proceeding to read.")
++            
++            file_content_or_error_str = read_file_impl(file_path_arg)
++
++            if file_content_or_error_str.startswith("Error:"):
++                logger.warning(f"Failed to read file '{file_path_arg}': {file_content_or_error_str}")
++                return ReadFileOutput(path=file_path_arg, content=None, error=file_content_or_error_str)
++            else:
++                # Success
++                return ReadFileOutput(path=file_path_arg, content=file_content_or_error_str, error=None)
++        
++        # Defensive handling for unexpected decisions (should not occur for "read_file" type)
++        else:
++            error_message = f"File read for '{file_path_arg}' was unexpectedly {decision.lower().replace('_', ' ')}."
++            if decision == "PROHIBITED":
++                 error_message = f"File read for '{file_path_arg}' prohibited by policy (unexpected for read operations)."
++            
++            logger.warning(error_message)
++            return ReadFileOutput(path=file_path_arg, content=None, error=error_message)
++
++
+ if __name__ == "__main__":
+-    # Example usage for direct testing (ensure you have appropriate files/permissions)
+-    # Create a dummy project structure for testing
+-    # mkdir -p /tmp/qx_test_project/.Q
+-    # echo "hello from project file" > /tmp/qx_test_project/test.txt
+-    # echo "user details" > ~/.config/q/user.md (if not exists)
+-
+-    # Test within a "project"
+-    # current_dir = Path("/tmp/qx_test_project")
+-    # current_dir.mkdir(parents=True, exist_ok=True)
+-    # (current_dir / ".Q").mkdir(exist_ok=True)
+-    # (current_dir / "example.txt").write_text("Project file content.")
+-
+-    # print(f"Testing read_file_impl from {current_dir}")
+-    # print(f"Reading 'example.txt': {read_file_impl(str(current_dir / 'example.txt'))}")
+-    # print(f"Reading './example.txt' (relative): {read_file_impl('example.txt')}") # Needs CWD to be /tmp/qx_test_project
+-    # print(f"Reading non_existent.txt: {read_file_impl('non_existent.txt')}")
+-    # print(f"Reading outside project (e.g., /etc/hosts - should be denied by policy if not in home and no project): {read_file_impl('/etc/hosts')}")
+-
+-    # To run this test effectively, you might need to adjust CWD or use absolute paths
+-    # that align with your test setup and the logic in _find_project_root and is_path_allowed.
+-    pass
+\ No newline at end of file
++    from rich.console import Console as RichConsole
++    import shutil
++
++    # Dummy ApprovalManager for testing
++    class DummyApprovalManager:
++        def __init__(self, console):
++            self.console = console
++            self._approve_all_active = False
++
++        def request_approval(self, operation_description, item_to_approve, operation_type, **kwargs):
++            self.console.print(
++                f"DummyApprovalManager: Requesting approval for '{operation_description}: {item_to_approve}' (type: {operation_type})"
++            )
++            if operation_type == "read_file":
++                if self._approve_all_active:
++                    return "SESSION_APPROVED", item_to_approve, None
++                return "AUTO_APPROVED", item_to_approve, None
++            return "USER_DENIED", item_to_approve, None # Fallback
++
++        def is_globally_approved(self):
++            return self._approve_all_active
++
++    test_console = RichConsole()
++    approval_manager_instance = DummyApprovalManager(console=test_console)
++    read_tool = ReadFileTool(approval_manager=approval_manager_instance)
++
++    test_console.rule("[bold bright_green]Testing ReadFileTool[/]")
++
++    # Setup test environment
++    base_test_dir = Path("/tmp/qx_tool_tests")
++    test_project_dir = base_test_dir / "qx_read_tool_test_project"
++    user_home_files_dir = Path(USER_HOME_DIR) / "qx_read_tool_test_home_files" # Assumes USER_HOME_DIR is sensible
++
++    for p_dir in [test_project_dir, user_home_files_dir]:
++        p_dir.mkdir(parents=True, exist_ok=True)
++    
++    (test_project_dir / ".Q").mkdir(exist_ok=True)
++    (test_project_dir / "project_file.txt").write_text("Content of project_file.txt")
++    (user_home_files_dir / "home_file.txt").write_text("Content of home_file.txt")
++    (test_project_dir / "forbidden_dir").mkdir(exist_ok=True) # For directory read attempt
++
++    original_cwd = Path.cwd()
++
++    def run_read_test(path_str: str, description: str, expect_success: bool, set_cwd_to_project: bool = False):
++        test_console.print(f"\n[bold]Test Case:[/] {description}")
++        test_console.print(f"[cyan]Attempting to read:[/] '{path_str}'")
++        
++        if set_cwd_to_project:
++            os.chdir(test_project_dir)
++            test_console.print(f"[dim]Changed CWD to: {test_project_dir}[/dim]")
++        
++        tool_input = ReadFileInput(path=path_str)
++        result = read_tool.run(tool_input)
++        
++        if Path.cwd() != original_cwd:
++            os.chdir(original_cwd)
++            test_console.print(f"[dim]Restored CWD to: {original_cwd}[/dim]")
++
++        test_console.print(f"  Path Attempted: {result.path}")
++        if result.content:
++            preview = result.content[:70] + "..." if len(result.content) > 70 else result.content
++            test_console.print(f"  [green]Content:[/] '{preview}'")
++        if result.error:
++            test_console.print(f"  [red]Error:[/] {result.error}")
++
++        if expect_success and result.error:
++            test_console.print("  [bold red]TEST FAILED: Expected success, got error.[/]")
++        elif not expect_success and not result.error:
++            test_console.print("  [bold red]TEST FAILED: Expected error, got success.[/]")
++        elif expect_success and not result.error:
++            test_console.print("  [bold green]TEST PASSED: Successfully read as expected.[/]")
++        elif not expect_success and result.error:
++            test_console.print("  [bold green]TEST PASSED: Correctly failed as expected.[/]")
++        test_console.print("-" * 40)
++
++    # Test cases
++    run_read_test(str(test_project_dir / "project_file.txt"), "Read project file (absolute path)", True)
++    run_read_test("project_file.txt", "Read project file (relative path from project root)", True, set_cwd_to_project=True)
++    run_read_test(str(user_home_files_dir / "home_file.txt"), "Read user home file (absolute path)", True)
++    
++    # Test relative path from non-project CWD to a home file (requires careful path construction)
++    # This depends on how USER_HOME_DIR and path_str are combined.
++    # Assuming path_str can be relative to CWD and then resolved.
++    # For robustness, absolute paths or paths relative to known roots (project/home) are better for LLM.
++    # Let's test a relative path that should resolve correctly if CWD is user's actual home.
++    # This test is a bit fragile depending on CWD of test execution.
++    # os.chdir(USER_HOME_DIR)
++    # run_read_test("qx_read_tool_test_home_files/home_file.txt", "Read user home file (relative from user home CWD)", True)
++    # os.chdir(original_cwd)
++
++    run_read_test(str(test_project_dir / "non_existent.txt"), "Read non-existent file", False)
++    run_read_test(str(test_project_dir / "forbidden_dir"), "Attempt to read a directory", False)
++    run_read_test("/etc/passwd", "Read system file (e.g., /etc/passwd - should be denied by policy)", False)
++    
++    # Test with "Approve All" active
++    test_console.rule("[bold]Testing with 'Approve All' active[/]")
++    approval_manager_instance._approve_all_active = True
++    run_read_test(str(test_project_dir / "project_file.txt"), "Read project file ('Approve All' active)", True)
++    approval_manager_instance._approve_all_active = False # Reset
++
++    test_console.print(f"\n[dim]Test files are in {base_test_dir} and {user_home_files_dir}. Clean up manually if needed.[/dim]")
++    test_console.print("\n[bold bright_green]Finished ReadFileTool Tests[/]")
++
++    # shutil.rmtree(base_test_dir, ignore_errors=True)
++    # if user_home_files_dir.exists() and "qx_read_tool_test_home_files" in str(user_home_files_dir): # Safety check
++    #     shutil.rmtree(user_home_files_dir, ignore_errors=True)
 diff --git a/tmp/commit_message.txt b/tmp/commit_message.txt
-index c20bee6..3219b1e 100644
+index 3219b1e..68a18a8 100644
 --- a/tmp/commit_message.txt
 +++ b/tmp/commit_message.txt
-@@ -1,8 +1,31 @@
--fix: Ensure Ctrl+C during async operations returns to prompt
-+feat: Implement shell command permissions and configurable logging
- 
--Refined KeyboardInterrupt (Ctrl+C) handling in `src/qx/main.py` to ensure that interrupting an asynchronous operation (e.g., while QX is "thinking") returns the user to the input prompt instead of exiting the application.
-+This commit introduces a comprehensive shell command permission system and makes the application's log level configurable via an environment variable.
- 
--- Added an `except asyncio.CancelledError:` block to the main loop in `_async_main`. When a `KeyboardInterrupt` occurs during an `await` call, `asyncio.run()` cancels the main task, raising `asyncio.CancelledError`. This new handler catches the error, prints a message, optionally clears `current_message_history`, and then `continue`s the loop, effectively returning to the prompt.
--- This prevents the `KeyboardInterrupt` from propagating up and causing the application to terminate.
--- The existing `except KeyboardInterrupt:` in `_async_main` remains for synchronous interrupts.
--- Updated `.Q/projectlog.md` to reflect this more robust handling.
+@@ -1,31 +1,456 @@
+-feat: Implement shell command permissions and configurable logging
+-
+-This commit introduces a comprehensive shell command permission system and makes the application's log level configurable via an environment variable.
+-
+-Key changes:
+-
+-Shell Command Permission System:
+-- Added `DEFAULT_APPROVED_COMMANDS` and updated `DEFAULT_PROHIBITED_COMMANDS` in `src/qx/core/constants.py` with more comprehensive lists and fnmatch patterns.
+-- Enhanced `ApprovalManager` (`src/qx/core/approvals.py`):
+-    - Implemented `get_command_permission_status` to check commands against prohibited/approved lists using fnmatch.
+-    - Modified `request_approval` to handle different operation types (e.g., "shell_command"), return detailed `ApprovalDecision`, and manage a "Modify" flow for commands.
+-- Implemented `ExecuteShellTool` (`src/qx/tools/execute_shell.py`):
+-    - Defined `ShellCommandInput` and `ShellCommandOutput` Pydantic models.
+-    - The tool uses `ApprovalManager` to orchestrate the approval workflow, including command modification and re-evaluation.
+-    - Executes commands via `subprocess.run` only after approval.
+-    - Returns structured output including modification details.
+-- Integration:
+-    - Updated `src/qx/tools/__init__.py` to export `ExecuteShellTool`.
+-    - Refactored `src/qx/core/llm.py` (`initialize_llm_agent`):
+-        - Instantiated `ExecuteShellTool` and created a wrapper for PydanticAI agent integration.
+-        - Standardized return types for all tool wrappers (`approved_read_file_tool`, `approved_write_file_tool`) to provide consistent string feedback to the LLM.
+-        - Corrected `query_llm` to directly `await agent.run()`.
+-
+-Configurable Logging:
+-- Modified `src/qx/main.py` to allow setting the application log level via the `QX_LOG_LEVEL` environment variable (DEBUG, INFO, WARNING, ERROR, CRITICAL), defaulting to ERROR.
+-
+-Other Changes:
+-- Updated `.env` to use a newer Gemini model.
+-- Added `src/qx/directives/worklogger.md` (content seems related to future worklog functionality).
+-- Updated `src/qx/prompts/system-prompt.md` with an `<extended-directives>` placeholder.
+-- Updated `.Q/projectlog.md` to reflect these developments.
 \ No newline at end of file
-+Key changes:
-+
-+Shell Command Permission System:
-+- Added `DEFAULT_APPROVED_COMMANDS` and updated `DEFAULT_PROHIBITED_COMMANDS` in `src/qx/core/constants.py` with more comprehensive lists and fnmatch patterns.
-+- Enhanced `ApprovalManager` (`src/qx/core/approvals.py`):
-+    - Implemented `get_command_permission_status` to check commands against prohibited/approved lists using fnmatch.
-+    - Modified `request_approval` to handle different operation types (e.g., "shell_command"), return detailed `ApprovalDecision`, and manage a "Modify" flow for commands.
-+- Implemented `ExecuteShellTool` (`src/qx/tools/execute_shell.py`):
-+    - Defined `ShellCommandInput` and `ShellCommandOutput` Pydantic models.
-+    - The tool uses `ApprovalManager` to orchestrate the approval workflow, including command modification and re-evaluation.
-+    - Executes commands via `subprocess.run` only after approval.
-+    - Returns structured output including modification details.
-+- Integration:
-+    - Updated `src/qx/tools/__init__.py` to export `ExecuteShellTool`.
-+    - Refactored `src/qx/core/llm.py` (`initialize_llm_agent`):
-+        - Instantiated `ExecuteShellTool` and created a wrapper for PydanticAI agent integration.
-+        - Standardized return types for all tool wrappers (`approved_read_file_tool`, `approved_write_file_tool`) to provide consistent string feedback to the LLM.
-+        - Corrected `query_llm` to directly `await agent.run()`.
-+
-+Configurable Logging:
-+- Modified `src/qx/main.py` to allow setting the application log level via the `QX_LOG_LEVEL` environment variable (DEBUG, INFO, WARNING, ERROR, CRITICAL), defaulting to ERROR.
-+
-+Other Changes:
-+- Updated `.env` to use a newer Gemini model.
-+- Added `src/qx/directives/worklogger.md` (content seems related to future worklog functionality).
-+- Updated `src/qx/prompts/system-prompt.md` with an `<extended-directives>` placeholder.
-+- Updated `.Q/projectlog.md` to reflect these developments.
-\ No newline at end of file
-diff --git a/uv.lock b/uv.lock
-index bc28e3b..46ddc37 100644
---- a/uv.lock
-+++ b/uv.lock
-@@ -890,6 +890,7 @@ dependencies = [
-     { name = "pydantic-ai" },
-     { name = "pyfzf" },
-     { name = "python-dotenv" },
-+    { name = "rich" },
- ]
- 
- [package.dev-dependencies]
-@@ -903,6 +904,7 @@ requires-dist = [
-     { name = "pydantic-ai", specifier = ">=0.2.4" },
-     { name = "pyfzf", specifier = ">=0.2.3" },
-     { name = "python-dotenv", specifier = ">=1.1.0" },
-+    { name = "rich", specifier = ">=14.0.0" },
- ]
- 
- [package.metadata.requires-dev]
++diff --git a/pyproject.toml b/pyproject.toml
++index 82b70b4..df22b96 100644
++--- a/pyproject.toml
+++++ b/pyproject.toml
++@@ -9,6 +9,7 @@ dependencies = [
++     "python-dotenv>=1.1.0",
++     "prompt-toolkit>=3.0.0",
++     "pyfzf>=0.2.3", # Added pyfzf
+++    "rich>=14.0.0",
++ ]
++ 
++ [build-system]
++diff --git a/src/qx/cli/console.py b/src/qx/cli/console.py
++new file mode 100644
++index 0000000..18f15d3
++--- /dev/null
+++++ b/src/qx/cli/console.py
++@@ -0,0 +1,101 @@
+++# src/qx/cli/console.py
+++# This module handles rich text output using the rich library.
+++
+++from typing import Optional
+++
+++from rich.console import Console
+++from rich.status import Status
+++from rich.theme import Theme as RichTheme # Renamed to avoid conflict
+++
+++# Create a standard Rich Console - this will be the base for qx_console
+++# It can be re-initialized with a theme later.
+++_initial_rich_console = Console(force_terminal=True)
+++
+++
+++class QXConsole:
+++    """
+++    A wrapper around rich.console.Console to provide QX-specific console utilities.
+++    This class manages a single Rich Console instance that can be themed.
+++    """
+++
+++    def __init__(self, initial_console: Console):
+++        self._console = initial_console
+++
+++    def print(self, *args, **kwargs):
+++        """
+++        Prints to the console using the underlying rich Console.
+++        """
+++        return self._console.print(*args, **kwargs)
+++
+++    def status(self, *args, **kwargs) -> Status:
+++        """
+++        Displays a status message with a spinner.
+++        Forwards to the underlying rich Console's status method.
+++        """
+++        return self._console.status(*args, **kwargs)
+++
+++    def apply_theme(self, theme: RichTheme):
+++        """
+++        Applies a new theme to the console.
+++        This re-initializes the internal Rich Console instance.
+++        """
+++        self._console = Console(theme=theme, force_terminal=True)
+++        # Potentially log theme application here if a logger is available/passed
+++
+++    def __getattr__(self, name):
+++        """Forward all other attribute access to the underlying console."""
+++        return getattr(self._console, name)
+++
+++
+++# Create the global QXConsole instance
+++qx_console = QXConsole(_initial_rich_console)
+++
+++
+++def show_spinner(
+++    message: str = "Thinking...",
+++    spinner_name: str = "dots",
+++    speed: float = 1.0,
+++    style: str = "status.spinner",
+++) -> Status:
+++    """
+++    Display a spinner with the given message using the global qx_console.
+++
+++    Args:
+++        message: The message to display alongside the spinner.
+++        spinner_name: The type of spinner to be used (e.g., "dots", "line", "moon").
+++        speed: The speed of the spinner.
+++        style: The style to apply to the spinner.
+++
+++    Returns:
+++        A rich.status.Status object that can be updated or stopped.
+++    """
+++    # Ensure spinner uses the potentially themed qx_console
+++    return qx_console.status(
+++        message,
+++        spinner=spinner_name,
+++        speed=speed,
+++        spinner_style=style,
+++    )
+++
+++
+++if __name__ == "__main__":
+++    # Example usage:
+++    import time
+++    from rich.theme import Theme as RichThemeExample
+++
+++    # Example of applying a theme (optional)
+++    custom_theme = RichThemeExample({"status.spinner": "bold blue", "info": "dim cyan"})
+++    qx_console.apply_theme(custom_theme)
+++
+++    spinner = show_spinner("Processing your request...", style="status.spinner")
+++    with spinner:
+++        time.sleep(3)
+++        spinner.update("Almost done...")
+++        time.sleep(2)
+++    qx_console.print("[green]Done![/green]")
+++
+++    with show_spinner("Another task...", spinner_name="moon") as status:
+++        time.sleep(3)
+++        status.update("Finalizing...")
+++        time.sleep(2)
+++    qx_console.print("Task complete.", style="info")
++diff --git a/src/qx/core/constants.py b/src/qx/core/constants.py
++index 2391da1..26fed2a 100644
++--- a/src/qx/core/constants.py
+++++ b/src/qx/core/constants.py
++@@ -32,6 +32,23 @@ DEFAULT_TREE_IGNORE_PATTERNS = [
++     "coverage_reports",
++     "htmlcov",
++     ".coverage",
+++    "package-lock.json",
+++    "yarn.lock",
+++    "yarn-error.log",
+++    "npm-debug.log",
+++    "*.class",
+++    "*.jar",
+++    "*.war",
+++    "*.ear",
+++    ".settings",
+++    ".classpath",
+++    ".project",
+++    # R-specific patterns
+++    ".Rhistory",
+++    ".RData",
+++    "*.Rproj",
+++    ".Ruserdata",  # Simpler form of .Ruserdata/
+++    "renv",  # Simpler form of renv/
++ ]
++ 
++ DEFAULT_PROHIBITED_COMMANDS = [
++@@ -366,4 +383,3 @@ CLI_THEMES = {
++         "markdown.hr": "dim black",
++     },
++ }
++-
++diff --git a/src/qx/main.py b/src/qx/main.py
++index f8d42d6..b6ed1ee 100644
++--- a/src/qx/main.py
+++++ b/src/qx/main.py
++@@ -3,12 +3,13 @@ import logging
++ import os
++ import sys
++ 
++-from rich.console import Console as RichConsole
++ from rich.panel import Panel
++ from rich.text import Text
++-from rich.theme import Theme
+++from rich.theme import Theme as RichTheme # Keep for creating theme objects
++ 
+++# QX imports
++ from qx.cli.qprompt import get_user_input
+++from qx.cli.console import qx_console, show_spinner # Import global console and spinner
++ from qx.core.config_manager import load_runtime_configurations
++ from qx.core.constants import (
++     DEFAULT_MODEL,
++@@ -17,13 +18,11 @@ from qx.core.constants import (
++     DEFAULT_CLI_THEME
++ )
++ from qx.core.llm import initialize_llm_agent, query_llm
++-from qx.core.approvals import ApprovalManager # Import ApprovalManager
+++from qx.core.approvals import ApprovalManager
++ from pydantic_ai.messages import ModelMessage
++ from typing import List, Optional, Any
++ 
++ # --- Configure logging for the application ---
++-# Determine log level from environment variable QX_LOG_LEVEL
++-# Defaults to ERROR if not set or invalid.
++ log_level_name = os.getenv("QX_LOG_LEVEL", "ERROR").upper()
++ LOG_LEVELS = {
++     "DEBUG": logging.DEBUG,
++@@ -35,7 +34,7 @@ LOG_LEVELS = {
++ effective_log_level = LOG_LEVELS.get(log_level_name, logging.ERROR)
++ 
++ logging.basicConfig(
++-    level=effective_log_level, 
+++    level=effective_log_level,
++     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
++ )
++ logger = logging.getLogger("qx")
++@@ -43,13 +42,9 @@ logger.info(f"QX application log level set to: {logging.getLevelName(effective_l
++ # --- End logging configuration ---
++ 
++ 
++-# Global console instance - will be themed and potentially reassigned in _async_main
++-q_console = RichConsole()
++-
++-
++ async def _async_main():
++     """Asynchronous main function to handle the QX agent logic."""
++-    global q_console
+++    # qx_console is now imported and globally available
++ 
++     load_runtime_configurations()
++ 
++@@ -61,9 +56,7 @@ async def _async_main():
++             selected_theme_name = theme_name_from_env
++             logger.info(f"Using CLI theme from environment variable: {selected_theme_name}")
++         else:
++-            # Use a basic console for this warning if q_console isn't themed yet
++-            temp_console = RichConsole()
++-            temp_console.print(
+++            qx_console.print( # Use qx_console directly
++                 f"[yellow]Warning:[/yellow] CLI_THEME environment variable '{theme_name_from_env}' is invalid. "
++                 f"Available themes: {list(CLI_THEMES.keys())}. "
++                 f"Falling back to default theme: {DEFAULT_CLI_THEME}.",
++@@ -77,9 +70,7 @@ async def _async_main():
++ 
++     final_theme_dict = CLI_THEMES.get(selected_theme_name)
++     if not final_theme_dict:
++-        # Use a basic console for this error if q_console isn't themed yet
++-        temp_console = RichConsole()
++-        temp_console.print(
+++        qx_console.print( # Use qx_console directly
++             f"[bold red]Error:[/bold red] Selected theme '{selected_theme_name}' not found in CLI_THEMES. "
++             f"Using a basic console without full custom theming."
++         )
++@@ -89,19 +80,17 @@ async def _async_main():
++         )
++     else:
++         try:
++-            rich_theme_obj = Theme(final_theme_dict)
++-            q_console = RichConsole(theme=rich_theme_obj)
+++            rich_theme_obj = RichTheme(final_theme_dict)
+++            qx_console.apply_theme(rich_theme_obj) # Apply theme to the global qx_console
++             logger.info(f"Successfully applied CLI theme: {selected_theme_name}")
++         except Exception as e:
++-            # Use a basic console for this error
++-            temp_console = RichConsole()
++-            temp_console.print(f"[bold red]Error applying theme '{selected_theme_name}': {e}. Using basic console.[/bold red]")
+++            qx_console.print(f"[bold red]Error applying theme '{selected_theme_name}': {e}. Using basic console.[/bold red]")
++             logger.error(f"Error applying theme '{selected_theme_name}': {e}. Using basic console.", exc_info=True)
++ 
++-    # Instantiate ApprovalManager after the console is potentially themed
++-    approval_manager = ApprovalManager(console=q_console)
+++    # Instantiate ApprovalManager with the (now potentially themed) global qx_console
+++    approval_manager = ApprovalManager(console=qx_console)
++ 
++-    q_console.print(
+++    qx_console.print(
++         Panel(
++             Text("Welcome to QX - Your AI Coding Agent by Transparently.AI", justify="center"),
++             title="QX Agent",
++@@ -114,33 +103,33 @@ async def _async_main():
++     location = os.environ.get("QX_VERTEX_LOCATION", DEFAULT_VERTEXAI_LOCATION if project_id else None)
++ 
++     if not model_name_from_env:
++-        q_console.print(
+++        qx_console.print(
++             "[error]Critical Error:[/] QX_MODEL_NAME missing."
++         )
++         sys.exit(1)
++ 
++     if project_id and not location:
++-        q_console.print(
+++        qx_console.print(
++             f"[warning]Warning:[/] QX_VERTEX_PROJECT_ID ('{project_id}') set, "
++             f"but QX_VERTEX_LOCATION is not. Using default: '{DEFAULT_VERTEXAI_LOCATION}'.",
++         )
++         location = DEFAULT_VERTEXAI_LOCATION
++ 
++-    q_console.print(f"Using Model: [info]{model_name_from_env}[/]")
+++    qx_console.print(f"Using Model: [info]{model_name_from_env}[/]")
++     if project_id:
++-        q_console.print(f"Vertex AI Project ID: [info]{project_id}[/]")
++-        q_console.print(f"Vertex AI Location: [info]{location}[/]")
+++        qx_console.print(f"Vertex AI Project ID: [info]{project_id}[/]")
+++        qx_console.print(f"Vertex AI Location: [info]{location}[/]")
++ 
++     agent = initialize_llm_agent(
++         model_name_str=model_name_from_env,
++         project_id=project_id,
++         location=location,
++-        console=q_console,
+++        console=qx_console, # Pass the global qx_console
++         approval_manager=approval_manager
++     )
++ 
++     if agent is None:
++-        q_console.print(
+++        qx_console.print(
++             "[error]Critical Error:[/] Failed to initialize LLM agent. Exiting."
++         )
++         sys.exit(1)
++@@ -149,49 +138,51 @@ async def _async_main():
++ 
++     while True:
++         try:
++-            user_input = await get_user_input(q_console, approval_manager)
++-            
++-            if user_input == "" and not approval_manager.is_globally_approved(): # Check if Ctrl+C in prompt
+++            user_input = await get_user_input(qx_console, approval_manager)
+++
+++            if user_input == "" and not approval_manager.is_globally_approved():
++                 continue
++ 
++             if user_input.lower() in ["exit", "quit"]:
++-                q_console.print("Exiting QX. Goodbye!", style="info")
+++                qx_console.print("Exiting QX. Goodbye!", style="info")
++                 break
++-            if not user_input.strip(): 
+++            if not user_input.strip():
++                 continue
++ 
++-            run_result: Optional[Any] = await query_llm(
++-                agent, user_input, message_history=current_message_history, console=q_console
++-            )
+++            run_result: Optional[Any] = None
+++            with show_spinner("QX is thinking..."): # Use the spinner
+++                run_result = await query_llm(
+++                    agent, user_input, message_history=current_message_history, console=qx_console
+++                )
++ 
++             if run_result:
++-                q_console.print("\n[title]QX:[/]")
+++                qx_console.print("\n[title]QX:[/]")
++                 if hasattr(run_result, 'output'):
++-                    q_console.print(run_result.output)
+++                    qx_console.print(run_result.output)
++                     if hasattr(run_result, 'all_messages'):
++                         current_message_history = run_result.all_messages()
++                     else:
++                         logger.warning("run_result is missing 'all_messages' attribute.")
++                 else:
++                     logger.error(f"run_result is missing 'output' attribute. run_result type: {type(run_result)}, value: {run_result}")
++-                    q_console.print("[error]Error:[/] Unexpected response structure from LLM.")
+++                    qx_console.print("[error]Error:[/] Unexpected response structure from LLM.")
++             else:
++-                q_console.print(
+++                qx_console.print(
++                     "[warning]Info:[/] No response generated or an error occurred.",
++                 )
++ 
++         except KeyboardInterrupt:
++-            q_console.print("\nOperation cancelled by Ctrl+C. Returning to prompt.", style="warning")
++-            current_message_history = None 
++-            continue 
+++            qx_console.print("\nOperation cancelled by Ctrl+C. Returning to prompt.", style="warning")
+++            current_message_history = None
+++            continue
++         except asyncio.CancelledError:
++-            q_console.print("\nOperation cancelled (async). Returning to prompt.", style="warning")
+++            qx_console.print("\nOperation cancelled (async). Returning to prompt.", style="warning")
++             current_message_history = None
++             continue
++         except Exception as e:
++             logger.error(f"An unexpected error occurred in the main loop: {e}", exc_info=True)
++-            q_console.print(f"[error]Critical Error:[/] An unexpected error occurred: {e}")
++-            q_console.print("Exiting QX due to critical error.", style="error")
+++            qx_console.print(f"[error]Critical Error:[/] An unexpected error occurred: {e}")
+++            qx_console.print("Exiting QX due to critical error.", style="error")
++             break
++ 
++ 
++@@ -199,17 +190,15 @@ def main():
++     try:
++         asyncio.run(_async_main())
++     except KeyboardInterrupt:
++-        console_to_use = q_console if 'q_console' in globals() and q_console else RichConsole()
++-        console_to_use.print("\nQX terminated by user.", style="info")
+++        # qx_console is imported and globally available
+++        qx_console.print("\nQX terminated by user.", style="info")
++         sys.exit(0)
++     except Exception as e:
++-        # Ensure logger is available at this stage, even if basicConfig failed somehow
++-        # (though it's unlikely if the script reaches here)
++         fallback_logger = logging.getLogger("qx.critical")
++         fallback_logger.critical(f"Critical error running QX: {e}", exc_info=True)
++         
++-        console_to_use = q_console if 'q_console' in globals() and q_console else RichConsole()
++-        console_to_use.print(f"[bold red]Critical error running QX:[/bold red] {e}")
+++        # qx_console is imported and globally available
+++        qx_console.print(f"[bold red]Critical error running QX:[/bold red] {e}")
++         sys.exit(1)
++ 
++ 
++diff --git a/tmp/commit_message.txt b/tmp/commit_message.txt
++index c20bee6..3219b1e 100644
++--- a/tmp/commit_message.txt
+++++ b/tmp/commit_message.txt
++@@ -1,8 +1,31 @@
++-fix: Ensure Ctrl+C during async operations returns to prompt
+++feat: Implement shell command permissions and configurable logging
++ 
++-Refined KeyboardInterrupt (Ctrl+C) handling in `src/qx/main.py` to ensure that interrupting an asynchronous operation (e.g., while QX is "thinking") returns the user to the input prompt instead of exiting the application.
+++This commit introduces a comprehensive shell command permission system and makes the application's log level configurable via an environment variable.
++ 
++-- Added an `except asyncio.CancelledError:` block to the main loop in `_async_main`. When a `KeyboardInterrupt` occurs during an `await` call, `asyncio.run()` cancels the main task, raising `asyncio.CancelledError`. This new handler catches the error, prints a message, optionally clears `current_message_history`, and then `continue`s the loop, effectively returning to the prompt.
++-- This prevents the `KeyboardInterrupt` from propagating up and causing the application to terminate.
++-- The existing `except KeyboardInterrupt:` in `_async_main` remains for synchronous interrupts.
++-- Updated `.Q/projectlog.md` to reflect this more robust handling.
++\ No newline at end of file
+++Key changes:
+++
+++Shell Command Permission System:
+++- Added `DEFAULT_APPROVED_COMMANDS` and updated `DEFAULT_PROHIBITED_COMMANDS` in `src/qx/core/constants.py` with more comprehensive lists and fnmatch patterns.
+++- Enhanced `ApprovalManager` (`src/qx/core/approvals.py`):
+++    - Implemented `get_command_permission_status` to check commands against prohibited/approved lists using fnmatch.
+++    - Modified `request_approval` to handle different operation types (e.g., "shell_command"), return detailed `ApprovalDecision`, and manage a "Modify" flow for commands.
+++- Implemented `ExecuteShellTool` (`src/qx/tools/execute_shell.py`):
+++    - Defined `ShellCommandInput` and `ShellCommandOutput` Pydantic models.
+++    - The tool uses `ApprovalManager` to orchestrate the approval workflow, including command modification and re-evaluation.
+++    - Executes commands via `subprocess.run` only after approval.
+++    - Returns structured output including modification details.
+++- Integration:
+++    - Updated `src/qx/tools/__init__.py` to export `ExecuteShellTool`.
+++    - Refactored `src/qx/core/llm.py` (`initialize_llm_agent`):
+++        - Instantiated `ExecuteShellTool` and created a wrapper for PydanticAI agent integration.
+++        - Standardized return types for all tool wrappers (`approved_read_file_tool`, `approved_write_file_tool`) to provide consistent string feedback to the LLM.
+++        - Corrected `query_llm` to directly `await agent.run()`.
+++
+++Configurable Logging:
+++- Modified `src/qx/main.py` to allow setting the application log level via the `QX_LOG_LEVEL` environment variable (DEBUG, INFO, WARNING, ERROR, CRITICAL), defaulting to ERROR.
+++
+++Other Changes:
+++- Updated `.env` to use a newer Gemini model.
+++- Added `src/qx/directives/worklogger.md` (content seems related to future worklog functionality).
+++- Updated `src/qx/prompts/system-prompt.md` with an `<extended-directives>` placeholder.
+++- Updated `.Q/projectlog.md` to reflect these developments.
++\ No newline at end of file
++diff --git a/uv.lock b/uv.lock
++index bc28e3b..46ddc37 100644
++--- a/uv.lock
+++++ b/uv.lock
++@@ -890,6 +890,7 @@ dependencies = [
++     { name = "pydantic-ai" },
++     { name = "pyfzf" },
++     { name = "python-dotenv" },
+++    { name = "rich" },
++ ]
++ 
++ [package.dev-dependencies]
++@@ -903,6 +904,7 @@ requires-dist = [
++     { name = "pydantic-ai", specifier = ">=0.2.4" },
++     { name = "pyfzf", specifier = ">=0.2.3" },
++     { name = "python-dotenv", specifier = ">=1.1.0" },
+++    { name = "rich", specifier = ">=14.0.0" },
++ ]
++ 
++ [package.metadata.requires-dev]
