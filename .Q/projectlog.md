@@ -399,3 +399,29 @@
 *   `.Q/projectlog.md`: Updated with session activities.
 
 **Commit:** `7fb6393` - Refactor: Rename LLM tool wrappers for prompt compatibility
+
+## Session 2025-05-19
+
+**Goal:** Display QX version and model information on startup.
+
+**Key Activities:**
+
+1.  **Read `pyproject.toml`:**
+    *   Confirmed QX version is "0.3.2".
+
+2.  **Modified `src/qx/main.py`:**
+    *   Added a `QX_VERSION` constant (currently hardcoded as "0.3.2", with a comment noting it should ideally be sourced from the package).
+    *   Imported `Text` from `rich.text`.
+    *   After `initialize_llm_agent` completes and the agent is confirmed not `None`:
+        *   Constructed an info string: `f"QX ver: {QX_VERSION} - brain: {model_name_from_env}"`.
+        *   Printed this string using `qx_console.print(Text(info_text, style="dim"))`.
+        *   Added `qx_console.print()` for a blank line after the info message for better visual spacing.
+
+**Files Modified:**
+
+*   `src/qx/main.py`: Implemented display of QX version and model name on startup.
+*   `.Q/projectlog.md`: Updated with session activities.
+
+**Next Steps:**
+
+*   Commit the changes.
