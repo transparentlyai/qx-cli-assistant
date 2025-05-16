@@ -1,8 +1,31 @@
-fix: Ensure Ctrl+C during async operations returns to prompt
+feat: Implement shell command permissions and configurable logging
 
-Refined KeyboardInterrupt (Ctrl+C) handling in `src/qx/main.py` to ensure that interrupting an asynchronous operation (e.g., while QX is "thinking") returns the user to the input prompt instead of exiting the application.
+This commit introduces a comprehensive shell command permission system and makes the application's log level configurable via an environment variable.
 
-- Added an `except asyncio.CancelledError:` block to the main loop in `_async_main`. When a `KeyboardInterrupt` occurs during an `await` call, `asyncio.run()` cancels the main task, raising `asyncio.CancelledError`. This new handler catches the error, prints a message, optionally clears `current_message_history`, and then `continue`s the loop, effectively returning to the prompt.
-- This prevents the `KeyboardInterrupt` from propagating up and causing the application to terminate.
-- The existing `except KeyboardInterrupt:` in `_async_main` remains for synchronous interrupts.
-- Updated `.Q/projectlog.md` to reflect this more robust handling.
+Key changes:
+
+Shell Command Permission System:
+- Added `DEFAULT_APPROVED_COMMANDS` and updated `DEFAULT_PROHIBITED_COMMANDS` in `src/qx/core/constants.py` with more comprehensive lists and fnmatch patterns.
+- Enhanced `ApprovalManager` (`src/qx/core/approvals.py`):
+    - Implemented `get_command_permission_status` to check commands against prohibited/approved lists using fnmatch.
+    - Modified `request_approval` to handle different operation types (e.g., "shell_command"), return detailed `ApprovalDecision`, and manage a "Modify" flow for commands.
+- Implemented `ExecuteShellTool` (`src/qx/tools/execute_shell.py`):
+    - Defined `ShellCommandInput` and `ShellCommandOutput` Pydantic models.
+    - The tool uses `ApprovalManager` to orchestrate the approval workflow, including command modification and re-evaluation.
+    - Executes commands via `subprocess.run` only after approval.
+    - Returns structured output including modification details.
+- Integration:
+    - Updated `src/qx/tools/__init__.py` to export `ExecuteShellTool`.
+    - Refactored `src/qx/core/llm.py` (`initialize_llm_agent`):
+        - Instantiated `ExecuteShellTool` and created a wrapper for PydanticAI agent integration.
+        - Standardized return types for all tool wrappers (`approved_read_file_tool`, `approved_write_file_tool`) to provide consistent string feedback to the LLM.
+        - Corrected `query_llm` to directly `await agent.run()`.
+
+Configurable Logging:
+- Modified `src/qx/main.py` to allow setting the application log level via the `QX_LOG_LEVEL` environment variable (DEBUG, INFO, WARNING, ERROR, CRITICAL), defaulting to ERROR.
+
+Other Changes:
+- Updated `.env` to use a newer Gemini model.
+- Added `src/qx/directives/worklogger.md` (content seems related to future worklog functionality).
+- Updated `src/qx/prompts/system-prompt.md` with an `<extended-directives>` placeholder.
+- Updated `.Q/projectlog.md` to reflect these developments.
