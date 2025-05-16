@@ -32,6 +32,23 @@ DEFAULT_TREE_IGNORE_PATTERNS = [
     "coverage_reports",
     "htmlcov",
     ".coverage",
+    "package-lock.json",
+    "yarn.lock",
+    "yarn-error.log",
+    "npm-debug.log",
+    "*.class",
+    "*.jar",
+    "*.war",
+    "*.ear",
+    ".settings",
+    ".classpath",
+    ".project",
+    # R-specific patterns
+    ".Rhistory",
+    ".RData",
+    "*.Rproj",
+    ".Ruserdata",  # Simpler form of .Ruserdata/
+    "renv",  # Simpler form of renv/
 ]
 
 DEFAULT_PROHIBITED_COMMANDS = [
@@ -366,4 +383,3 @@ CLI_THEMES = {
         "markdown.hr": "dim black",
     },
 }
-

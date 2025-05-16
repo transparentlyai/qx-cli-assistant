@@ -890,6 +890,7 @@ dependencies = [
     { name = "pydantic-ai" },
     { name = "pyfzf" },
     { name = "python-dotenv" },
+    { name = "rich" },
 ]
 
 [package.dev-dependencies]
@@ -903,6 +904,7 @@ requires-dist = [
     { name = "pydantic-ai", specifier = ">=0.2.4" },
     { name = "pyfzf", specifier = ">=0.2.3" },
     { name = "python-dotenv", specifier = ">=1.1.0" },
+    { name = "rich", specifier = ">=14.0.0" },
 ]
 
 [package.metadata.requires-dev]
