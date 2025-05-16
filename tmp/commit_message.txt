@@ -1,8 +1,8 @@
-fix: Enhance KeyboardInterrupt handling to return to prompt
+fix: Ensure Ctrl+C during async operations returns to prompt
 
-Modified the main application loop in `src/qx/main.py` to improve `KeyboardInterrupt` (Ctrl+C) resilience.
+Refined KeyboardInterrupt (Ctrl+C) handling in `src/qx/main.py` to ensure that interrupting an asynchronous operation (e.g., while QX is "thinking") returns the user to the input prompt instead of exiting the application.
 
-- The `KeyboardInterrupt` exception handler within the main `while True:` loop in `_async_main` now directs the application to `continue` to the next iteration. This returns the user to the input prompt instead of exiting the application when an operation (e.g., LLM query) is interrupted.
-- Added a condition after `get_user_input` to check for an empty string result (which `qx/cli/qprompt.py` returns if Ctrl+C is pressed during input). If an empty string is received, the loop continues, re-displaying the prompt.
-- `current_message_history` is now reset to `None` if an operation is cancelled by `KeyboardInterrupt` to prevent carrying over potentially incomplete context.
-- Updated `.Q/projectlog.md` to document these changes.
+- Added an `except asyncio.CancelledError:` block to the main loop in `_async_main`. When a `KeyboardInterrupt` occurs during an `await` call, `asyncio.run()` cancels the main task, raising `asyncio.CancelledError`. This new handler catches the error, prints a message, optionally clears `current_message_history`, and then `continue`s the loop, effectively returning to the prompt.
+- This prevents the `KeyboardInterrupt` from propagating up and causing the application to terminate.
+- The existing `except KeyboardInterrupt:` in `_async_main` remains for synchronous interrupts.
+- Updated `.Q/projectlog.md` to reflect this more robust handling.
