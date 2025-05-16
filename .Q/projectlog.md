@@ -329,10 +329,30 @@
     *   Renamed the second parameter of `_get_file_preview_renderables` from `new_content` to `operation_content_for_preview` to better reflect its dual role (new file content for "write_file", or generic preview string for "generic").
     *   Updated the logic within `_get_file_preview_renderables` to use this `operation_content_for_preview` parameter consistently for both "write_file" (as new content) and "generic" (as the preview string) operation types.
     *   In `request_approval`, when calling `_get_file_preview_renderables`, the `content_preview` (from `request_approval`'s parameters) is now correctly passed as the second argument (`operation_content_for_preview`) to `_get_file_preview_renderables`.
+    *   Commit `8adf402` for these changes was successful.
 
 **Files Modified:**
 
 *   `src/qx/core/approvals.py`: Corrected parameter handling in `_get_file_preview_renderables` to resolve the `NameError`.
+*   `.Q/projectlog.md`: Updated with session activities.
+
+**Commit:** `8adf402` - fix: Resolve NameError in ApprovalManager's preview logic
+
+## Session 2025-05-18 (Continued)
+
+**Goal:** Ensure file write previews use `rich.syntax.Syntax` by correctly setting `operation_type` in the `approved_write_file_tool` wrapper.
+
+**Key Activities:**
+
+1.  **Identified Issue:** The `approved_write_file_tool` in `src/qx/core/llm.py` was calling `approval_manager.request_approval` with `operation_type="generic"`. This caused the `ApprovalManager` to use simple text truncation for the preview instead of the intended diff/syntax highlighting logic for file writes.
+
+2.  **Modified `src/qx/core/llm.py`:**
+    *   In the `approved_write_file_tool` function, changed the `operation_type` argument in the call to `approval_manager.request_approval` from `"generic"` to `"write_file"`.
+    *   Ensured `allow_modify=True` is set for this call to allow path modification.
+
+**Files Modified:**
+
+*   `src/qx/core/llm.py`: Updated `approved_write_file_tool` to use `operation_type="write_file"`.
 *   `.Q/projectlog.md`: Updated with session activities.
 
 **Next Steps:**

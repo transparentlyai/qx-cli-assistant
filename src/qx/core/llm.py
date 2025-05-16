@@ -80,29 +80,31 @@ def initialize_llm_agent(
             logger.warning(f"ReadFileTool returned no content and no error for path: {path}")
             return f"Error: An unexpected issue occurred while reading file '{path}'. No content or error reported by tool."
 
-    # Wrapper for write_file_impl (remains largely the same, uses "generic" approval)
+    # Wrapper for write_file_impl
     def approved_write_file_tool(path: str, content: str) -> str:
         decision, final_path, _ = approval_manager.request_approval(
             operation_description="Write file",
             item_to_approve=path,
-            content_preview=content,
-            allow_modify=False, # Or True, depending on desired behavior for write
-            operation_type="generic" # Write operations still go through generic approval
+            content_preview=content, # This is the full new content
+            allow_modify=True, # Allow modifying the path
+            operation_type="write_file" # Use "write_file" type for specific preview
         )
-        if decision not in ["AUTO_APPROVED", "SESSION_APPROVED", "USER_APPROVED"]:
+        if decision not in ["AUTO_APPROVED", "SESSION_APPROVED", "USER_APPROVED", "USER_MODIFIED"]:
             denial_reason = f"File write operation for '{final_path}' was {decision.lower().replace('_', ' ')}."
+            # If USER_MODIFIED, final_path is already the modified path.
+            # If denied/cancelled, final_path is the original or last considered path.
             console.print(denial_reason, style="warning")
             return f"Error: {denial_reason}"
-
+        
+        # If USER_MODIFIED, final_path is the new path to write to.
+        # Content remains the original 'content' argument passed to this tool function.
         success = write_file_impl(final_path, content)
         if success:
             return f"Successfully wrote to file: {final_path}"
         else:
-            # write_file_impl itself doesn't return detailed errors, might need enhancement
-            # or rely on logs. For LLM, a simple error is often sufficient.
             return f"Error: Failed to write to file: {final_path}"
 
-    # Wrapper for ExecuteShellTool (remains the same)
+    # Wrapper for ExecuteShellTool
     def approved_execute_shell_tool_wrapper(command: str) -> str:
         tool_input = ShellCommandInput(command=command)
         output: ShellCommandOutput = shell_tool_instance.run(tool_input)
@@ -123,7 +125,7 @@ def initialize_llm_agent(
             )
 
     registered_tools = [
-        approved_read_file_tool_wrapper, # Use the new ReadFileTool wrapper
+        approved_read_file_tool_wrapper,
         approved_write_file_tool,
         approved_execute_shell_tool_wrapper,
     ]
@@ -166,14 +168,13 @@ def initialize_llm_agent(
 async def query_llm(
     agent: Agent,
     user_input: str,
-    console: RichConsole, # Retained for potential direct use, though spinner is now global
+    console: RichConsole, 
     message_history: Optional[List[ModelMessage]] = None,
 ) -> Optional[Any]:
     """
     Queries the LLM agent. Assumes agent.run() is a coroutine.
     Spinner is handled in main.py around this call.
     """
-    # console.print("\nQX is thinking...", style="info") # Spinner handles this now
     try:
         if message_history:
             result = await agent.run(user_input, message_history=message_history)
@@ -182,8 +183,5 @@ async def query_llm(
         return result
     except Exception as e:
         logger.error(f"Error during LLM query: {e}", exc_info=True)
-        # The console for printing errors should ideally be the global qx_console
-        # but this function receives one. For consistency, we use the passed one.
-        # If qx_console is desired here, it would need to be imported or passed differently.
         console.print(f"[error]Error:[/] LLM query: {e}")
         return None
