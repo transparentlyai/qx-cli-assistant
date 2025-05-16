@@ -17,7 +17,7 @@ def write_file_impl(path_str: str, content: str) -> bool:
 
     Args:
         path_str: The relative or absolute path to the file.
-        content: The string content to write to the file.
+        content: The string content to write to the file. Do not wrap the content in triples quotes.
 
     Returns:
         True if the write was successful, False otherwise.
@@ -33,7 +33,7 @@ def write_file_impl(path_str: str, content: str) -> bool:
                 f"Project root: {project_root}, User home: {USER_HOME_DIR}"
             )
             # Consider returning a more descriptive error message if the LLM needs it
-            return False # Or raise an exception / return error string
+            return False  # Or raise an exception / return error string
 
         # Also check if creating the parent directory is allowed, if it doesn't exist
         parent_dir = absolute_path.parent
@@ -63,6 +63,7 @@ def write_file_impl(path_str: str, content: str) -> bool:
 
     return False
 
+
 if __name__ == "__main__":
     # Example usage for direct testing
     # Ensure you have appropriate permissions in /tmp or a test directory
@@ -82,3 +83,4 @@ if __name__ == "__main__":
 
     # print(f"Attempting to write to a restricted path (e.g., /etc/test_write.txt - should fail): {write_file_impl('/etc/test_write.txt', 'restricted content')}")
     pass
+
