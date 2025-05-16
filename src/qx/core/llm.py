@@ -1,5 +1,4 @@
 import asyncio
-# import functools # No longer needed
 import logging
 import os
 from pathlib import Path
@@ -14,8 +13,9 @@ from rich.console import Console as RichConsole
 from qx.core.approvals import ApprovalManager
 from qx.core.config_manager import load_runtime_configurations
 from qx.tools.execute_shell import ExecuteShellTool, ShellCommandInput, ShellCommandOutput
-from qx.tools.read_file import read_file_impl
-from qx.tools.write_file import write_file_impl
+# Import the new ReadFileTool and its Pydantic models
+from qx.tools.read_file import ReadFileTool, ReadFileInput, ReadFileOutput
+from qx.tools.write_file import write_file_impl # write_file_impl is still used directly in its wrapper
 
 # Configure logging for this module
 logger = logging.getLogger(__name__)
@@ -52,42 +52,42 @@ def initialize_llm_agent(
     project_id: Optional[str],
     location: Optional[str],
     console: RichConsole,
-    approval_manager: ApprovalManager, # Accept ApprovalManager instance
+    approval_manager: ApprovalManager,
 ) -> Optional[Agent]:
     """
     Initializes the Pydantic-AI Agent.
-    The 'location' parameter is used as 'region' for GoogleVertexProvider.
-    The 'approval_manager' is used for tool approval.
     """
     console.print("Initializing LLM Agent...", style="info")
     system_prompt_content = load_and_format_system_prompt()
 
+    # Instantiate tools
     shell_tool_instance = ExecuteShellTool(approval_manager=approval_manager)
+    read_file_tool_instance = ReadFileTool(approval_manager=approval_manager)
 
-    def approved_read_file_tool(path: str) -> str:
-        decision, final_path, _ = approval_manager.request_approval(
-            operation_description="Read file",
-            item_to_approve=path,
-            allow_modify=False,
-            operation_type="generic"
-        )
-        if decision not in ["AUTO_APPROVED", "SESSION_APPROVED", "USER_APPROVED"]:
-            denial_reason = f"File read operation for '{final_path}' was {decision.lower().replace('_', ' ')}."
-            console.print(denial_reason, style="warning")
-            return f"Error: {denial_reason}"
-        
-        file_content = read_file_impl(final_path)
-        if file_content is None:
-            return f"Error: Could not read file at '{final_path}'. File may not exist or an error occurred."
-        return file_content
+    # Wrapper for ReadFileTool
+    def approved_read_file_tool_wrapper(path: str) -> str:
+        tool_input = ReadFileInput(path=path)
+        output: ReadFileOutput = read_file_tool_instance.run(tool_input)
 
+        if output.error:
+            # output.error from ReadFileOutput should be a comprehensive message
+            return output.error
+        elif output.content is not None:
+            return output.content
+        else:
+            # This case should ideally not be reached if output.error covers all failures
+            # and output.content is present on success.
+            logger.warning(f"ReadFileTool returned no content and no error for path: {path}")
+            return f"Error: An unexpected issue occurred while reading file '{path}'. No content or error reported by tool."
+
+    # Wrapper for write_file_impl (remains largely the same, uses "generic" approval)
     def approved_write_file_tool(path: str, content: str) -> str:
         decision, final_path, _ = approval_manager.request_approval(
             operation_description="Write file",
             item_to_approve=path,
             content_preview=content,
-            allow_modify=False,
-            operation_type="generic"
+            allow_modify=False, # Or True, depending on desired behavior for write
+            operation_type="generic" # Write operations still go through generic approval
         )
         if decision not in ["AUTO_APPROVED", "SESSION_APPROVED", "USER_APPROVED"]:
             denial_reason = f"File write operation for '{final_path}' was {decision.lower().replace('_', ' ')}."
@@ -98,8 +98,11 @@ def initialize_llm_agent(
         if success:
             return f"Successfully wrote to file: {final_path}"
         else:
+            # write_file_impl itself doesn't return detailed errors, might need enhancement
+            # or rely on logs. For LLM, a simple error is often sufficient.
             return f"Error: Failed to write to file: {final_path}"
 
+    # Wrapper for ExecuteShellTool (remains the same)
     def approved_execute_shell_tool_wrapper(command: str) -> str:
         tool_input = ShellCommandInput(command=command)
         output: ShellCommandOutput = shell_tool_instance.run(tool_input)
@@ -120,7 +123,7 @@ def initialize_llm_agent(
             )
 
     registered_tools = [
-        approved_read_file_tool,
+        approved_read_file_tool_wrapper, # Use the new ReadFileTool wrapper
         approved_write_file_tool,
         approved_execute_shell_tool_wrapper,
     ]
@@ -147,7 +150,7 @@ def initialize_llm_agent(
             tools=registered_tools,
         )
         
-        tool_names = [tool.__name__ for tool in registered_tools]
+        tool_names = [tool.__name__ for tool in registered_tools] # type: ignore
         console.print(
             f"LLM Agent initialized: [info]{model_name_str}[/] "
             f"Tools: [info]{', '.join(tool_names)}[/].",
@@ -163,21 +166,24 @@ def initialize_llm_agent(
 async def query_llm(
     agent: Agent,
     user_input: str,
-    console: RichConsole,
+    console: RichConsole, # Retained for potential direct use, though spinner is now global
     message_history: Optional[List[ModelMessage]] = None,
 ) -> Optional[Any]:
     """
     Queries the LLM agent. Assumes agent.run() is a coroutine.
+    Spinner is handled in main.py around this call.
     """
-    console.print("\nQX is thinking...", style="info")
+    # console.print("\nQX is thinking...", style="info") # Spinner handles this now
     try:
         if message_history:
-            # agent.run() is an async method, so it should be awaited directly.
             result = await agent.run(user_input, message_history=message_history)
         else:
             result = await agent.run(user_input)
         return result
     except Exception as e:
         logger.error(f"Error during LLM query: {e}", exc_info=True)
+        # The console for printing errors should ideally be the global qx_console
+        # but this function receives one. For consistency, we use the passed one.
+        # If qx_console is desired here, it would need to be imported or passed differently.
         console.print(f"[error]Error:[/] LLM query: {e}")
         return None
