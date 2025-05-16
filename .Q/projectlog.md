@@ -245,11 +245,46 @@
     *   In `_async_main`, read the `QX_SYNTAX_HIGHLIGHT_THEME` environment variable.
     *   Determined `code_theme_to_use` by using the environment variable if set, otherwise falling back to `DEFAULT_SYNTAX_HIGHLIGHT_THEME`.
     *   Passed `code_theme_to_use` to the `Markdown(..., code_theme=code_theme_to_use)` constructor when rendering agent responses.
+    *   A previous commit attempt for this failed due to shell quoting issues. The commit `819cf9d` with a simplified message was made, and a subsequent attempt to amend it with a detailed message also failed.
 
 **Files Modified:**
 
 *   `src/qx/core/constants.py`: Added `DEFAULT_SYNTAX_HIGHLIGHT_THEME`.
 *   `src/qx/main.py`: Implemented configurable Markdown code block theme.
+*   `.Q/projectlog.md`: Updated with session activities.
+
+**Commit:** `819cf9d` - feat: Make Markdown code_theme configurable (Simplified message due to shell quoting issues with detailed message)
+
+## Session 2025-05-18
+
+**Goal:** Enhance file write approval previews to show diffs for existing files and truncated content for new files, using a configurable syntax theme.
+
+**Key Activities:**
+
+1.  **Reviewed Reference Implementation:**
+    *   Read `/home/mauro/projects/q/q/operators/write.py` to understand its diff generation (`difflib`), diff display (`rich.syntax.Syntax` with "diff" lexer), new content preview (truncation, `rich.syntax.Syntax`), and content preprocessing (stripping Markdown fences).
+
+2.  **Updated `ApprovalManager` (`src/qx/core/approvals.py`):**
+    *   Modified `__init__` to accept and store `syntax_highlight_theme` (defaulting to "vim" for standalone testing, but will be passed from `main.py`).
+    *   Added `OperationType` "write_file".
+    *   Created a new private method `_get_file_preview_renderable(file_path_str: str, new_content: str, operation_type: OperationType)`:
+        *   If `operation_type` is "write_file":
+            *   Checks if `file_path_str` exists.
+            *   **If file exists**: Reads current content, generates a diff using `difflib.unified_diff`, and creates a `rich.syntax.Syntax` object with the "diff" lexer and the configured `syntax_highlight_theme`.
+            *   **If file does not exist (new file)**: Applies truncation logic (e.g., 12 head lines, 12 tail lines, "more lines" message if > 30 total lines) to `new_content`. Creates a `rich.syntax.Syntax` object using the file extension for the lexer and the configured `syntax_highlight_theme`.
+        *   If `operation_type` is "generic" and `content_preview` is provided, it uses the existing simple text truncation.
+    *   Modified `request_approval`:
+        *   When `operation_type` is "write_file" and `content_preview` (new full content) is provided, it calls `_get_file_preview_renderable` to get the diff or truncated new content display.
+        *   The returned `Syntax` or `Text` object is then included in the approval panel.
+        *   Ensured "Modify" option is available for "write_file" operations, allowing the user to change the target path.
+
+3.  **Updated `main.py` (`src/qx/main.py`):**
+    *   When `ApprovalManager` is instantiated in `_async_main`, the `code_theme_to_use` (already determined from `QX_SYNTAX_HIGHLIGHT_THEME` or `DEFAULT_SYNTAX_HIGHLIGHT_THEME`) is passed to the `ApprovalManager`'s `syntax_highlight_theme` parameter.
+
+**Files Modified:**
+
+*   `src/qx/core/approvals.py`: Implemented diff and truncated new content previews for write operations.
+*   `src/qx/main.py`: Passed configured syntax theme to `ApprovalManager`.
 *   `.Q/projectlog.md`: Updated with session activities.
 
 **Next Steps:**

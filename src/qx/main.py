@@ -10,22 +10,18 @@ from rich.panel import Panel
 from rich.text import Text
 from rich.theme import Theme as RichTheme
 
-from qx.cli.console import (
-    QXConsole,
-    qx_console,
-    show_spinner,
-)
+from qx.cli.console import QXConsole, qx_console, show_spinner
 
 # QX imports
 from qx.cli.qprompt import get_user_input
 from qx.core.approvals import ApprovalManager
 from qx.core.config_manager import load_runtime_configurations
+from qx.core.constants import DEFAULT_SYNTAX_HIGHLIGHT_THEME
 from qx.core.constants import (
     CLI_THEMES,
     DEFAULT_CLI_THEME,
     DEFAULT_MODEL,
     DEFAULT_VERTEXAI_LOCATION,
-    DEFAULT_SYNTAX_HIGHLIGHT_THEME, # Import the new default
 )
 from qx.core.llm import initialize_llm_agent, query_llm
 
@@ -101,12 +97,19 @@ async def _async_main():
                 exc_info=True,
             )
 
-    approval_manager = ApprovalManager(console=qx_console)
-
-    # Determine syntax highlighting theme for Markdown code blocks
+    # Determine syntax highlighting theme for Markdown code blocks AND ApprovalManager previews
     syntax_theme_from_env = os.getenv("QX_SYNTAX_HIGHLIGHT_THEME")
-    code_theme_to_use = syntax_theme_from_env if syntax_theme_from_env else DEFAULT_SYNTAX_HIGHLIGHT_THEME
-    logger.info(f"Using syntax highlighting theme for Markdown code blocks: {code_theme_to_use}")
+    code_theme_to_use = (
+        syntax_theme_from_env
+        if syntax_theme_from_env
+        else DEFAULT_SYNTAX_HIGHLIGHT_THEME
+    )
+    logger.info(
+        f"Using syntax highlighting theme for Markdown code blocks and previews: {code_theme_to_use}"
+    )
+
+    # Pass the determined theme to ApprovalManager
+    approval_manager = ApprovalManager(console=qx_console, syntax_highlight_theme=code_theme_to_use)
 
 
     qx_console.print(
@@ -188,7 +191,9 @@ async def _async_main():
             if run_result:
                 if hasattr(run_result, "output"):
                     qx_console.print("\n")
-                    markdown_output = Markdown(run_result.output, code_theme=code_theme_to_use)
+                    markdown_output = Markdown(
+                        run_result.output, code_theme=code_theme_to_use
+                    )
                     qx_console.print(markdown_output)
                     qx_console.print("\n")
                     if hasattr(run_result, "all_messages"):
