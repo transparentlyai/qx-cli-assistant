@@ -1,10 +1,8 @@
 import asyncio
-import os
 import shutil
 import subprocess  # subprocess is not directly used by pyfzf, but good to keep if other shell ops needed
 from datetime import datetime, timedelta
-from pathlib import Path
-from typing import List, Optional, Tuple, Any
+from typing import Any, List, Optional, Tuple
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.document import Document
@@ -35,7 +33,9 @@ QX_MULTILINE_PROMPT_TEXT = "M⏵ "
 QX_MULTILINE_HINT_TEXT = "[Alt+Enter to submit] "
 
 QX_FIXED_PROMPT_FORMATTED = FormattedText([("class:prompt", QX_FIXED_PROMPT_TEXT)])
-QX_AUTO_APPROVE_PROMPT_FORMATTED = FormattedText([("class:prompt", QX_AUTO_APPROVE_PROMPT_TEXT)])
+QX_AUTO_APPROVE_PROMPT_FORMATTED = FormattedText(
+    [("class:prompt", QX_AUTO_APPROVE_PROMPT_TEXT)]
+)
 QX_MULTILINE_PROMPT_FORMATTED = FormattedText(
     [
         ("class:prompt.multiline", QX_MULTILINE_PROMPT_TEXT),
@@ -70,7 +70,7 @@ async def get_user_input(
     kb = KeyBindings()
 
     is_multiline = [False]  # Use a list to allow modification in closures
-    
+
     # current_prompt_formatted holds the FormattedText object for the prompt
     current_prompt_formatted: List[Any] = [
         QX_AUTO_APPROVE_PROMPT_FORMATTED
@@ -161,30 +161,32 @@ async def get_user_input(
 
                 current_command_parts = []
                 current_timestamp_str = None
-            else: # Treat as a single line command without timestamp or '+'
-                if current_command_parts: # Should not happen if format is strict, but handle defensively
+            else:  # Treat as a single line command without timestamp or '+'
+                if (
+                    current_command_parts
+                ):  # Should not happen if format is strict, but handle defensively
                     original_command_pending = "\n".join(current_command_parts)
                     fzf_display_command_pending = original_command_pending.replace(
                         "\n", " ↵ "
                     )
-                    ts_placeholder_pending = " " * 15 # Placeholder as no timestamp
+                    ts_placeholder_pending = " " * 15  # Placeholder as no timestamp
                     display_string_pending = (
                         f"{ts_placeholder_pending}  {fzf_display_command_pending}"
                     )
                     processed_history_entries.append(
                         (display_string_pending, original_command_pending)
                     )
-                    current_command_parts = [] # Reset
+                    current_command_parts = []  # Reset
 
-                original_command = stripped_line # The line itself is the command
+                original_command = stripped_line  # The line itself is the command
                 fzf_display_command = original_command.replace("\n", " ↵ ")
-                formatted_ts_display = " " * 15 # Placeholder as no timestamp
+                formatted_ts_display = " " * 15  # Placeholder as no timestamp
                 display_string = f"{formatted_ts_display}  {fzf_display_command}"
                 processed_history_entries.append((display_string, original_command))
                 idx += 1
-                current_timestamp_str = None # Reset timestamp
+                current_timestamp_str = None  # Reset timestamp
 
-        if current_command_parts: # Process any remaining command parts at EOF
+        if current_command_parts:  # Process any remaining command parts at EOF
             original_command = "\n".join(current_command_parts)
             fzf_display_command = original_command.replace("\n", " ↵ ")
             formatted_ts_display = " " * 15
@@ -264,7 +266,6 @@ async def get_user_input(
             # This matches the reference behavior.
             event.app.current_buffer.insert_text("\n")
 
-
     @kb.add("c-c")
     def _handle_ctrl_c(event):
         event.app.exit(exception=KeyboardInterrupt())
@@ -276,21 +277,21 @@ async def get_user_input(
         current_prompt_formatted[0] = QX_AUTO_APPROVE_PROMPT_FORMATTED
     else:
         current_prompt_formatted[0] = QX_FIXED_PROMPT_FORMATTED
-        
+
     try:
         user_input = await asyncio.to_thread(
-            session.prompt, 
-            lambda: current_prompt_formatted[0], # Use lambda for dynamic prompt
-            key_bindings=kb
+            session.prompt,
+            lambda: current_prompt_formatted[0],  # Use lambda for dynamic prompt
+            key_bindings=kb,
         )
         return user_input
     except KeyboardInterrupt:
         # This message is now more of a fallback, as Ctrl+C should exit cleanly.
         # However, it's good to keep for other potential KeyboardInterrupt sources.
         console.print("\n[#666666]Prompt aborted. Use 'exit' or 'quit' to exit QX.[/]")
-        return "" # Return empty string to signify aborted input
-    except EOFError: # Ctrl+D
-        return "exit" # Signal to exit the application
+        return ""  # Return empty string to signify aborted input
+    except EOFError:  # Ctrl+D
+        return "exit"  # Signal to exit the application
 
 
 if __name__ == "__main__":
@@ -301,7 +302,9 @@ if __name__ == "__main__":
 
         print("Testing qprompt. Type Ctrl-R for fzf history (if fzf is installed).")
         print("Press Enter to submit.")
-        print(f"Press Alt+Enter to toggle multiline input (prompt changes to '{QX_MULTILINE_PROMPT_TEXT.strip()}' + hint).")
+        print(
+            f"Press Alt+Enter to toggle multiline input (prompt changes to '{QX_MULTILINE_PROMPT_TEXT.strip()}' + hint)."
+        )
         print("While in multiline, Enter adds a newline.")
         print("Press Alt+Enter again to submit the multiline input.")
         print(
@@ -320,10 +323,12 @@ if __name__ == "__main__":
                 f.write(f"# {ts1_dt.strftime('%Y-%m-%d %H:%M:%S.%f')}\n")
                 f.write("+ls -la\n\n")
                 f.write(f"# {ts2_dt.strftime('%Y-%m-%d %H:%M:%S.%f')}\n")
-                f.write('+echo "hello\nworld"\n\n') # Example of multiline command in history
+                f.write(
+                    '+echo "hello\nworld"\n\n'
+                )  # Example of multiline command in history
                 f.write("git status # No specific timestamp line for this one\n\n")
                 f.write("python script.py --arg value\n")
-                f.write(f"# {ts3_dt.timestamp()}\n") # Example of float timestamp
+                f.write(f"# {ts3_dt.timestamp()}\n")  # Example of float timestamp
                 f.write("+multi line\n")
                 f.write("+command example\n")
                 f.write("+  with indentation\n")
@@ -332,13 +337,14 @@ if __name__ == "__main__":
             try:
                 inp = await get_user_input(console_for_test, approval_manager_test)
 
-                if inp == "" and not is_multiline[0]: # Check if input was aborted by Ctrl+C
+                if (
+                    inp == "" and not is_multiline[0]
+                ):  # Check if input was aborted by Ctrl+C
                     # The KeyboardInterrupt handler in get_user_input now returns ""
                     # We might want to decide if this should also break the loop or just ask for new input.
                     # For now, let's assume it means "clear current input line and retry".
                     # If "exit" is returned (from Ctrl+D), the loop will break.
                     continue
-
 
                 if inp.strip().lower() == "approve all":
                     approval_manager_test._approve_all_until = (
@@ -355,14 +361,14 @@ if __name__ == "__main__":
                     )
                     continue
 
-                if inp.lower() == "exit": # Handles Ctrl+D or typed "exit"
+                if inp.lower() == "exit":  # Handles Ctrl+D or typed "exit"
                     console_for_test.print("\nExiting test.")
                     break
-                
-                if inp: # Only print if there's actual input
+
+                if inp:  # Only print if there's actual input
                     console_for_test.print(f"You entered:\n---\n[b]{inp}[/b]\n---")
 
-            except KeyboardInterrupt: # This catches Ctrl+C if it happens outside get_user_input, or if get_user_input re-raises it.
+            except KeyboardInterrupt:  # This catches Ctrl+C if it happens outside get_user_input, or if get_user_input re-raises it.
                 console_for_test.print("\nExiting test (Ctrl-C).")
                 break
             # EOFError should be handled by get_user_input returning "exit"
