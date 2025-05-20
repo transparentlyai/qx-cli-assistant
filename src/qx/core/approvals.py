@@ -302,7 +302,7 @@ class ApprovalManager:
         else:
             panel_display_content = Text("") 
 
-        self._console.print(Panel(panel_display_content, title=panel_title_text, border_style="prompt.border"))
+        self._console.print(Panel(panel_display_content, title=panel_title_text, border_style="blue"))
 
         current_choices = list(BASE_CHOICES)
         effective_allow_modify = allow_modify or (operation_type == "shell_command") or (operation_type == "write_file")

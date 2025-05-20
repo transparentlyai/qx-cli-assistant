@@ -8,7 +8,6 @@ from pydantic_ai.messages import ModelMessage
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.text import Text
-from rich.theme import Theme as RichTheme
 
 from qx.cli.console import QXConsole, qx_console, show_spinner
 
@@ -17,8 +16,6 @@ from qx.cli.qprompt import get_user_input
 from qx.core.approvals import ApprovalManager
 from qx.core.config_manager import load_runtime_configurations
 from qx.core.constants import (
-    CLI_THEMES,
-    DEFAULT_CLI_THEME,
     DEFAULT_MODEL,
     DEFAULT_SYNTAX_HIGHLIGHT_THEME,
     DEFAULT_VERTEXAI_LOCATION,
@@ -26,8 +23,6 @@ from qx.core.constants import (
 from qx.core.llm import initialize_llm_agent, query_llm
 
 # --- QX Version ---
-# This should ideally be sourced from the package itself, e.g., qx.__version__
-# For now, using the version from pyproject.toml
 QX_VERSION = "0.3.2"
 # --- End QX Version ---
 
@@ -57,51 +52,7 @@ async def _async_main():
     """Asynchronous main function to handle the QX agent logic."""
     load_runtime_configurations()
 
-    theme_name_from_env = os.getenv("CLI_THEME")
-    selected_theme_name = DEFAULT_CLI_THEME
-
-    if theme_name_from_env:
-        if theme_name_from_env in CLI_THEMES:
-            selected_theme_name = theme_name_from_env
-            logger.info(
-                f"Using CLI theme from environment variable: {selected_theme_name}"
-            )
-        else:
-            qx_console.print(
-                f"[yellow]Warning:[/yellow] CLI_THEME environment variable '{theme_name_from_env}' is invalid. "
-                f"Available themes: {list(CLI_THEMES.keys())}. "
-                f"Falling back to default theme: {DEFAULT_CLI_THEME}.",
-            )
-            logger.warning(
-                f"CLI_THEME environment variable '{theme_name_from_env}' is invalid. "
-                f"Falling back to default theme: {DEFAULT_CLI_THEME}."
-            )
-    else:
-        logger.info(f"Using default CLI theme: {selected_theme_name}")
-
-    final_theme_dict = CLI_THEMES.get(selected_theme_name)
-    if not final_theme_dict:
-        qx_console.print(
-            f"[bold red]Error:[/bold red] Selected theme '{selected_theme_name}' not found in CLI_THEMES. "
-            f"Using a basic console without full custom theming."
-        )
-        logger.error(
-            f"Selected theme '{selected_theme_name}' not found in CLI_THEMES. "
-            f"Using basic console."
-        )
-    else:
-        try:
-            rich_theme_obj = RichTheme(final_theme_dict)
-            qx_console.apply_theme(rich_theme_obj)
-            logger.info(f"Successfully applied CLI theme: {selected_theme_name}")
-        except Exception as e:
-            qx_console.print(
-                f"[bold red]Error applying theme '{selected_theme_name}': {e}. Using basic console.[/bold red]"
-            )
-            logger.error(
-                f"Error applying theme '{selected_theme_name}': {e}. Using basic console.",
-                exc_info=True,
-            )
+    logger.info("CLI theming system has been removed. Using default Rich console styling.")
 
     # Determine syntax highlighting theme for Markdown code blocks AND ApprovalManager previews
     syntax_theme_from_env = os.getenv("QX_SYNTAX_HIGHLIGHT_THEME")
@@ -229,7 +180,6 @@ async def _async_main():
             qx_console.print("Exiting QX due to critical error.", style="error")
             break
 
-
 def main():
     try:
         asyncio.run(_async_main())
@@ -245,4 +195,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
