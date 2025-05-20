@@ -97,13 +97,13 @@ class ApprovalManager:
         for key, _, full_word in available_choices:
             choice_map[full_word.lower()] = key
 
-        full_prompt_text = Text(prompt_message, style="prompt")
+        full_prompt_text = Text(prompt_message) # Removed style="prompt"
         full_prompt_text.append(" (")
 
         choices_for_display_str_list = []
         for i, (key, display, _) in enumerate(available_choices):
             full_prompt_text.append(display)
-            full_prompt_text.append(f"[{key.upper()}]", style="prompt.choices.key")
+            full_prompt_text.append(f"[{key.upper()}]", style="bold cyan") # Changed style
             choices_for_display_str_list.append(f"{display}[{key.upper()}]")
             if i < len(available_choices) - 1:
                 full_prompt_text.append("/")
@@ -124,13 +124,13 @@ class ApprovalManager:
 
                 self._console.print(
                     f"[error]Invalid input.[/] Please enter one of: {choices_display_str_for_error}",
-                    style="prompt.invalid"
+                    style="red" # Changed style
                 )
             except Exception as e:
                 logger.error(f"Failed to get user confirmation choice: {e}", exc_info=True)
                 self._console.print(
                     "[error]An error occurred during input. Defaulting to Cancel.[/]",
-                     style="prompt.invalid"
+                     style="red" # Changed style
                 )
                 return "c"
 
@@ -138,7 +138,7 @@ class ApprovalManager:
         while True:
             try:
                 duration_str = Prompt.ask(
-                    Text(prompt_message, style="prompt"),
+                    Text(prompt_message), # Removed style="prompt"
                     default=str(default),
                     console=self._console,
                 )
@@ -146,20 +146,20 @@ class ApprovalManager:
                 if duration < 0:
                     self._console.print(
                         "[error]Please enter a non-negative number of minutes.[/]",
-                        style="prompt.invalid"
+                        style="red" # Changed style
                     )
                     continue
                 return duration
             except ValueError:
                 self._console.print(
                     "[error]Please enter a valid number of minutes.[/]",
-                    style="prompt.invalid"
+                    style="red" # Changed style
                 )
             except Exception as e:
                 logger.error(f"Failed to get duration input: {e}", exc_info=True)
                 self._console.print(
                     f"[error]An error occurred. Using default value ({default} minutes).[/]",
-                    style="prompt.invalid"
+                    style="red" # Changed style
                 )
                 return default
 
@@ -242,9 +242,9 @@ class ApprovalManager:
         elif operation_type == "generic" and operation_content_for_preview is not None:
             preview_limit = 200 
             if len(operation_content_for_preview) > preview_limit:
-                renderables.append(Text(operation_content_for_preview[:preview_limit] + "...", style="code"))
+                renderables.append(Text(operation_content_for_preview[:preview_limit] + "...")) # Removed style="code"
             else:
-                renderables.append(Text(operation_content_for_preview, style="code"))
+                renderables.append(Text(operation_content_for_preview)) # Removed style="code"
         
         return renderables
 
@@ -280,16 +280,16 @@ class ApprovalManager:
             self._console.print(f"[success]AUTO-APPROVED (SESSION):[/] {operation_description}: [info]{item_to_approve}[/]")
             return "SESSION_APPROVED", item_to_approve, None
 
-        panel_title_text = Text(f"{operation_description}: ", style="bold") # Changed "title" to "bold"
-        panel_title_text.append(item_to_approve, style="info")
+        panel_title_text = Text(f"{operation_description}: ", style="bold") 
+        panel_title_text.append(item_to_approve, style="cyan") # Changed style="info" to "cyan"
         
         panel_content_renderables: List[RenderableType] = []
 
         if content_preview is not None: 
             preview_header_text = "\nContent Preview (Diff or New):\n" if operation_type == "write_file" else "\nContent Preview:\n"
-            panel_content_renderables.append(Text(preview_header_text, style="highlight"))
+            panel_content_renderables.append(Text(preview_header_text, style="underline")) # Changed style="highlight"
             
-            path_for_preview = item_to_approve if operation_type == "write_file" else "generic_item.txt" # Provide a dummy ext for generic
+            path_for_preview = item_to_approve if operation_type == "write_file" else "generic_item.txt" 
             
             preview_items = self._get_file_preview_renderables(path_for_preview, content_preview, operation_type)
             panel_content_renderables.extend(preview_items)
@@ -344,7 +344,7 @@ class ApprovalManager:
                 prompt_text = "Enter the modified file path"
             
             modified_item = Prompt.ask(
-                Text(prompt_text, style="prompt"),
+                Text(prompt_text), # Removed style="prompt"
                 default=item_to_approve,
                 console=self._console,
             ).strip()
@@ -356,7 +356,7 @@ class ApprovalManager:
 
             if operation_type == "shell_command" and modified_item != item_to_approve:
                 modification_reason = Prompt.ask(
-                    Text("Reason for modification (optional)", style="prompt"),
+                    Text("Reason for modification (optional)"), # Removed style="prompt"
                     default="", console=self._console,
                 ).strip() or None
             
