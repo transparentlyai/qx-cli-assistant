@@ -12,33 +12,33 @@ from qx.tools.file_operations_base import is_path_allowed # Used by read_file_im
 logger = logging.getLogger(__name__)
 
 
-def read_file_impl(path_str: str) -> str: # Changed Optional[str] to str
+def read_file_impl(path_str: str) -> str:
     """
     Reads the content of a file after path validation.
     This is the core implementation, intended to be called after approval.
 
     Args:
-        path_str: The relative or absolute path to the file.
+        path_str: The relative or absolute path to the file. Tilde expansion is performed.
 
     Returns:
         The file content as a string, or an error message string if an error occurs
         or the path is not allowed.
     """
     try:
+        expanded_path_str = os.path.expanduser(path_str)
+        
         # project_root determination is crucial for is_path_allowed
-        # Assuming Path.cwd() is the intended base for resolving project_root if path_str is relative
-        # and project_root isn't explicitly passed.
         current_working_dir = Path.cwd()
         project_root = _find_project_root(str(current_working_dir))
         
-        # Resolve path_str. If path_str is absolute, it's used as is.
-        # If path_str is relative, it's resolved against current_working_dir.
-        absolute_path = current_working_dir.joinpath(path_str).resolve()
-        # An alternative for explicit relative-to-project:
-        # if project_root and not Path(path_str).is_absolute():
-        #    absolute_path = project_root.joinpath(path_str).resolve()
-        # else:
-        #    absolute_path = Path(path_str).resolve()
+        # Resolve expanded_path_str. If it's absolute, it's used as is.
+        # If it's relative, it's resolved against current_working_dir.
+        # Path.resolve() handles .. and . components.
+        absolute_path = Path(expanded_path_str)
+        if not absolute_path.is_absolute():
+            absolute_path = current_working_dir.joinpath(expanded_path_str).resolve()
+        else:
+            absolute_path = absolute_path.resolve() # Ensure symlinks are resolved etc.
 
 
         if not is_path_allowed(absolute_path, project_root, USER_HOME_DIR):
@@ -57,30 +57,26 @@ def read_file_impl(path_str: str) -> str: # Changed Optional[str] to str
         return content
 
     except FileNotFoundError:
-        # This might be redundant if absolute_path.is_file() check is robust
-        logger.error(f"File not found (exception): {path_str}")
-        return f"Error: File not found: {path_str}"
+        logger.error(f"File not found (exception): {expanded_path_str}")
+        return f"Error: File not found: {expanded_path_str}"
     except PermissionError:
-        logger.error(f"Permission denied reading file: {path_str}")
-        return f"Error: Permission denied reading file: {path_str}"
+        logger.error(f"Permission denied reading file: {expanded_path_str}")
+        return f"Error: Permission denied reading file: {expanded_path_str}"
     except IsADirectoryError:
-        logger.error(f"Path is a directory, not a file: {path_str}")
-        return f"Error: Path is a directory, not a file: {path_str}"
+        logger.error(f"Path is a directory, not a file: {expanded_path_str}")
+        return f"Error: Path is a directory, not a file: {expanded_path_str}"
     except Exception as e:
-        logger.error(f"Error reading file '{path_str}': {e}", exc_info=True)
-        return f"Error reading file '{path_str}': {e}"
+        logger.error(f"Error reading file '{expanded_path_str}': {e}", exc_info=True)
+        return f"Error reading file '{expanded_path_str}': {e}"
 
 
 class ReadFileInput(BaseModel):
     """Input model for the ReadFileTool."""
-    path: str = Field(..., description="The path to the file to be read. Can be relative or absolute.")
-    # Future enhancements:
-    # from_line: Optional[int] = Field(None, description="Optional line number to start reading from (1-indexed).")
-    # to_line: Optional[int] = Field(None, description="Optional line number to end reading at (inclusive).")
+    path: str = Field(..., description="The path to the file to be read. Can be relative, absolute, or start with '~'.")
 
 class ReadFileOutput(BaseModel):
     """Output model for the ReadFileTool."""
-    path: str = Field(description="The path of the file attempted to be read.")
+    path: str = Field(description="The (expanded) path of the file attempted to be read.")
     content: Optional[str] = Field(None, description="The content of the file if successful, otherwise None.")
     error: Optional[str] = Field(None, description="Error message if the operation was denied, failed, or the file was not found.")
 
@@ -91,10 +87,11 @@ class ReadFileTool:
     This operation is automatically approved by the system (logged as AUTO_APPROVED or SESSION_APPROVED)
     and does not require explicit user confirmation unless 'Approve All' is active.
     Path validation ensures reads are restricted to the project directory or user's home directory.
+    Tilde (~) in the path is expanded to the user's home directory.
     """
     name: str = "read_file"
     description: str = (
-        "Reads the content of a specified file. Provide a relative or absolute path. "
+        "Reads the content of a specified file. Provide a relative, absolute, or tilde-based path (e.g., ~/file.txt). "
         "Access is restricted to project files or files within the user's home directory. "
         "This operation is auto-approved."
     )
@@ -107,45 +104,45 @@ class ReadFileTool:
     def run(self, args: ReadFileInput) -> ReadFileOutput:
         """
         Handles the (auto)approval and execution of reading a file.
+        Performs tilde expansion on the input path.
         """
-        file_path_arg = args.path
+        original_path_arg = args.path
+        expanded_path_arg = os.path.expanduser(original_path_arg)
 
         decision, item_after_approval, _ = \
             self.approval_manager.request_approval(
-                operation_description="Read file",
-                item_to_approve=file_path_arg,
+                operation_description=f"Read file: {original_path_arg} (expanded: {expanded_path_arg})",
+                item_to_approve=expanded_path_arg, # Use expanded path for approval check
                 operation_type="read_file"
             )
 
-        # For "read_file", item_after_approval should be the same as file_path_arg
-        # as modification is not supported for this operation type.
-        if item_after_approval != file_path_arg:
+        if item_after_approval != expanded_path_arg:
             logger.warning(
-                f"File path changed during 'read_file' approval from '{file_path_arg}' to '{item_after_approval}'. "
-                "This is unexpected. Using the original path argument."
+                f"File path changed during 'read_file' approval from '{expanded_path_arg}' to '{item_after_approval}'. "
+                f"This is unexpected for read_file. Using the originally expanded path: {expanded_path_arg}."
             )
-            # Sticking to file_path_arg as modification isn't a feature here.
+            # Sticking to expanded_path_arg as modification isn't a feature here for path itself.
+
+        path_to_read = expanded_path_arg # The path that will actually be read.
 
         if decision in ["AUTO_APPROVED", "SESSION_APPROVED"]:
-            logger.info(f"Read operation for '{file_path_arg}' approved (Decision: {decision}). Proceeding to read.")
+            logger.info(f"Read operation for '{path_to_read}' (original: '{original_path_arg}') approved (Decision: {decision}). Proceeding to read.")
             
-            file_content_or_error_str = read_file_impl(file_path_arg)
+            file_content_or_error_str = read_file_impl(path_to_read)
 
             if file_content_or_error_str.startswith("Error:"):
-                logger.warning(f"Failed to read file '{file_path_arg}': {file_content_or_error_str}")
-                return ReadFileOutput(path=file_path_arg, content=None, error=file_content_or_error_str)
+                logger.warning(f"Failed to read file '{path_to_read}': {file_content_or_error_str}")
+                return ReadFileOutput(path=path_to_read, content=None, error=file_content_or_error_str)
             else:
-                # Success
-                return ReadFileOutput(path=file_path_arg, content=file_content_or_error_str, error=None)
+                return ReadFileOutput(path=path_to_read, content=file_content_or_error_str, error=None)
         
-        # Defensive handling for unexpected decisions (should not occur for "read_file" type)
-        else:
-            error_message = f"File read for '{file_path_arg}' was unexpectedly {decision.lower().replace('_', ' ')}."
+        else: # DENIED, PROHIBITED, USER_DENIED, etc.
+            error_message = f"File read for '{path_to_read}' (original: '{original_path_arg}') was {decision.lower().replace('_', ' ')}."
             if decision == "PROHIBITED":
-                 error_message = f"File read for '{file_path_arg}' prohibited by policy (unexpected for read operations)."
+                 error_message = f"File read for '{path_to_read}' (original: '{original_path_arg}') prohibited by policy."
             
             logger.warning(error_message)
-            return ReadFileOutput(path=file_path_arg, content=None, error=error_message)
+            return ReadFileOutput(path=path_to_read, content=None, error=error_message)
 
 
 if __name__ == "__main__":
@@ -160,7 +157,7 @@ if __name__ == "__main__":
 
         def request_approval(self, operation_description, item_to_approve, operation_type, **kwargs):
             self.console.print(
-                f"DummyApprovalManager: Requesting approval for '{operation_description}: {item_to_approve}' (type: {operation_type})"
+                f"DummyApprovalManager: Requesting approval for '{operation_description}' (type: {operation_type}) - Item: '{item_to_approve}'"
             )
             if operation_type == "read_file":
                 if self._approve_all_active:
@@ -175,19 +172,24 @@ if __name__ == "__main__":
     approval_manager_instance = DummyApprovalManager(console=test_console)
     read_tool = ReadFileTool(approval_manager=approval_manager_instance)
 
-    test_console.rule("[bold bright_green]Testing ReadFileTool[/]")
+    test_console.rule("[bold bright_green]Testing ReadFileTool with Tilde Expansion[/]")
 
     # Setup test environment
     base_test_dir = Path("/tmp/qx_tool_tests")
     test_project_dir = base_test_dir / "qx_read_tool_test_project"
-    user_home_files_dir = Path(USER_HOME_DIR) / "qx_read_tool_test_home_files" # Assumes USER_HOME_DIR is sensible
+    
+    # Ensure USER_HOME_DIR is correctly determined for tests, or mock it.
+    # For this test, we'll create a file relative to the actual USER_HOME_DIR.
+    # Note: USER_HOME_DIR in paths.py is derived from `Path.home()`.
+    test_home_file_relative_path = "qx_test_home_file.txt"
+    home_file_path_obj = USER_HOME_DIR / test_home_file_relative_path
 
-    for p_dir in [test_project_dir, user_home_files_dir]:
+    for p_dir in [test_project_dir]: # user_home_files_dir creation handled by USER_HOME_DIR directly
         p_dir.mkdir(parents=True, exist_ok=True)
     
     (test_project_dir / ".Q").mkdir(exist_ok=True)
     (test_project_dir / "project_file.txt").write_text("Content of project_file.txt")
-    (user_home_files_dir / "home_file.txt").write_text("Content of home_file.txt")
+    home_file_path_obj.write_text("Content of home_file.txt in user home")
     (test_project_dir / "forbidden_dir").mkdir(exist_ok=True) # For directory read attempt
 
     original_cwd = Path.cwd()
@@ -207,7 +209,7 @@ if __name__ == "__main__":
             os.chdir(original_cwd)
             test_console.print(f"[dim]Restored CWD to: {original_cwd}[/dim]")
 
-        test_console.print(f"  Path Attempted: {result.path}")
+        test_console.print(f"  Path Reported by Tool: {result.path}")
         if result.content:
             preview = result.content[:70] + "..." if len(result.content) > 70 else result.content
             test_console.print(f"  [green]Content:[/] '{preview}'")
@@ -227,31 +229,29 @@ if __name__ == "__main__":
     # Test cases
     run_read_test(str(test_project_dir / "project_file.txt"), "Read project file (absolute path)", True)
     run_read_test("project_file.txt", "Read project file (relative path from project root)", True, set_cwd_to_project=True)
-    run_read_test(str(user_home_files_dir / "home_file.txt"), "Read user home file (absolute path)", True)
     
-    # Test relative path from non-project CWD to a home file (requires careful path construction)
-    # This depends on how USER_HOME_DIR and path_str are combined.
-    # Assuming path_str can be relative to CWD and then resolved.
-    # For robustness, absolute paths or paths relative to known roots (project/home) are better for LLM.
-    # Let's test a relative path that should resolve correctly if CWD is user's actual home.
-    # This test is a bit fragile depending on CWD of test execution.
-    # os.chdir(USER_HOME_DIR)
-    # run_read_test("qx_read_tool_test_home_files/home_file.txt", "Read user home file (relative from user home CWD)", True)
-    # os.chdir(original_cwd)
+    # Test tilde expansion
+    run_read_test(f"~/{test_home_file_relative_path}", "Read user home file (using tilde path)", True)
+    run_read_test(str(home_file_path_obj), "Read user home file (absolute path to user home)", True)
+
 
     run_read_test(str(test_project_dir / "non_existent.txt"), "Read non-existent file", False)
+    run_read_test("~/non_existent_home_file.txt", "Read non-existent tilde file", False)
     run_read_test(str(test_project_dir / "forbidden_dir"), "Attempt to read a directory", False)
     run_read_test("/etc/passwd", "Read system file (e.g., /etc/passwd - should be denied by policy)", False)
     
-    # Test with "Approve All" active
     test_console.rule("[bold]Testing with 'Approve All' active[/]")
     approval_manager_instance._approve_all_active = True
-    run_read_test(str(test_project_dir / "project_file.txt"), "Read project file ('Approve All' active)", True)
+    run_read_test(f"~/{test_home_file_relative_path}", "Read tilde path ('Approve All' active)", True)
     approval_manager_instance._approve_all_active = False # Reset
 
-    test_console.print(f"\n[dim]Test files are in {base_test_dir} and {user_home_files_dir}. Clean up manually if needed.[/dim]")
+    test_console.print(f"\n[dim]Test project files are in {test_project_dir}.[/dim]")
+    test_console.print(f"[dim]Test home file is {home_file_path_obj}. Clean up manually if needed.[/dim]")
     test_console.print("\n[bold bright_green]Finished ReadFileTool Tests[/]")
 
+    # Manual cleanup instructions:
+    # print(f"To cleanup, run: rm -rf {base_test_dir} {home_file_path_obj}")
+    # Consider adding actual cleanup if safe and desired:
     # shutil.rmtree(base_test_dir, ignore_errors=True)
-    # if user_home_files_dir.exists() and "qx_read_tool_test_home_files" in str(user_home_files_dir): # Safety check
-    #     shutil.rmtree(user_home_files_dir, ignore_errors=True)
+    # if home_file_path_obj.exists() and test_home_file_relative_path in str(home_file_path_obj): # Safety check
+    # home_file_path_obj.unlink(missing_ok=True)
