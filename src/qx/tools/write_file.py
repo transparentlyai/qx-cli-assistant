@@ -8,11 +8,11 @@ from pydantic import BaseModel, Field
 from rich.console import Console as RichConsole
 
 from qx.core.approvals import ApprovalManager
-from qx.core.paths import USER_HOME_DIR  # Used by write_file_impl
+from qx.core.paths import USER_HOME_DIR
 from qx.core.paths import (
     _find_project_root,
-)  # Used by WriteFileTool.run and write_file_impl
-from qx.tools.file_operations_base import is_path_allowed  # Used by write_file_impl
+)
+from qx.tools.file_operations_base import is_path_allowed
 
 # Configure logging for this module
 logger = logging.getLogger(__name__)
@@ -49,12 +49,11 @@ def write_file_impl(path_str: str, content: str) -> Optional[str]:
             )
             return f"Error: Access denied by policy for path: {absolute_path}"
 
-        # Ensure parent directory exists
         absolute_path.parent.mkdir(parents=True, exist_ok=True)
 
         absolute_path.write_text(content, encoding="utf-8")
         logger.info(f"Successfully wrote to file: {absolute_path}")
-        return None  # Success
+        return None
 
     except PermissionError:
         logger.error(f"Permission denied writing to file: {expanded_path_str}")
@@ -116,7 +115,7 @@ class WriteFileTool:
         self.approval_manager = approval_manager
         self._console = (
             console or RichConsole()
-        )  # Not directly used here but good practice
+        )
 
     def run(self, args: WriteFileInput) -> WriteFileOutput:
         """
@@ -125,21 +124,22 @@ class WriteFileTool:
         """
         original_path_arg = args.path
         expanded_path_arg = os.path.expanduser(original_path_arg)
-
         current_project_root = _find_project_root(str(Path.cwd()))
+        
+        op_desc_for_prompt = "Write to file"
 
         decision, item_after_approval, modification_reason = (
             self.approval_manager.request_approval(
-                operation_description=f"Write to file: {original_path_arg}",
+                operation_description=op_desc_for_prompt, # Standardized description
                 item_to_approve=expanded_path_arg,
-                allow_modify=True,  # Always allow modification for write paths
+                allow_modify=True,
                 content_preview=args.content,
                 operation_type="write_file",
-                project_root=current_project_root,  # Pass current project_root
+                project_root=current_project_root,
             )
         )
 
-        path_to_write = item_after_approval  # Use the path after potential modification
+        path_to_write = item_after_approval
 
         if decision in ["USER_APPROVED", "SESSION_APPROVED", "USER_MODIFIED"]:
             if decision == "USER_MODIFIED":
@@ -154,14 +154,14 @@ class WriteFileTool:
                     f"Write operation for '{path_to_write}' (original: '{original_path_arg}') approved (Decision: {decision}). Proceeding to write."
                 )
 
-            error_message = write_file_impl(path_to_write, args.content)
+            error_message_from_impl = write_file_impl(path_to_write, args.content)
 
-            if error_message:
+            if error_message_from_impl:
                 logger.warning(
-                    f"Failed to write file '{path_to_write}': {error_message}"
+                    f"Failed to write file '{path_to_write}': {error_message_from_impl}"
                 )
                 return WriteFileOutput(
-                    path=path_to_write, success=False, message=error_message
+                    path=path_to_write, success=False, message=error_message_from_impl
                 )
             else:
                 return WriteFileOutput(
@@ -169,28 +169,24 @@ class WriteFileTool:
                     success=True,
                     message=f"Successfully wrote to {path_to_write}",
                 )
-        else:  # DENIED, PROHIBITED, USER_DENIED, USER_CANCELLED etc.
-            # PROHIBITED should ideally be caught by is_path_allowed in write_file_impl if ApprovalManager somehow approved it.
-            # However, ApprovalManager itself might return PROHIBITED for write_file if future rules are added.
-            error_msg = f"File write to '{path_to_write}' (original: '{original_path_arg}') was {decision.lower().replace('_', ' ')}."
+        else:
+            error_msg = f"{op_desc_for_prompt} for '{path_to_write}' (original: '{original_path_arg}') was {decision.lower().replace('_', ' ')}."
             logger.warning(error_msg)
             return WriteFileOutput(path=path_to_write, success=False, message=error_msg)
 
 
 if __name__ == "__main__":
     import shutil
-
     from rich.console import Console as RichConsole
+    from qx.core.paths import _ensure_project_q_dir_exists
 
-    from qx.core.paths import _ensure_project_q_dir_exists  # For test setup
-
-    # Dummy ApprovalManager for testing
     class DummyApprovalManager:
         def __init__(self, console, default_decision="USER_APPROVED"):
             self.console = console
             self._approve_all_active = False
             self.default_decision = default_decision
             self.last_received_project_root = None
+            self.last_operation_description = None # To check the description passed
 
         def request_approval(
             self,
@@ -201,7 +197,8 @@ if __name__ == "__main__":
             content_preview=None,
             project_root: Optional[Path] = None,
         ):
-            self.last_received_project_root = project_root  # Store for verification
+            self.last_received_project_root = project_root
+            self.last_operation_description = operation_description # Store it
             self.console.print(
                 f"DummyApprovalManager: Requesting approval for '{operation_description}' (type: {operation_type}) - Item: '{item_to_approve}'"
             )
@@ -210,17 +207,13 @@ if __name__ == "__main__":
             )
 
             if self._approve_all_active:
-                # Simulate ApprovalManager's logic for write_file with session approval
                 if operation_type == "write_file":
                     expanded_path_str = os.path.expanduser(item_to_approve)
                     absolute_path = Path(expanded_path_str)
                     if not absolute_path.is_absolute():
-                        # In real scenario, CWD of the tool matters. Here, assume CWD is where test runs.
                         absolute_path = Path.cwd().joinpath(expanded_path_str).resolve()
                     else:
                         absolute_path = absolute_path.resolve()
-
-                    # Use the actual is_path_allowed for this dummy check
                     if is_path_allowed(absolute_path, project_root, USER_HOME_DIR):
                         self.console.print(
                             "DummyApprovalManager: Simulating SESSION_APPROVED (path OK for write)"
@@ -230,14 +223,12 @@ if __name__ == "__main__":
                         self.console.print(
                             "DummyApprovalManager: Path NOT OK for write, falling back from session to configured default."
                         )
-                        # Fall through to default_decision if path not allowed for session
-                else:  # For other types, session approve directly
+                else:
                     self.console.print(
                         f"DummyApprovalManager: Simulating SESSION_APPROVED for {operation_type}"
                     )
                     return "SESSION_APPROVED", item_to_approve, None
-
-            # If not session approved, return the default_decision (e.g. USER_APPROVED or USER_DENIED for testing)
+            
             self.console.print(
                 f"DummyApprovalManager: Simulating '{self.default_decision}'"
             )
@@ -247,25 +238,21 @@ if __name__ == "__main__":
             return self._approve_all_active
 
     test_console = RichConsole()
-
-    # --- Test Setup ---
-    base_test_dir_name = "tmp_qx_write_tool_tests"
+    base_test_dir_name = "tmp_qx_write_tool_tests_v2" # New version for new tests
     Path(base_test_dir_name).mkdir(exist_ok=True)
     base_test_dir = Path(base_test_dir_name).resolve()
-
-    test_project_sim_dir = base_test_dir / "write_tool_project_sim"
-    # Ensure it's a project for _find_project_root
+    test_project_sim_dir = base_test_dir / "write_tool_project_sim_v2"
     _ensure_project_q_dir_exists(str(test_project_sim_dir))
-
     original_cwd = Path.cwd()
 
     def run_write_test(
-        tool: WriteFileTool,  # Pass the tool instance
+        tool: WriteFileTool,
         path_str: str,
         content: str,
         description: str,
         expect_success: bool,
         change_cwd_to_project_sim: bool = False,
+        expected_op_desc_in_approval: str = "Write to file" # Check this
     ):
         test_console.print(f"\n[bold]Test Case:[/] {description}")
         test_console.print(f"[cyan]Attempting to write to:[/] '{path_str}'")
@@ -278,7 +265,6 @@ if __name__ == "__main__":
                 f"[dim]Changed CWD to: {test_project_sim_dir} (Project Root for this test)[/dim]"
             )
         else:
-            # If CWD is not changed, _find_project_root will use original_cwd
             expected_project_root_in_approval = _find_project_root(str(original_cwd))
             test_console.print(
                 f"[dim]CWD is: {original_cwd} (Project Root for approval: {expected_project_root_in_approval})[/dim]"
@@ -287,14 +273,16 @@ if __name__ == "__main__":
         tool_input = WriteFileInput(path=path_str, content=content)
         result = tool.run(tool_input)
 
-        # Check if the dummy approval manager received the correct project_root
-        # This assumes tool.approval_manager is the DummyApprovalManager instance
         if isinstance(tool.approval_manager, DummyApprovalManager):
             received_pr = tool.approval_manager.last_received_project_root
+            received_op_desc = tool.approval_manager.last_operation_description
             if received_pr != expected_project_root_in_approval:
                 test_console.print(f"[bold red]PROJECT ROOT MISMATCH IN APPROVAL:[/]")
-                test_console.print(f"  Expected: {expected_project_root_in_approval}")
-                test_console.print(f"  Received: {received_pr}")
+                test_console.print(f"  Expected: {expected_project_root_in_approval}, Received: {received_pr}")
+            if received_op_desc != expected_op_desc_in_approval:
+                test_console.print(f"[bold red]OPERATION DESCRIPTION MISMATCH IN APPROVAL:[/]")
+                test_console.print(f"  Expected: '{expected_op_desc_in_approval}', Received: '{received_op_desc}'")
+
 
         if Path.cwd() != original_cwd:
             os.chdir(original_cwd)
@@ -307,7 +295,7 @@ if __name__ == "__main__":
         if not final_path_abs.is_absolute():
             final_path_abs = (
                 Path.cwd().joinpath(final_path_abs).resolve()
-            )  # Resolve based on original CWD if path was relative
+            )
 
         content_matches = False
         if result.success and final_path_abs.is_file():
@@ -342,88 +330,48 @@ if __name__ == "__main__":
         approval_manager=approval_manager_user_approves
     )
 
-    # 1. Write to a file within the simulated project (CWD is project)
     run_write_test(
-        write_tool_user_approves,
-        "project_file.txt",
-        "content1",
-        "Write to project file (CWD in project)",
-        True,
-        change_cwd_to_project_sim=True,
+        write_tool_user_approves, "project_file.txt", "content1",
+        "Write to project file (CWD in project)", True, True
     )
-    # 2. Write to a file in user home (using tilde, CWD is project)
     home_test_file = f"~/{base_test_dir_name}_home_write_test.txt"
     run_write_test(
-        write_tool_user_approves,
-        home_test_file,
-        "content2",
-        "Write to home file (tilde, CWD in project)",
-        True,
-        change_cwd_to_project_sim=True,
+        write_tool_user_approves, home_test_file, "content2",
+        "Write to home file (tilde, CWD in project)", True, True
     )
-    # 3. Write to an absolute path outside project but in home (CWD is project)
     abs_home_path = USER_HOME_DIR / f"{base_test_dir_name}_abs_home_write.txt"
     run_write_test(
-        write_tool_user_approves,
-        str(abs_home_path),
-        "content3",
-        "Write to home file (absolute, CWD in project)",
-        True,
-        change_cwd_to_project_sim=True,
+        write_tool_user_approves, str(abs_home_path), "content3",
+        "Write to home file (absolute, CWD in project)", True, True
     )
-    # 4. Attempt to write to a forbidden path (e.g., /etc/) - should be denied by is_path_allowed
-    #    DummyApprovalManager will approve, but write_file_impl should deny.
     run_write_test(
-        write_tool_user_approves,
-        "/etc/qx_test_dummy_write.txt",
-        "content4",
-        "Write to /etc/ (CWD in project, should fail policy)",
-        False,
-        change_cwd_to_project_sim=True,
+        write_tool_user_approves, "/etc/qx_test_dummy_write.txt", "content4",
+        "Write to /etc/ (CWD in project, should fail policy)", False, True
     )
 
-    test_console.rule(
-        "[bold]'Approve All' Tests (Dummy simulates conditional session approval)[/]"
-    )
+    test_console.rule("[bold]'Approve All' Tests (Dummy simulates conditional session approval)[/]")
     approval_manager_approve_all = DummyApprovalManager(
         console=test_console, default_decision="USER_APPROVED"
-    )  # Default if session bypasses
+    )
     approval_manager_approve_all._approve_all_active = True
     write_tool_approve_all = WriteFileTool(
         approval_manager=approval_manager_approve_all
     )
 
-    # 5. 'Approve All': Write to project file (CWD in project) - Should be SESSION_APPROVED by dummy
     run_write_test(
-        write_tool_approve_all,
-        "project_file_session.txt",
-        "content_session1",
-        "'Approve All': Write to project file (CWD in project)",
-        True,
-        change_cwd_to_project_sim=True,
+        write_tool_approve_all, "project_file_session.txt", "content_session1",
+        "'Approve All': Write to project file (CWD in project)", True, True
     )
-    # 6. 'Approve All': Write to home file (tilde, CWD in project) - Should be SESSION_APPROVED by dummy
     home_session_test_file = f"~/{base_test_dir_name}_home_session_write.txt"
     run_write_test(
-        write_tool_approve_all,
-        home_session_test_file,
-        "content_session2",
-        "'Approve All': Write to home file (tilde, CWD in project)",
-        True,
-        change_cwd_to_project_sim=True,
+        write_tool_approve_all, home_session_test_file, "content_session2",
+        "'Approve All': Write to home file (tilde, CWD in project)", True, True
     )
-    # 7. 'Approve All': Write to forbidden path (/etc/) - Dummy should bypass session, then default to USER_APPROVED,
-    #    but write_file_impl should still deny due to is_path_allowed.
     run_write_test(
-        write_tool_approve_all,
-        "/etc/qx_test_dummy_session_write_forbidden.txt",
-        "content_session3",
-        "'Approve All': Write to /etc/ (should fail policy despite Approve All)",
-        False,
-        change_cwd_to_project_sim=True,
+        write_tool_approve_all, "/etc/qx_test_dummy_session_write_forbidden.txt", "content_session3",
+        "'Approve All': Write to /etc/ (should fail policy despite Approve All)", False, True
     )
-
-    approval_manager_approve_all._approve_all_active = False  # Reset
+    approval_manager_approve_all._approve_all_active = False
 
     test_console.rule("[bold]Test with User Denying (Dummy set to USER_DENIED)[/]")
     approval_manager_user_denies = DummyApprovalManager(
@@ -432,14 +380,9 @@ if __name__ == "__main__":
     write_tool_user_denies = WriteFileTool(
         approval_manager=approval_manager_user_denies
     )
-    # 8. User denies write to a project file
     run_write_test(
-        write_tool_user_denies,
-        "project_file_denied.txt",
-        "content_denied",
-        "User denies write to project file (CWD in project)",
-        False,  # Expect failure because user denies
-        change_cwd_to_project_sim=True,
+        write_tool_user_denies, "project_file_denied.txt", "content_denied",
+        "User denies write to project file (CWD in project)", False, True
     )
 
     test_console.print(
@@ -450,11 +393,9 @@ if __name__ == "__main__":
     )
     test_console.print("\n[bold bright_green]Finished WriteFileTool Tests[/]")
 
-    # Cleanup
-    # print(f"To cleanup, run: rm -rf {base_test_dir}")
+    # shutil.rmtree(base_test_dir_name, ignore_errors=True)
+    # for f_path_str_cleanup in [home_test_file, str(abs_home_path), home_session_test_file]:
+    #     p_cleanup = Path(os.path.expanduser(f_path_str_cleanup))
+    #     if p_cleanup.exists(): p_cleanup.unlink(missing_ok=True)
+    # print(f"To cleanup, run: rm -rf {base_test_dir_name}")
     # print(f"And potentially: rm -f {USER_HOME_DIR}/{base_test_dir_name}*")
-    # Consider more robust cleanup if needed, e.g., tracking created files.
-    # shutil.rmtree(base_test_dir, ignore_errors=True)
-    # for f_path_str in [home_test_file, str(abs_home_path), home_session_test_file]:
-    #     p = Path(os.path.expanduser(f_path_str))
-    #     if p.exists(): p.unlink()

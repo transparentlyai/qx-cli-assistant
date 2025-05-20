@@ -16,7 +16,6 @@ from pygments.util import ClassNotFound # To catch invalid lexer error
 # Import constants for command checking
 from qx.core.constants import DEFAULT_PROHIBITED_COMMANDS, DEFAULT_APPROVED_COMMANDS
 from qx.core.paths import USER_HOME_DIR # For path validation during session approval
-# Removed: from qx.tools.file_operations_base import is_path_allowed
 
 # Configure logging for this module
 logger = logging.getLogger(__name__)
@@ -67,7 +66,6 @@ class ApprovalManager:
     def _is_approve_all_active(self) -> bool:
         if self._approve_all_until:
             if datetime.datetime.now() < self._approve_all_until:
-                # Log statement moved to where it's confirmed to be used for an operation
                 return True
             else:
                 self._console.print(
@@ -99,7 +97,8 @@ class ApprovalManager:
             choice_map[full_word.lower()] = key
 
         simple_choices_str = "/".join(display_text for _, display_text, _ in available_choices)
-        prompt_text = f"{simple_choices_str}: "
+        # Rich's Prompt.ask will add the colon and space
+        prompt_text = f"{simple_choices_str}"
 
         while True:
             try:
@@ -133,7 +132,7 @@ class ApprovalManager:
         while True:
             try:
                 duration_str = Prompt.ask(
-                    Text(prompt_message), # This prompt is a question, not choices, so Text() is fine
+                    Text(prompt_message),
                     default=str(default),
                     console=self._console,
                 )
@@ -209,9 +208,9 @@ class ApprovalManager:
                 except Exception as e:
                     logger.error(f"Error generating diff preview for {file_path_str}: {e}", exc_info=True)
                     renderables.append(Text(f"[red]Error generating diff: {e}[/red]\\nDisplaying new content instead:", style="error"))
-                    file_exists = False # Fallback to showing new content
+                    file_exists = False
 
-            if not file_exists: # Also applies if diff generation failed and file_exists was set to False
+            if not file_exists:
                 lines = operation_content_for_preview.splitlines()
                 line_count = len(lines)
                 display_content: str
@@ -223,7 +222,7 @@ class ApprovalManager:
                     renderables.append(Syntax(
                         display_content, lexer_name,
                         theme=self.syntax_highlight_theme,
-                        line_numbers=True, word_wrap=False # word_wrap=False for truncated content
+                        line_numbers=True, word_wrap=False
                     ))
                     renderables.append(Text(f"[dim](Showing head and tail of {line_count} total lines)[/dim]", justify="center"))
                 else:
@@ -231,12 +230,11 @@ class ApprovalManager:
                     renderables.append(Syntax(
                         display_content, lexer_name,
                         theme=self.syntax_highlight_theme,
-                        line_numbers=True, word_wrap=False # word_wrap=False for consistency
+                        line_numbers=True, word_wrap=False
                     ))
 
         elif operation_type == "generic" and operation_content_for_preview is not None:
-            # Generic preview remains simple text, possibly truncated
-            preview_limit = 200 # Character limit for generic preview
+            preview_limit = 200
             if len(operation_content_for_preview) > preview_limit:
                 renderables.append(Text(operation_content_for_preview[:preview_limit] + "... [dim](truncated)[/dim]"))
             else:
@@ -246,27 +244,26 @@ class ApprovalManager:
 
     def request_approval(
         self,
-        operation_description: str, # e.g., "Execute shell command", "Read file", "Some custom task"
-        item_to_approve: str,       # e.g., "ls -l", "/path/to/file.txt", "input_data"
+        operation_description: str, # Expected: "Read file", "Write to file", "Execute shell command", "Perform generic task"
+        item_to_approve: str,
         allow_modify: bool = False,
         content_preview: Optional[str] = None,
         operation_type: OperationType = "generic",
         project_root: Optional[Path] = None,
     ) -> Tuple[ApprovalDecision, str, Optional[str]]:
-        # Moved import here to break circular dependency
-        from qx.tools.file_operations_base import is_path_allowed
+        from qx.tools.file_operations_base import is_path_allowed # Moved import
 
         modification_reason: Optional[str] = None
 
-        # 1. Handle operation types that might be auto-approved/denied without "Approve All"
+        # 1. Handle auto-approvals/denials
         if operation_type == "read_file":
             if self._is_approve_all_active():
-                logger.info(f"Operation automatically approved due to 'Approve All' until {self._approve_all_until} for read_file.")
-                self._console.print(f"[success]SESSION_APPROVED (READ):[/] {operation_description}: [info]{item_to_approve}[/]")
+                logger.info(f"Session approval for read_file: {item_to_approve}")
+                self._console.print(f"[success]SESSION_APPROVED:[/] {operation_description} [info]{item_to_approve}[/]")
                 return "SESSION_APPROVED", item_to_approve, None
             else:
-                logger.info(f"File read operation auto-approved (type 'read_file'): {operation_description} for '{item_to_approve}'")
-                self._console.print(f"[success]AUTO-APPROVED (READ):[/] {operation_description}: [info]{item_to_approve}[/]")
+                logger.info(f"Auto-approval for read_file: {item_to_approve}")
+                self._console.print(f"[success]AUTO-APPROVED:[/] {operation_description} [info]{item_to_approve}[/]")
                 return "AUTO_APPROVED", item_to_approve, None
 
         if operation_type == "shell_command":
@@ -276,15 +273,15 @@ class ApprovalManager:
                 return "PROHIBITED", item_to_approve, None
             if permission_status == "AUTO_APPROVED":
                 if self._is_approve_all_active():
-                    logger.info(f"Operation automatically approved due to 'Approve All' until {self._approve_all_until} for shell_command (auto-pattern).")
-                    self._console.print(f"[success]SESSION_APPROVED (SHELL - AUTO PATTERN):[/] {item_to_approve}")
+                    logger.info(f"Session approval for shell_command (auto-pattern): {item_to_approve}")
+                    self._console.print(f"[success]SESSION_APPROVED (AUTO PATTERN):[/] {operation_description} [info]{item_to_approve}[/]")
                     return "SESSION_APPROVED", item_to_approve, None
                 self._console.print(f"[success]COMMAND AUTO-APPROVED (PATTERN):[/] {item_to_approve}")
                 return "AUTO_APPROVED", item_to_approve, None
 
-        # 2. Handle "Approve All" for operations that are eligible
+        # 2. Handle "Approve All" for operations that are eligible and not yet returned
         if self._is_approve_all_active():
-            logger.info(f"Operation automatically approved due to 'Approve All' until {self._approve_all_until} for {operation_type}.")
+            logger.info(f"Session approval for {operation_type}: {item_to_approve}")
             if operation_type == "write_file":
                 expanded_path_str = os.path.expanduser(item_to_approve)
                 absolute_path = Path(expanded_path_str)
@@ -294,40 +291,23 @@ class ApprovalManager:
                     absolute_path = absolute_path.resolve()
 
                 if is_path_allowed(absolute_path, project_root, USER_HOME_DIR):
-                    self._console.print(f"[success]SESSION_APPROVED (WRITE - PATH OK):[/] {operation_description}: [info]{item_to_approve}[/]")
+                    self._console.print(f"[success]SESSION_APPROVED (PATH OK):[/] {operation_description} [info]{item_to_approve}[/]")
                     return "SESSION_APPROVED", item_to_approve, None
                 else:
                     self._console.print(
-                        f"[warning]Session approval for write to '{item_to_approve}' bypassed:[/]"\
-                        f" Path is outside project/home. Explicit confirmation required."
+                        f"[warning]Session approval for write to '{item_to_approve}' bypassed:[/] Path is outside project/home. Explicit confirmation required."
                     )
-            else: # For generic or other types if added
-                self._console.print(f"[success]SESSION_APPROVED ({operation_type.upper()}):[/] {operation_description}: [info]{item_to_approve}[/]")
+            else: # For generic
+                self._console.print(f"[success]SESSION_APPROVED:[/] {operation_description} [info]{item_to_approve}[/]")
                 return "SESSION_APPROVED", item_to_approve, None
 
         # 3. If not returned yet, explicit user confirmation is needed
-        
-        # Construct and print the simplified request line
-        display_action_verb = ""
-        if operation_type == "shell_command":
-            display_action_verb = "execute"
-        elif operation_type == "read_file":
-            display_action_verb = "read"
-        elif operation_type == "write_file":
-            display_action_verb = "write to"
-        elif operation_type == "generic":
-            display_action_verb = operation_description # Use the description as the action phrase
-
-        # Ensure display_action_verb is not empty if operation_type was unexpected (though typed)
-        if not display_action_verb: display_action_verb = f"process ({operation_type})"
-
-        self._console.print(f"QX wants to {display_action_verb.lower()}: {item_to_approve}")
+        self._console.print(f"QX wants to {operation_description.lower()}: {item_to_approve}")
 
         content_renderables: List[RenderableType] = []
         if content_preview is not None:
             preview_header_text = "\\nContent Preview (Diff or New):\\n" if operation_type == "write_file" else "\\nContent Preview:\\n"
             content_renderables.append(Text(preview_header_text, style="underline"))
-            # For write_file, item_to_approve is the path. For generic, it might not be a path.
             path_for_preview = item_to_approve if operation_type == "write_file" else "generic_item_preview.txt"
             preview_items = self._get_file_preview_renderables(path_for_preview, content_preview, operation_type)
             content_renderables.extend(preview_items)
@@ -335,16 +315,13 @@ class ApprovalManager:
         if content_renderables:
             for renderable in content_renderables:
                 self._console.print(renderable)
-        
-        self._console.print() # Add a blank line for spacing before the prompt
+        # Removed extra self._console.print() here
 
         current_choices = list(BASE_CHOICES)
-        # Modification is always allowed for shell and write, or if explicitly set for generic
         effective_allow_modify = allow_modify or (operation_type == "shell_command") or (operation_type == "write_file")
         if effective_allow_modify:
             if not any(c[0] == MODIFY_CHOICE[0] for c in current_choices):
-                # Insert Modify typically after Yes/No
-                current_choices.insert(2, MODIFY_CHOICE) 
+                current_choices.insert(2, MODIFY_CHOICE)
 
         user_choice_key = self._ask_confirmation(current_choices)
 
@@ -353,11 +330,11 @@ class ApprovalManager:
             return "USER_APPROVED", item_to_approve, None
         elif user_choice_key == "n":
             logger.warning(f"User denied: {operation_description} for '{item_to_approve}'")
-            self._console.print(f"[warning]Denied by user:[/] {operation_description}")
+            self._console.print(f"[warning]Denied by user:[/] {operation_description} [info]{item_to_approve}[/]")
             return "USER_DENIED", item_to_approve, None
         elif user_choice_key == "c":
             logger.warning(f"User cancelled: {operation_description} for '{item_to_approve}'")
-            self._console.print(f"[warning]Cancelled by user:[/] {operation_description}")
+            self._console.print(f"[warning]Cancelled by user:[/] {operation_description} [info]{item_to_approve}[/]")
             return "USER_CANCELLED", item_to_approve, None
         elif user_choice_key == "a":
             logger.info(f"User chose 'Approve All' for: {operation_description} on '{item_to_approve}'")
@@ -369,8 +346,7 @@ class ApprovalManager:
                 self._approve_all_until = datetime.datetime.now() + datetime.timedelta(minutes=duration_minutes)
                 logger.info(f"'Approve All' activated until {self._approve_all_until}")
                 self._console.print(f"\\n[success]▶▶▶ Auto-approval enabled for {duration_minutes} minutes.[/]\\n")
-                # This operation itself is also approved by choosing 'a'
-                return "USER_APPROVED", item_to_approve, None # Or SESSION_APPROVED if we want to distinguish
+                return "USER_APPROVED", item_to_approve, None
             else:
                 logger.info("User entered 0 or negative duration for 'Approve All'. Not activating. Current operation denied.")
                 self._console.print("[warning]Auto-approval not enabled (duration was 0 or less). Current operation denied.[/]")
@@ -382,20 +358,17 @@ class ApprovalManager:
             elif operation_type == "shell_command":
                  prompt_text = "Enter the modified command"
 
-
             modified_item = Prompt.ask(
-                Text(prompt_text), # Using Text for consistency, though simple string is fine
+                Text(prompt_text),
                 default=item_to_approve,
                 console=self._console,
             ).strip()
 
-            if not modified_item: # Empty input means cancel modification
+            if not modified_item:
                 self._console.print("[warning]Modification cancelled (empty value entered). Original operation cancelled.[/]")
                 logger.warning("Modification resulted in empty value. Cancelling operation.")
-                return "USER_CANCELLED", item_to_approve, None # Or USER_DENIED? Cancel seems more appropriate.
+                return "USER_CANCELLED", item_to_approve, None
 
-            # For shell commands, if modified, ask for reason.
-            # For write_file, path modification reason is less common to ask for, but could be added.
             if operation_type == "shell_command" and modified_item != item_to_approve:
                 modification_reason = Prompt.ask(
                     Text("Reason for modification (optional)"),
@@ -405,7 +378,6 @@ class ApprovalManager:
             self._console.print(f"[success]Value to be processed:[/] [info]{modified_item}[/]")
             return "USER_MODIFIED", modified_item, modification_reason
 
-        # Fallback, should ideally not be reached if all choices are handled
         logger.error(f"Unexpected choice key '{user_choice_key}' or scenario in request_approval for '{operation_description}'.")
         self._console.print(f"[error]An unexpected error occurred in approval. Operation cancelled.[/]")
         return "USER_CANCELLED", item_to_approve, None
@@ -417,56 +389,44 @@ if __name__ == "__main__":
     from qx.core.constants import DEFAULT_SYNTAX_HIGHLIGHT_THEME
     
     console = RichConsole()
-    # Create a dummy project root for testing is_path_allowed within ApprovalManager
-    # This is particularly for the "Approve All" + "write_file" scenario.
-    # The actual test project root for the main block's operations.
-    # Placed inside a temp directory to avoid cluttering CWD.
-    
     temp_base_test_dir = Path("temp_approval_manager_tests_dir")
     temp_base_test_dir.mkdir(exist_ok=True)
-
     test_project_root_for_main = temp_base_test_dir / "dummy_project_for_am_main"
     test_project_root_for_main.mkdir(parents=True, exist_ok=True)
-    (test_project_root_for_main / ".Q").mkdir(exist_ok=True) # Make it a "project"
+    (test_project_root_for_main / ".Q").mkdir(exist_ok=True)
 
     approval_manager = ApprovalManager(console=console, syntax_highlight_theme=DEFAULT_SYNTAX_HIGHLIGHT_THEME)
 
     console.rule("[bold bright_magenta]Test 1: Generic Operation (User Approves)[/]")
-    # For generic, operation_description is used as the action phrase
     approval_manager.request_approval(
-        operation_description="Perform a generic task", 
+        operation_description="Perform generic task", # This is the action phrase
         item_to_approve="generic_item_abc", 
         operation_type="generic",
         content_preview="This is a short generic preview.",
-        project_root=test_project_root_for_main # Pass project root
+        project_root=test_project_root_for_main
     )
 
     console.rule("[bold bright_magenta]Test 2: Read File Operation (Auto-Approved by type)[/]")
-    # operation_description for read/write/shell is more for logging/internal detail
-    # The prompt "QX wants to read: ..." is generated from operation_type and item_to_approve
     approval_manager.request_approval(
-        operation_description="Read important config", # This description is for logging/context
+        operation_description="Read file", # Action phrase
         item_to_approve=str(test_project_root_for_main / "example.txt"),
         operation_type="read_file", 
         project_root=test_project_root_for_main
     )
 
-    # Test setup for write operations
     project_file_for_write = test_project_root_for_main / "project_write_test.py"
-    home_file_for_write = USER_HOME_DIR / "home_write_test_qx_am.py" # Unique name for AM test
-    # Path outside project and home, ensure its parent exists for the test if it's to be created
+    home_file_for_write = USER_HOME_DIR / "home_write_test_qx_am.py"
     outside_parent_dir = temp_base_test_dir / "outside_files_dir"
     outside_parent_dir.mkdir(exist_ok=True)
     outside_all_file_for_write = outside_parent_dir / "outside_project_home_test.txt"
 
-
     existing_content_v1 = "def old_function():\\n    print('hello from old version')\\n    return 1"
-    project_file_for_write.write_text(existing_content_v1) # Create for diff
+    project_file_for_write.write_text(existing_content_v1)
     new_content_for_py = "def new_function():\\n    print('world from new version') # changed line\\n    # added a comment\\n    return 2 # also changed"
 
     console.rule("[bold cyan]Test Write File - Diff Preview (In Project) - Approve All OFF[/]")
     approval_manager.request_approval(
-        operation_description="Update Python script in project", 
+        operation_description="Write to file", 
         item_to_approve=str(project_file_for_write),
         content_preview=new_content_for_py, 
         operation_type="write_file", 
@@ -478,7 +438,7 @@ if __name__ == "__main__":
     new_project_file = test_project_root_for_main / "newly_created_file.txt"
     if new_project_file.exists(): new_project_file.unlink()
     approval_manager.request_approval(
-        operation_description="Create a new text file in project",
+        operation_description="Write to file",
         item_to_approve=str(new_project_file),
         content_preview="Line 1\\nLine 2\\nLine 3 - this is a new file.",
         operation_type="write_file",
@@ -486,29 +446,28 @@ if __name__ == "__main__":
         project_root=test_project_root_for_main
     )
 
-
     console.rule("[bold cyan]Test Write File - Approve All ON - Path OK (In Project)[/]")
     approval_manager._approve_all_until = datetime.datetime.now() + datetime.timedelta(minutes=5)
     approval_manager.request_approval(
-        operation_description="Update Python script (Session Approved)", 
-        item_to_approve=str(project_file_for_write), # Existing file
+        operation_description="Write to file", 
+        item_to_approve=str(project_file_for_write),
         content_preview=new_content_for_py.replace("new version", "session approved version"), 
         operation_type="write_file", 
-        allow_modify=True, # Should be session approved, so modify won't be hit unless user forces it
+        allow_modify=True,
         project_root=test_project_root_for_main
     )
-    approval_manager._approve_all_until = None # Reset for next tests
+    approval_manager._approve_all_until = None
 
     console.rule("[bold cyan]Test Write File - Approve All ON - Path OK (In User Home)[/]")
-    if home_file_for_write.exists(): home_file_for_write.unlink(missing_ok=True) # Ensure it's new for preview
+    if home_file_for_write.exists(): home_file_for_write.unlink(missing_ok=True)
     approval_manager._approve_all_until = datetime.datetime.now() + datetime.timedelta(minutes=5)
     approval_manager.request_approval(
-        operation_description="Create Python file in user home (Session Approved)", 
+        operation_description="Write to file", 
         item_to_approve=str(home_file_for_write),
         content_preview=new_content_for_py.replace("new_function", "home_session_function"), 
         operation_type="write_file", 
         allow_modify=True,
-        project_root=test_project_root_for_main # Project root is for context, path is in home
+        project_root=test_project_root_for_main
     )
     approval_manager._approve_all_until = None
 
@@ -516,41 +475,39 @@ if __name__ == "__main__":
     if outside_all_file_for_write.exists(): outside_all_file_for_write.unlink(missing_ok=True)
     approval_manager._approve_all_until = datetime.datetime.now() + datetime.timedelta(minutes=5)
     approval_manager.request_approval(
-        operation_description="Create file outside project/home (Session Bypassed)", 
+        operation_description="Write to file", 
         item_to_approve=str(outside_all_file_for_write),
         content_preview="Content for a file written outside allowed session approval zones.", 
         operation_type="write_file", 
         allow_modify=True,
-        project_root=test_project_root_for_main # Project root context
+        project_root=test_project_root_for_main
     )
     approval_manager._approve_all_until = None
 
     console.rule("[bold magenta]Test Shell Command - Requires User Approval[/]")
     approval_manager.request_approval(
-        operation_description="Execute a harmless echo command",
+        operation_description="Execute shell command",
         item_to_approve="echo 'Hello from approvals test'",
         operation_type="shell_command",
-        allow_modify=True, # Shell commands can be modified
+        allow_modify=True,
         project_root=test_project_root_for_main
     )
     
     console.rule("[bold magenta]Test Shell Command - Auto-Approved by Pattern (e.g. 'git status')[/]")
     approval_manager.request_approval(
-        operation_description="Execute 'git status'",
-        item_to_approve="git status", # Assumes 'git*' is in DEFAULT_APPROVED_COMMANDS
+        operation_description="Execute shell command", # Action phrase is generic for shell
+        item_to_approve="git status",
         operation_type="shell_command",
         project_root=test_project_root_for_main
     )
 
     console.rule("[bold magenta]Test Shell Command - Prohibited (e.g. 'sudo rm -rf /')[/]")
-    # Ensure 'sudo*' or specific dangerous commands are in DEFAULT_PROHIBITED_COMMANDS
     approval_manager.request_approval(
-        operation_description="Execute a prohibited command",
+        operation_description="Execute shell command",
         item_to_approve="sudo rm -rf /", 
         operation_type="shell_command",
         project_root=test_project_root_for_main
     )
-
 
     console.print(f"\\n[dim]Simulated project root for main tests: {test_project_root_for_main}[/dim]")
     console.print(f"[dim]Other test files might be in {temp_base_test_dir}, {USER_HOME_DIR}[/dim]")
