@@ -14,8 +14,8 @@ from qx.core.approvals import ApprovalManager
 from qx.core.config_manager import load_runtime_configurations
 from qx.tools.execute_shell import (
     ExecuteShellTool,
-    ShellCommandInput,
-    ShellCommandOutput,
+    ExecuteShellInput,  # Corrected name
+    ExecuteShellOutput, # Corrected name
 )
 
 # Import the new ReadFileTool and its Pydantic models
@@ -93,12 +93,17 @@ def initialize_llm_agent(
 
     # Wrapper for write_file_impl, now named 'write_file'
     def write_file(path: str, content: str) -> str:
+        # Determine project_root to pass to approval_manager
+        # This is crucial for the conditional session approval logic for write_file
+        current_project_root = _find_project_root(str(Path.cwd()))
+
         decision, final_path, _ = approval_manager.request_approval(
             operation_description="Write file",
             item_to_approve=path,
             content_preview=content,  # This is the full new content
             allow_modify=True,  # Allow modifying the path
             operation_type="write_file",  # Use "write_file" type for specific preview
+            project_root=current_project_root, # Pass project_root
         )
         if decision not in [
             "AUTO_APPROVED",
@@ -114,30 +119,33 @@ def initialize_llm_agent(
 
         # If USER_MODIFIED, final_path is the new path to write to.
         # Content remains the original 'content' argument passed to this tool function.
-        success = write_file_impl(final_path, content)
-        if success:
+        # Note: write_file_impl is the raw implementation, does not involve approval_manager again.
+        error_message_from_impl = write_file_impl(final_path, content)
+        if error_message_from_impl is None: # write_file_impl returns None on success
             return f"Successfully wrote to file: {final_path}"
         else:
-            return f"Error: Failed to write to file: {final_path}"
+            # error_message_from_impl contains the error string
+            return f"Error: {error_message_from_impl}"
+
 
     # Wrapper for ExecuteShellTool, now named 'execute_shell'
     def execute_shell(command: str) -> str:
-        tool_input = ShellCommandInput(command=command)
-        output: ShellCommandOutput = shell_tool_instance.run(tool_input)
+        tool_input = ExecuteShellInput(command=command) # Corrected name
+        output: ExecuteShellOutput = shell_tool_instance.run(tool_input) # Corrected name
 
         if output.error:
             return f"Error executing command '{output.command}': {output.error}. Stderr: {output.stderr or '<empty>'}"
-        elif output.exit_code != 0:
+        elif output.return_code != 0: # Check if return_code is not None before comparing
             return (
-                f"Command '{output.command}' executed with exit code {output.exit_code}.\n"
+                f"Command '{output.command}' executed with exit code {output.return_code}.\n"
                 f"Stdout: {output.stdout or '<empty>'}\n"
                 f"Stderr: {output.stderr or '<empty>'}"
             )
-        else:
+        else: # Command succeeded (return_code is 0)
             return (
                 f"Command '{output.command}' executed successfully.\n"
                 f"Stdout: {output.stdout or '<empty>'}\n"
-                f"Stderr: {output.stderr or '<empty>'}"
+                f"Stderr: {output.stderr or '<empty>'}" # Stderr might still have content on success
             )
 
     registered_tools = [
@@ -155,7 +163,7 @@ def initialize_llm_agent(
         if project_id:
             provider_config["project_id"] = project_id
         if location:
-            provider_config["region"] = location
+            provider_config["region"] = location # Gemini uses 'region' not 'location'
 
         gemini_model_instance = GeminiModel(
             model_name=actual_model_name,
@@ -198,3 +206,16 @@ async def query_llm(
         console.print(f"[error]Error:[/] LLM query: {e}")
         return None
 
+# Helper import for write_file wrapper, if not already available globally in this module
+# This is to ensure _find_project_root is available for the write_file wrapper.
+# It might already be available if another import pulls it in, but explicit is safer.
+try:
+    from qx.core.paths import _find_project_root
+except ImportError:
+    # This case should ideally not happen if project structure is correct
+    # and qx.core.paths is always accessible.
+    logger.error("Failed to import _find_project_root directly in llm.py for write_file wrapper.")
+    # Define a dummy or raise error if critical
+    def _find_project_root(path_str: str) -> Optional[Path]:
+        logger.warning("_find_project_root is a dummy in llm.py due to import error.")
+        return None
