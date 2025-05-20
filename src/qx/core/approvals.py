@@ -280,7 +280,7 @@ class ApprovalManager:
             self._console.print(f"[success]AUTO-APPROVED (SESSION):[/] {operation_description}: [info]{item_to_approve}[/]")
             return "SESSION_APPROVED", item_to_approve, None
 
-        panel_title_text = Text(f"{operation_description}: ", style="title")
+        panel_title_text = Text(f"{operation_description}: ", style="bold") # Changed "title" to "bold"
         panel_title_text.append(item_to_approve, style="info")
         
         panel_content_renderables: List[RenderableType] = []
