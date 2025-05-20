@@ -1,7 +1,7 @@
 import asyncio
 import shutil
-import subprocess  # subprocess is not directly used by pyfzf, but good to keep if other shell ops needed
-import os 
+import subprocess
+import os
 from datetime import datetime, timedelta
 from typing import Any, List, Optional, Tuple, Iterator
 
@@ -20,11 +20,11 @@ from prompt_toolkit.styles import Style
 from pyfzf.pyfzf import FzfPrompt
 from rich.console import Console as RichConsole
 
-from qx.core.approvals import ApprovalManager
+# ApprovalManager import removed
+# from qx.core.approvals import ApprovalManager 
 from qx.core.paths import Q_HISTORY_FILE
-from qx.cli.commands import CommandCompleter # Import CommandCompleter
+from qx.cli.commands import CommandCompleter
 
-# Define the prompt style
 prompt_style = Style.from_dict(
     {
         "": "#ff0066",
@@ -34,16 +34,13 @@ prompt_style = Style.from_dict(
     }
 )
 
-# Define the fixed prompt strings and formats
 QX_FIXED_PROMPT_TEXT = "Q⏵ "
-QX_AUTO_APPROVE_PROMPT_TEXT = "QA⏵ "
+# QX_AUTO_APPROVE_PROMPT_TEXT removed
 QX_MULTILINE_PROMPT_TEXT = "M⏵ "
 QX_MULTILINE_HINT_TEXT = "[Alt+Enter to submit] "
 
 QX_FIXED_PROMPT_FORMATTED = FormattedText([("class:prompt", QX_FIXED_PROMPT_TEXT)])
-QX_AUTO_APPROVE_PROMPT_FORMATTED = FormattedText(
-    [("class:prompt", QX_AUTO_APPROVE_PROMPT_TEXT)]
-)
+# QX_AUTO_APPROVE_PROMPT_FORMATTED removed
 QX_MULTILINE_PROMPT_FORMATTED = FormattedText(
     [
         ("class:prompt.multiline", QX_MULTILINE_PROMPT_TEXT),
@@ -133,7 +130,8 @@ class CommandArgumentPathCompleter(Completer):
                 )
 
 async def get_user_input(
-    console: RichConsole, approval_manager: ApprovalManager
+    console: RichConsole, 
+    # approval_manager: ApprovalManager # Removed approval_manager argument
 ) -> str:
     try:
         Q_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -145,11 +143,9 @@ async def get_user_input(
     q_history = FileHistory(str(Q_HISTORY_FILE))
     kb = KeyBindings()
     is_multiline = [False]
-    current_prompt_formatted: List[Any] = [
-        QX_AUTO_APPROVE_PROMPT_FORMATTED
-        if approval_manager.is_globally_approved()
-        else QX_FIXED_PROMPT_FORMATTED
-    ]
+    
+    # Prompt always defaults to QX_FIXED_PROMPT_FORMATTED now
+    current_prompt_formatted: List[Any] = [QX_FIXED_PROMPT_FORMATTED]
 
     @kb.add("c-r")
     def _show_history_fzf_event(event):
@@ -277,10 +273,8 @@ async def get_user_input(
     def _handle_alt_enter(event):
         if is_multiline[0]:
             is_multiline[0] = False
-            if approval_manager.is_globally_approved():
-                current_prompt_formatted[0] = QX_AUTO_APPROVE_PROMPT_FORMATTED
-            else:
-                current_prompt_formatted[0] = QX_FIXED_PROMPT_FORMATTED
+            # Removed check for approval_manager.is_globally_approved()
+            current_prompt_formatted[0] = QX_FIXED_PROMPT_FORMATTED
             event.app.current_buffer.validate_and_handle()
         else:
             is_multiline[0] = True
@@ -292,13 +286,10 @@ async def get_user_input(
         event.app.exit(exception=KeyboardInterrupt())
 
     is_multiline[0] = False
-    if approval_manager.is_globally_approved():
-        current_prompt_formatted[0] = QX_AUTO_APPROVE_PROMPT_FORMATTED
-    else:
-        current_prompt_formatted[0] = QX_FIXED_PROMPT_FORMATTED
+    # Removed check for approval_manager.is_globally_approved()
+    current_prompt_formatted[0] = QX_FIXED_PROMPT_FORMATTED
 
-    # Setup completers
-    qx_command_completer = CommandCompleter()  # Uses DEFAULT_COMMANDS from qx.cli.commands
+    qx_command_completer = CommandCompleter()
     path_argument_completer = CommandArgumentPathCompleter()
     merged_completer = merge_completers([qx_command_completer, path_argument_completer])
 
@@ -306,15 +297,14 @@ async def get_user_input(
         history=q_history, 
         style=prompt_style,
         completer=merged_completer, 
-        complete_while_typing=True, # Set to True for completions as you type
-        key_bindings=kb # Moved key_bindings here as it's part of session config
+        complete_while_typing=True,
+        key_bindings=kb
     )
 
     try:
         user_input = await asyncio.to_thread(
             session.prompt,
             lambda: current_prompt_formatted[0],
-            # key_bindings removed from here, it's in PromptSession constructor now
         )
         return user_input
     except KeyboardInterrupt:
@@ -325,9 +315,14 @@ async def get_user_input(
 
 
 if __name__ == "__main__":
+    # For __main__ testing, ApprovalManager is no longer directly needed by get_user_input
+    # If the test itself needs to simulate "approve all" for other reasons,
+    # it would need its own mechanism.
+    # from qx.core.approvals import ApprovalManager # No longer needed for this test script's core functionality
+
     async def main_test():
         console_for_test = RichConsole()
-        approval_manager_test = ApprovalManager(console=console_for_test)
+        # approval_manager_test = ApprovalManager(console=console_for_test) # Not needed for get_user_input
 
         print("Testing qprompt. Type Ctrl-R for fzf history (if fzf is installed).")
         print("Tab for completion (commands like /help, then paths).")
@@ -337,13 +332,13 @@ if __name__ == "__main__":
         )
         print("While in multiline, Enter adds a newline.")
         print("Press Alt+Enter again to submit the multiline input.")
-        print(
-            "Type 'approve all' (simulated) to test QA❯ prompt, then 'reset approve' (simulated)."
-        )
+        # Removed "approve all" simulation as it's no longer part of qprompt's direct logic
+        # print(
+        #     "Type 'approve all' (simulated) to test QA❯ prompt, then 'reset approve' (simulated)."
+        # )
         print(f"History file will be: {Q_HISTORY_FILE}")
         Q_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-        # Dummy history for testing
         if not Q_HISTORY_FILE.exists() or Q_HISTORY_FILE.stat().st_size == 0:
             with open(Q_HISTORY_FILE, "w", encoding="utf-8") as f:
                 ts_now = datetime.now()
@@ -353,17 +348,11 @@ if __name__ == "__main__":
 
         while True:
             try:
-                inp = await get_user_input(console_for_test, approval_manager_test)
+                # Call get_user_input without approval_manager
+                inp = await get_user_input(console_for_test) 
                 if inp == "": 
                     continue
-                if inp.strip().lower() == "approve all":
-                    approval_manager_test._approve_all_until = datetime.now() + timedelta(minutes=5)
-                    console_for_test.print("[info]Simulated 'approve all' for 5 minutes.[/info]")
-                    continue
-                elif inp.strip().lower() == "reset approve":
-                    approval_manager_test._approve_all_until = None
-                    console_for_test.print("[info]Simulated reset of 'approve all'.[/info]")
-                    continue
+                # Removed "approve all" and "reset approve" test commands
                 if inp.lower() == "exit":
                     console_for_test.print("\nExiting test.")
                     break

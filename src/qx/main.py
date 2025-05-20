@@ -10,10 +10,9 @@ from rich.panel import Panel
 from rich.text import Text
 
 from qx.cli.console import QXConsole, qx_console, show_spinner
-
-# QX imports
 from qx.cli.qprompt import get_user_input
-from qx.core.approvals import ApprovalManager
+# ApprovalManager import removed
+# from qx.core.approvals import ApprovalManager 
 from qx.core.config_manager import load_runtime_configurations
 from qx.core.constants import (
     DEFAULT_MODEL,
@@ -23,7 +22,7 @@ from qx.core.constants import (
 from qx.core.llm import initialize_llm_agent, query_llm
 
 # --- QX Version ---
-QX_VERSION = "0.3.2"
+QX_VERSION = "0.3.3" # Updated for this refactor
 # --- End QX Version ---
 
 # --- Configure logging for the application ---
@@ -54,7 +53,6 @@ async def _async_main():
 
     logger.info("CLI theming system has been removed. Using default Rich console styling.")
 
-    # Determine syntax highlighting theme for Markdown code blocks AND ApprovalManager previews
     syntax_theme_from_env = os.getenv("QX_SYNTAX_HIGHLIGHT_THEME")
     code_theme_to_use = (
         syntax_theme_from_env
@@ -62,13 +60,12 @@ async def _async_main():
         else DEFAULT_SYNTAX_HIGHLIGHT_THEME
     )
     logger.info(
-        f"Using syntax highlighting theme for Markdown code blocks and previews: {code_theme_to_use}"
+        f"Using syntax highlighting theme for Markdown code blocks: {code_theme_to_use}"
     )
 
-    # Pass the determined theme to ApprovalManager
-    approval_manager = ApprovalManager(
-        console=qx_console, syntax_highlight_theme=code_theme_to_use
-    )
+    # ApprovalManager instantiation removed.
+    # The console is passed to initialize_llm_agent, which then includes it
+    # in QXToolDependencies for plugins that need it for request_confirmation.
 
     model_name_from_env = os.environ.get("QX_MODEL_NAME", DEFAULT_MODEL)
     project_id = os.environ.get("QX_VERTEX_PROJECT_ID")
@@ -91,8 +88,8 @@ async def _async_main():
         model_name_str=model_name_from_env,
         project_id=project_id,
         location=location,
-        console=qx_console,
-        approval_manager=approval_manager,
+        console=qx_console, # Pass console for QXToolDependencies
+        # approval_manager argument removed
     )
 
     if agent is None:
@@ -101,7 +98,6 @@ async def _async_main():
         )
         sys.exit(1)
 
-    # Display QX version and model information
     info_text = f"QX ver:{QX_VERSION} - {model_name_from_env}"
     qx_console.print(Text(info_text, style="dim"))
 
@@ -109,9 +105,11 @@ async def _async_main():
 
     while True:
         try:
-            user_input = await get_user_input(qx_console, approval_manager)
+            # get_user_input no longer takes approval_manager
+            user_input = await get_user_input(qx_console) 
 
-            if user_input == "" and not approval_manager.is_globally_approved():
+            # Simplified check as is_globally_approved is removed from qprompt
+            if user_input == "": 
                 continue
 
             if user_input.lower() in ["exit", "quit"]:
@@ -128,18 +126,20 @@ async def _async_main():
                         agent,
                         user_input,
                         message_history=current_message_history,
-                        console=qx_console,
+                        console=qx_console, # query_llm now needs console to create QXToolDependencies
                     )
             finally:
                 QXConsole.set_active_status(None)
 
             if run_result:
                 if hasattr(run_result, "output"):
+                    # Ensure output is a string before passing to Markdown
+                    output_content = str(run_result.output) if run_result.output is not None else ""
                     markdown_output = Markdown(
-                        run_result.output, code_theme=code_theme_to_use
+                        output_content, code_theme=code_theme_to_use
                     )
                     qx_console.print(markdown_output)
-                    qx_console.print("\n")
+                    qx_console.print("\n") # Add a newline for better separation
                     if hasattr(run_result, "all_messages"):
                         current_message_history = run_result.all_messages()
                     else:
@@ -160,13 +160,13 @@ async def _async_main():
 
         except KeyboardInterrupt:
             qx_console.print(
-                "\nOperation cancelled by Ctrl+C. Returning to prompt.", style="yellow" # Changed style
+                "\nOperation cancelled by Ctrl+C. Returning to prompt.", style="yellow"
             )
             current_message_history = None
             continue
         except asyncio.CancelledError:
             qx_console.print(
-                "\nOperation cancelled (async). Returning to prompt.", style="yellow" # Changed style
+                "\nOperation cancelled (async). Returning to prompt.", style="yellow"
             )
             current_message_history = None
             continue
