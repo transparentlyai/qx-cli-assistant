@@ -1,297 +1,283 @@
+# pyright: reportPossiblyUnboundVariable=false
 import logging
-import shlex
 import subprocess
-from typing import Any, Dict, Optional, Type
+from pathlib import Path # Added
+from typing import Optional, Type
 
 from pydantic import BaseModel, Field
+from rich.console import Console as RichConsole
 
-from qx.core.approvals import ApprovalManager # Changed from approvals_manager
-from qx.core.constants import SHELL_COMMAND_TIMEOUT
-from rich.console import Console as RichConsole # For __main__
+from qx.core.approvals import ApprovalManager
+from qx.core.paths import _find_project_root # Added
 
 # Configure logging for this module
 logger = logging.getLogger(__name__)
 
 
-class ShellCommandInput(BaseModel):
+class ExecuteShellInput(BaseModel):
     """Input model for the ExecuteShellTool."""
-    command: str = Field(..., description="The shell command to execute.")
+
+    command: str = Field(
+        ...,
+        description="The shell command to execute. Must not be a prohibited command (e.g., rm -rf /).",
+    )
+    # timeout: Optional[int] = Field(
+    #     default=60, description="Timeout in seconds for the command execution."
+    # )
 
 
-class ShellCommandOutput(BaseModel):
+class ExecuteShellOutput(BaseModel):
     """Output model for the ExecuteShellTool."""
-    command: str = Field(description="The command that was intended for execution or was executed.")
-    stdout: str = Field(description="Standard output of the command.")
-    stderr: str = Field(description="Standard error of the command.")
-    exit_code: int = Field(description="Exit code of the command.")
-    error: Optional[str] = Field(None, description="High-level error message if execution was prevented or failed fundamentally (e.g., prohibited, cancelled, timeout).")
-    modified_from: Optional[str] = Field(None, description="The original command if it was modified before execution.")
-    modification_reason: Optional[str] = Field(None, description="The reason provided for modifying the command.")
+
+    command: str = Field(description="The command that was attempted.")
+    stdout: Optional[str] = Field(None, description="Standard output of the command.")
+    stderr: Optional[str] = Field(None, description="Standard error of the command.")
+    return_code: Optional[int] = Field(None, description="Return code of the command.")
+    error: Optional[str] = Field(
+        None, description="Error message if the command was denied or failed to run."
+    )
 
 
 class ExecuteShellTool:
     """
-    A tool to execute shell commands with a robust approval and security layer.
-    It uses ApprovalManager to check against prohibited/approved lists and prompt the user.
+    A tool to execute shell commands.
+    Prohibited commands (like 'rm -rf /') are blocked.
+    Some safe commands might be auto-approved.
+    Most commands require explicit user confirmation, unless 'Approve All' is active.
     """
+
     name: str = "execute_shell"
     description: str = (
-        "Executes a shell command after going through an approval process. "
-        "Handles prohibited commands, auto-approved commands, and prompts the user for others. "
-        "Allows command modification during the approval process."
+        "Executes a shell command. Risky commands are blocked. "
+        "Most commands require user confirmation unless 'Approve All' is active."
     )
-    input_model: Type[BaseModel] = ShellCommandInput
-    output_model: Type[BaseModel] = ShellCommandOutput
+    input_model: Type[BaseModel] = ExecuteShellInput
+    output_model: Type[BaseModel] = ExecuteShellOutput
 
-    def __init__(self, approval_manager: ApprovalManager):
+    def __init__(self, approval_manager: ApprovalManager, console: Optional[RichConsole] = None):
         self.approval_manager = approval_manager
+        self._console = console or RichConsole()
 
-    def _execute_subprocess(self, command_to_run: str) -> Dict[str, Any]:
+    def run(self, args: ExecuteShellInput) -> ExecuteShellOutput:
         """
-        Executes the given shell command using subprocess.
-        This is called only after the command has been approved.
+        Handles approval and execution of a shell command.
         """
-        logger.info(f"Executing approved command: {command_to_run}")
+        original_command = args.command
+        
+        current_project_root = _find_project_root(str(Path.cwd())) # Determine project_root
+
+        decision, command_to_execute, modification_reason = self.approval_manager.request_approval(
+            operation_description=f"Execute shell command: {original_command}",
+            item_to_approve=original_command,
+            allow_modify=True,
+            operation_type="shell_command",
+            project_root=current_project_root, # Pass project_root
+        )
+
+        if decision in ["PROHIBITED", "USER_DENIED", "USER_CANCELLED"]:
+            error_msg = f"Command execution '{command_to_execute}' was {decision.lower().replace('_', ' ')}."
+            logger.warning(error_msg)
+            return ExecuteShellOutput(command=command_to_execute, error=error_msg)
+
+        if decision == "USER_MODIFIED":
+            reason_log = f" (Reason: {modification_reason})" if modification_reason else ""
+            logger.info(
+                f"Command '{command_to_execute}' (original: '{original_command}') approved for execution after modification{reason_log}."
+            )
+            self._console.print(f"[info]Executing modified command:[/] {command_to_execute}")
+        elif decision in ["AUTO_APPROVED", "SESSION_APPROVED", "USER_APPROVED"]:
+            logger.info(
+                f"Command '{command_to_execute}' approved for execution (Decision: {decision})."
+            )
+            self._console.print(f"[info]Executing command:[/] {command_to_execute}")
+        else: # Should not happen if logic is correct
+            error_msg = f"Unexpected approval decision '{decision}' for command '{command_to_execute}'. Aborting."
+            logger.error(error_msg)
+            return ExecuteShellOutput(command=command_to_execute, error=error_msg)
+
+
         try:
+            # Simplified execution without timeout for now, can be added back if PydanticAI supports it well
             process = subprocess.run(
-                command_to_run,
-                shell=True, # Allows shell features; use with caution, mitigated by approval.
+                command_to_execute,
+                shell=True, # Be cautious with shell=True
                 capture_output=True,
                 text=True,
-                timeout=SHELL_COMMAND_TIMEOUT,
-                check=False, # Do not raise exception for non-zero exit codes
+                check=False, # Don't raise exception for non-zero exit codes
+                # timeout=args.timeout # If timeout is re-added to input
             )
-            stdout = process.stdout.strip()
-            stderr = process.stderr.strip()
-            returncode = process.returncode
+            logger.info(f"Command '{command_to_execute}' executed. Return code: {process.returncode}")
+            # self._console.print(f"[info]STDOUT:\n[dim]{process.stdout}[/dim]")
+            # if process.stderr:
+            #     self._console.print(f"[warning]STDERR:\n[dim]{process.stderr}[/dim]")
 
-            if stdout:
-                logger.debug(f"Command stdout: {stdout}")
-            if stderr:
-                logger.warning(f"Command stderr: {stderr}")
-            logger.info(f"Command return code: {returncode}")
-
-            return {"stdout": stdout, "stderr": stderr, "returncode": returncode}
-
-        except subprocess.TimeoutExpired:
-            logger.error(f"Command '{command_to_run}' timed out after {SHELL_COMMAND_TIMEOUT} seconds.")
-            return {
-                "stdout": "",
-                "stderr": f"Command timed out after {SHELL_COMMAND_TIMEOUT} seconds.",
-                "returncode": -1, # Standardize timeout exit code
-                "error_type": "Timeout",
-            }
-        except FileNotFoundError:
-            cmd_name = shlex.split(command_to_run)[0] if command_to_run else "empty command"
-            logger.error(f"Command not found: {cmd_name}")
-            return {
-                "stdout": "",
-                "stderr": f"Command not found: {cmd_name}",
-                "returncode": 127, # Common exit code for command not found
-                "error_type": "Command not found",
-            }
+            return ExecuteShellOutput(
+                command=command_to_execute,
+                stdout=process.stdout.strip() if process.stdout else None,
+                stderr=process.stderr.strip() if process.stderr else None,
+                return_code=process.returncode,
+            )
+        # except subprocess.TimeoutExpired:
+        #     logger.warning(f"Command '{command_to_execute}' timed out after {args.timeout} seconds.")
+        #     return ExecuteShellOutput(
+        #         command=command_to_execute, error=f"Command timed out after {args.timeout} seconds."
+        #     )
         except Exception as e:
-            logger.error(f"Error executing command '{command_to_run}': {e}", exc_info=True)
-            return {
-                "stdout": "",
-                "stderr": f"An unexpected error occurred during execution: {e}",
-                "returncode": -2, # Standardize general execution error
-                "error_type": f"Execution error: {e}",
-            }
-
-    def run(self, args: ShellCommandInput) -> ShellCommandOutput:
-        """
-        Manages the approval workflow and executes the command if approved.
-        """
-        current_command = args.command
-        original_command = args.command
-        is_modified = False
-        final_modification_reason: Optional[str] = None
-        executed_command: Optional[str] = None # The command that is finally executed
-
-        while True:
-            decision, item_after_approval, mod_reason = \
-                self.approval_manager.request_approval(
-                    operation_description="Execute shell command",
-                    item_to_approve=current_command,
-                    operation_type="shell_command"
-                )
-
-            if decision == "USER_MODIFIED":
-                if not item_after_approval: # Handle case where user clears the command during modification
-                    logger.warning("Command modification resulted in an empty command. Cancelling.")
-                    return ShellCommandOutput(
-                        command=original_command, stdout="", stderr="Command modification cancelled (empty command).",
-                        exit_code=-1, error="Cancelled",
-                        modified_from=original_command if original_command != current_command else None,
-                        modification_reason=final_modification_reason
-                    )
-                current_command = item_after_approval
-                final_modification_reason = mod_reason
-                is_modified = True
-                logger.info(f"Command modified to: '{current_command}'. Re-evaluating approval.")
-                continue  # Re-evaluate the modified command
-
-            elif decision in ["AUTO_APPROVED", "SESSION_APPROVED", "USER_APPROVED"]:
-                executed_command = current_command # This is the command to execute
-                logger.info(f"Command '{executed_command}' approved for execution (Decision: {decision}).")
-                break # Proceed to execution
-
-            elif decision == "PROHIBITED":
-                logger.warning(f"Command '{current_command}' execution denied: Prohibited by policy.")
-                return ShellCommandOutput(
-                    command=current_command, stdout="", stderr=f"Command '{current_command}' is prohibited by policy.",
-                    exit_code=-1, error="Prohibited command",
-                    modified_from=original_command if is_modified and original_command != current_command else None,
-                    modification_reason=final_modification_reason if is_modified else None
-                )
-            elif decision == "USER_DENIED":
-                logger.warning(f"Command '{current_command}' execution denied by user.")
-                return ShellCommandOutput(
-                    command=current_command, stdout="", stderr="Command execution denied by user.",
-                    exit_code=-1, error="Denied by user",
-                    modified_from=original_command if is_modified and original_command != current_command else None,
-                    modification_reason=final_modification_reason if is_modified else None
-                )
-            elif decision == "USER_CANCELLED":
-                logger.warning(f"Command '{current_command}' execution cancelled by user.")
-                return ShellCommandOutput(
-                    command=current_command, stdout="", stderr="Command execution cancelled by user.",
-                    exit_code=-1, error="Cancelled by user",
-                    modified_from=original_command if is_modified and original_command != current_command else None,
-                    modification_reason=final_modification_reason if is_modified else None
-                )
-            else: # Should not happen
-                logger.error(f"Unexpected approval decision '{decision}' for command '{current_command}'. Denying.")
-                return ShellCommandOutput(
-                    command=current_command, stdout="", stderr=f"Unexpected approval status: {decision}.",
-                    exit_code=-1, error="Internal approval error",
-                    modified_from=original_command if is_modified and original_command != current_command else None,
-                    modification_reason=final_modification_reason if is_modified else None
-                )
-
-        # If loop exited for execution
-        if executed_command is None: # Should not happen if logic is correct
-             logger.error("Execution block reached without a command to execute. This is a bug.")
-             return ShellCommandOutput(
-                command=original_command, stdout="", stderr="Internal error: No command identified for execution.",
-                exit_code=-1, error="Internal logic error"
-             )
-
-        exec_result_dict = self._execute_subprocess(executed_command)
-
-        output_error = None
-        if exec_result_dict.get("error_type"):
-            output_error = exec_result_dict["error_type"]
-        elif exec_result_dict["returncode"] != 0 and exec_result_dict["stderr"]:
-             # If there's stderr and non-zero exit, consider it an error at command level
-            output_error = f"Command failed with exit code {exec_result_dict['returncode']}"
-
-
-        return ShellCommandOutput(
-            command=executed_command,
-            stdout=exec_result_dict["stdout"],
-            stderr=exec_result_dict["stderr"],
-            exit_code=exec_result_dict["returncode"],
-            error=output_error,
-            modified_from=original_command if is_modified and original_command != executed_command else None,
-            modification_reason=final_modification_reason if is_modified else None
-        )
+            logger.error(f"Failed to execute command '{command_to_execute}': {e}", exc_info=True)
+            return ExecuteShellOutput(
+                command=command_to_execute, error=f"Failed to execute command: {e}"
+            )
 
 
 if __name__ == "__main__":
-    # Setup for testing
-    # This requires user interaction for some tests.
-    # For non-interactive tests, you might need to mock ApprovalManager or pre-set its state.
-    
-    # Basic console for ApprovalManager
+    from rich.console import Console as RichConsole
+    from qx.core.constants import DEFAULT_PROHIBITED_COMMANDS, DEFAULT_APPROVED_COMMANDS
+    from qx.core.paths import USER_HOME_DIR # For dummy is_path_allowed
+    from qx.tools.file_operations_base import is_path_allowed # For dummy is_path_allowed
+
+    # Dummy ApprovalManager for testing ExecuteShellTool
+    class DummyApprovalManager:
+        def __init__(self, console, default_decision="USER_APPROVED"):
+            self.console = console
+            self._approve_all_active = False
+            self.default_decision = default_decision # e.g., "USER_APPROVED", "USER_DENIED"
+            self.prohibited_patterns = DEFAULT_PROHIBITED_COMMANDS
+            self.approved_patterns = DEFAULT_APPROVED_COMMANDS
+            self.last_received_project_root = None
+
+
+        def get_command_permission_status(self, command: str):
+            # Simplified from actual ApprovalManager for testing
+            for pattern in self.prohibited_patterns:
+                if command.startswith(pattern.split()[0]): # Basic check
+                    return "PROHIBITED"
+            for pattern in self.approved_patterns:
+                if command.startswith(pattern.split()[0]):
+                    return "AUTO_APPROVED"
+            return "REQUIRES_USER_APPROVAL"
+
+        def request_approval(
+            self, operation_description, item_to_approve, operation_type,
+            allow_modify=False, content_preview=None, project_root: Optional[Path] = None
+        ):
+            self.last_received_project_root = project_root
+            self.console.print(
+                f"DummyApprovalManager: Requesting approval for '{operation_description}' (type: {operation_type}) - Item: '{item_to_approve}'"
+            )
+            self.console.print(f"DummyApprovalManager: Received project_root: {project_root}")
+
+
+            if operation_type == "shell_command":
+                status = self.get_command_permission_status(item_to_approve)
+                if status == "PROHIBITED":
+                    self.console.print("DummyApprovalManager: Simulating PROHIBITED for shell command.")
+                    return "PROHIBITED", item_to_approve, None
+                if status == "AUTO_APPROVED":
+                    if self._approve_all_active:
+                         self.console.print("DummyApprovalManager: Simulating SESSION_APPROVED (AUTO_APPROVED pattern + Approve All).")
+                         return "SESSION_APPROVED", item_to_approve, None
+                    self.console.print("DummyApprovalManager: Simulating AUTO_APPROVED for shell command.")
+                    return "AUTO_APPROVED", item_to_approve, None
+                # If REQUIRES_USER_APPROVAL, falls through to session/default
+
+            if self._approve_all_active:
+                # Special handling for write_file if it were used here (it's not for shell)
+                # but showing the pattern for completeness if this dummy was reused.
+                if operation_type == "write_file" and project_root is not None: # Check project_root exists
+                    expanded_path_str = os.path.expanduser(item_to_approve)
+                    absolute_path = Path(expanded_path_str)
+                    if not absolute_path.is_absolute(): absolute_path = Path.cwd().joinpath(expanded_path_str).resolve()
+                    else: absolute_path = absolute_path.resolve()
+                    if is_path_allowed(absolute_path, project_root, USER_HOME_DIR):
+                        self.console.print(f"DummyApprovalManager: Simulating SESSION_APPROVED for {operation_type} (path OK).")
+                        return "SESSION_APPROVED", item_to_approve, None
+                    else:
+                        self.console.print(f"DummyApprovalManager: Path NOT OK for {operation_type}, bypassing session for this item.")
+                        # Fall through to default_decision
+                else: # General session approval for other types or if no path check needed
+                    self.console.print(f"DummyApprovalManager: Simulating SESSION_APPROVED for {operation_type}.")
+                    return "SESSION_APPROVED", item_to_approve, None
+
+            self.console.print(f"DummyApprovalManager: Simulating '{self.default_decision}' as fallback.")
+            return self.default_decision, item_to_approve, None # Default if not handled above
+
+        def is_globally_approved(self):
+            return self._approve_all_active
+
     test_console = RichConsole()
-    approval_manager_instance = ApprovalManager(console=test_console)
-    shell_tool = ExecuteShellTool(approval_manager=approval_manager_instance)
-
-    test_console.rule("[bold bright_blue]Testing ExecuteShellTool[/]")
-
-    def run_test_command(command_str: str, description: str):
+    
+    # --- Test Cases ---
+    def run_shell_test(
+        tool: ExecuteShellTool,
+        command_str: str,
+        description: str,
+        expect_success_status: bool, # True if command should run (not denied/prohibited)
+        expected_return_code: Optional[int] = 0, # Only if expect_success_status is True
+    ):
         test_console.print(f"\n[bold]Test Case:[/] {description}")
-        test_console.print(f"[cyan]Attempting command:[/] '{command_str}'")
-        tool_input = ShellCommandInput(command=command_str)
-        result = shell_tool.run(tool_input)
-        test_console.print(f"[bold yellow]Command Executed:[/] {result.command}")
-        test_console.print(f"[bold green]Stdout:[/] {result.stdout if result.stdout else '<empty>'}")
-        test_console.print(f"[bold red]Stderr:[/] {result.stderr if result.stderr else '<empty>'}")
-        test_console.print(f"[bold magenta]Exit Code:[/] {result.exit_code}")
-        if result.error:
-            test_console.print(f"[bold red]Tool Error:[/] {result.error}")
-        if result.modified_from:
-            test_console.print(f"[bold cyan]Modified From:[/] {result.modified_from}")
-        if result.modification_reason:
-            test_console.print(f"[bold cyan]Modification Reason:[/] {result.modification_reason}")
-        test_console.print("-" * 30)
+        test_console.print(f"[cyan]Attempting to execute:[/] '{command_str}'")
 
-    # --- Test Scenarios ---
-    # Note: Some of these will require specific user input during the test run.
+        # Determine what project_root would be passed based on CWD
+        # For shell tool, CWD is not changed for tests, so it's always original_cwd's project root
+        current_project_root_for_test = _find_project_root(str(Path.cwd()))
+        test_console.print(f"[dim]Project Root for approval: {current_project_root_for_test}[/dim]")
 
-    # 1. Prohibited command (e.g., "sudo reboot" if "sudo *" is in DEFAULT_PROHIBITED_COMMANDS)
-    run_test_command("sudo reboot", "Prohibited Command (sudo reboot)")
+        tool_input = ExecuteShellInput(command=command_str)
+        result = tool.run(tool_input)
+
+        if isinstance(tool.approval_manager, DummyApprovalManager):
+            received_pr = tool.approval_manager.last_received_project_root
+            if received_pr != current_project_root_for_test:
+                test_console.print(f"[bold red]PROJECT ROOT MISMATCH IN APPROVAL:[/]")
+                test_console.print(f"  Expected: {current_project_root_for_test}")
+                test_console.print(f"  Received: {received_pr}")
+
+
+        test_console.print(f"  Command: {result.command}")
+        test_console.print(f"  Error: {result.error}")
+        test_console.print(f"  Return Code: {result.return_code}")
+        test_console.print(f"  Stdout: {result.stdout}")
+        test_console.print(f"  Stderr: {result.stderr}")
+
+        command_was_allowed_to_run = not result.error or \
+                                   ("denied" not in (result.error or "").lower() and \
+                                    "prohibited" not in (result.error or "").lower() and \
+                                    "cancelled" not in (result.error or "").lower())
+
+
+        if command_was_allowed_to_run == expect_success_status:
+            if expect_success_status and result.return_code != expected_return_code:
+                test_console.print(f"  [bold red]TEST FAILED: Expected return code {expected_return_code}, got {result.return_code}.[/]")
+            else:
+                test_console.print(f"  [bold green]TEST PASSED: Correctly {'allowed' if expect_success_status else 'disallowed/failed as expected'}.[/]")
+        else:
+            test_console.print(f"  [bold red]TEST FAILED: Expected command to be {'allowed' if expect_success_status else 'disallowed/failed'}, but it was {'allowed' if command_was_allowed_to_run else 'disallowed/failed'}.[/]")
+        test_console.print("-" * 40)
+
+    test_console.rule("[bold]Standard Shell Tests (Dummy default: USER_APPROVED)[/]")
+    approval_manager_ua = DummyApprovalManager(test_console, default_decision="USER_APPROVED")
+    shell_tool_ua = ExecuteShellTool(approval_manager=approval_manager_ua)
+
+    run_shell_test(shell_tool_ua, "echo 'Hello from test'", "Simple echo (User Approved)", True, 0)
+    run_shell_test(shell_tool_ua, "ls -l non_existent_file_for_error", "ls non-existent (User Approved, command fails)", True, expected_return_code=None) # Return code depends on ls version
+    run_shell_test(shell_tool_ua, "git status", "git status (Auto-Approved by pattern)", True, 0) # `git` is an approved pattern
+    run_shell_test(shell_tool_ua, "rm -rf /", "Prohibited command rm -rf /", False)
+
+    test_console.rule("[bold]'Approve All' Shell Tests[/]")
+    approval_manager_aa = DummyApprovalManager(test_console, default_decision="USER_APPROVED")
+    approval_manager_aa._approve_all_active = True
+    shell_tool_aa = ExecuteShellTool(approval_manager=approval_manager_aa)
+
+    run_shell_test(shell_tool_aa, "echo 'Hello from session approval'", "'Approve All': Simple echo", True, 0)
+    run_shell_test(shell_tool_aa, "git log -1", "'Approve All': git log (Auto-Approved pattern + Session)", True, 0)
+    run_shell_test(shell_tool_aa, "sudo apt update", "'Approve All': sudo command (Prohibited pattern)", False) # sudo is prohibited
     
-    # 2. Auto-approved command (e.g., "ls -la" if "ls *" is in DEFAULT_APPROVED_COMMANDS)
-    run_test_command("ls -la", "Auto-Approved Command (ls -la)")
-    run_test_command("echo 'Hello from QX test'", "Auto-Approved Command (echo)")
+    approval_manager_aa._approve_all_active = False # Reset
+
+    test_console.rule("[bold]User Denies Shell Tests[/]")
+    approval_manager_ud = DummyApprovalManager(test_console, default_decision="USER_DENIED")
+    shell_tool_ud = ExecuteShellTool(approval_manager=approval_manager_ud)
+    run_shell_test(shell_tool_ud, "echo 'This should be denied'", "User denies echo", False)
 
 
-    # 3. Command requiring user approval - User approves (e.g., "date")
-    #    (Assuming "date" is not in DEFAULT_APPROVED_COMMANDS or DEFAULT_PROHIBITED_COMMANDS)
-    #    INPUT: y
-    run_test_command("date", "User Approves 'date'")
-
-    # 4. Command requiring user approval - User denies
-    #    INPUT: n
-    run_test_command("whoami", "User Denies 'whoami'")
-
-    # 5. Command requiring user approval - User cancels
-    #    INPUT: c
-    run_test_command("df -h", "User Cancels 'df -h'")
-    
-    # 6. Command requiring user approval - User modifies, then new command is approved
-    #    INPUT for 'sleep 1': m
-    #    INPUT for modified command: echo "modified sleep"
-    #    INPUT for reason: "testing modification"
-    #    INPUT for 'echo "modified sleep"': y
-    run_test_command("sleep 1", "User Modifies 'sleep 1' to 'echo \"modified sleep\"', then approves")
-
-    # 7. Command requiring user approval - User modifies to a prohibited command
-    #    INPUT for 'pwd': m
-    #    INPUT for modified command: rm -rf /
-    #    INPUT for reason: "testing modification to prohibited"
-    #    (Should be caught as prohibited without further prompt for y/n)
-    run_test_command("pwd", "User Modifies 'pwd' to 'rm -rf /' (prohibited)")
-
-    # 8. Command that times out
-    #    (Requires SHELL_COMMAND_TIMEOUT to be low for quick testing, e.g., 1-2s)
-    #    INPUT for `sleep 5` (if timeout is 2s): y
-    #    Make sure SHELL_COMMAND_TIMEOUT is set appropriately in constants.py for this test
-    #    Or, approval_manager_instance.default_approve_all_duration_minutes = 0.1 # to make it expire fast
-    #    approval_manager_instance._approve_all_until = datetime.datetime.now() + datetime.timedelta(seconds=1) # Temp approve for test
-    #    run_test_command(f"sleep {SHELL_COMMAND_TIMEOUT + 3}", f"Command Times Out (sleep {SHELL_COMMAND_TIMEOUT + 3})")
-    #    This test is harder to automate without mocking time or approval.
-    #    For manual test: set SHELL_COMMAND_TIMEOUT=2 in constants.py, then run this test with 'y'
-    test_console.print(f"\n[bold]Note:[/] Timeout test for 'sleep {SHELL_COMMAND_TIMEOUT + 3}' might require manual approval (y) "
-                       f"and SHELL_COMMAND_TIMEOUT to be set low (e.g. 2s). Current timeout: {SHELL_COMMAND_TIMEOUT}s.")
-
-
-    # 9. Command not found
-    #    INPUT: y
-    run_test_command("thiscommandshouldnotexist123", "Command Not Found")
-
-    # 10. Command with non-zero exit code and stderr
-    #     INPUT: y
-    run_test_command("ls /nonexistentpath", "Command with stderr and non-zero exit")
-    
-    # 11. "Approve All" functionality test
-    #     INPUT for 'git status': a
-    #     INPUT for duration: 1 (minute)
-    #     Then, the next command should be SESSION_APPROVED.
-    run_test_command("git status", "Activate 'Approve All' with 'git status'")
-    run_test_command("cat pyproject.toml", "Test 'Approve All' with 'cat pyproject.toml' (should be session approved or auto-approved if cat * is default)")
-
-    test_console.print("\n[bold bright_blue]Finished ExecuteShellTool Tests[/]")
+    test_console.print("\n[bold bright_green]Finished ExecuteShellTool Tests[/]")

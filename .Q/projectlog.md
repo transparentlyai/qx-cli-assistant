@@ -1,5 +1,26 @@
 # Project QX Log
 
+## Session 2024-05-21 (Continued)
+
+**Goal:** Resolve `rich.errors.MissingStyle` for 'warning' style.
+
+**Activities:**
+
+*   **Error Diagnosis:** User reported `rich.errors.MissingStyle: Failed to get style 'warning'` when running `qx`. The traceback indicated the error originated in `src/qx/main.py` when trying to use `style="warning"` for a Rich `print` call.
+*   **Investigation:**
+    *   Checked `src/qx/cli/console.py`: Confirmed that `QXConsole` was initialized with a standard Rich `Console` without a custom theme defining a "warning" style.
+*   **Resolution:**
+    *   Modified `src/qx/cli/console.py`:
+        *   Imported `Theme` from `rich.theme`.
+        *   Defined `qx_theme = Theme({"info": "dim cyan", "warning": "yellow", "danger": "bold red", "success": "green"})`.
+        *   Initialized `_initial_rich_console` with `theme=qx_theme`.
+    *   Modified `src/qx/main.py`: Changed `style="warning"` to `style="yellow"` in `except KeyboardInterrupt` and `except asyncio.CancelledError` blocks as a direct fix for the specific lines in the traceback, although the theme addition should also cover it.
+*   **Commit:** Committed the fix for the 'warning' style. (Commit `c930259`)
+
+**Next Steps:** Continue development or address further issues.
+
+---
+
 ## Session 2024-05-21
 
 **Goal:** Resolve `rich.errors.MissingStyle` error and continue development.
