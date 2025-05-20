@@ -20,10 +20,10 @@ from prompt_toolkit.styles import Style
 from pyfzf.pyfzf import FzfPrompt
 from rich.console import Console as RichConsole
 
-# ApprovalManager import removed
-# from qx.core.approvals import ApprovalManager 
 from qx.core.paths import Q_HISTORY_FILE
 from qx.cli.commands import CommandCompleter
+# Import for "Approve All" status check
+from qx.core.user_prompts import is_approve_all_active 
 
 prompt_style = Style.from_dict(
     {
@@ -35,12 +35,14 @@ prompt_style = Style.from_dict(
 )
 
 QX_FIXED_PROMPT_TEXT = "Q⏵ "
-# QX_AUTO_APPROVE_PROMPT_TEXT removed
+QX_AUTO_APPROVE_PROMPT_TEXT = "QA⏵ " # Reinstated for "Approve All" mode
 QX_MULTILINE_PROMPT_TEXT = "M⏵ "
 QX_MULTILINE_HINT_TEXT = "[Alt+Enter to submit] "
 
 QX_FIXED_PROMPT_FORMATTED = FormattedText([("class:prompt", QX_FIXED_PROMPT_TEXT)])
-# QX_AUTO_APPROVE_PROMPT_FORMATTED removed
+QX_AUTO_APPROVE_PROMPT_FORMATTED = FormattedText( # Reinstated
+    [("class:prompt", QX_AUTO_APPROVE_PROMPT_TEXT)]
+)
 QX_MULTILINE_PROMPT_FORMATTED = FormattedText(
     [
         ("class:prompt.multiline", QX_MULTILINE_PROMPT_TEXT),
@@ -130,8 +132,7 @@ class CommandArgumentPathCompleter(Completer):
                 )
 
 async def get_user_input(
-    console: RichConsole, 
-    # approval_manager: ApprovalManager # Removed approval_manager argument
+    console: RichConsole,
 ) -> str:
     try:
         Q_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -144,8 +145,11 @@ async def get_user_input(
     kb = KeyBindings()
     is_multiline = [False]
     
-    # Prompt always defaults to QX_FIXED_PROMPT_FORMATTED now
-    current_prompt_formatted: List[Any] = [QX_FIXED_PROMPT_FORMATTED]
+    # Determine prompt based on "Approve All" status
+    if is_approve_all_active(console): # Pass console to is_approve_all_active
+        current_prompt_formatted: List[Any] = [QX_AUTO_APPROVE_PROMPT_FORMATTED]
+    else:
+        current_prompt_formatted: List[Any] = [QX_FIXED_PROMPT_FORMATTED]
 
     @kb.add("c-r")
     def _show_history_fzf_event(event):
@@ -273,8 +277,11 @@ async def get_user_input(
     def _handle_alt_enter(event):
         if is_multiline[0]:
             is_multiline[0] = False
-            # Removed check for approval_manager.is_globally_approved()
-            current_prompt_formatted[0] = QX_FIXED_PROMPT_FORMATTED
+            # Update prompt based on "Approve All" status when exiting multiline
+            if is_approve_all_active(console):
+                current_prompt_formatted[0] = QX_AUTO_APPROVE_PROMPT_FORMATTED
+            else:
+                current_prompt_formatted[0] = QX_FIXED_PROMPT_FORMATTED
             event.app.current_buffer.validate_and_handle()
         else:
             is_multiline[0] = True
@@ -285,9 +292,12 @@ async def get_user_input(
     def _handle_ctrl_c(event):
         event.app.exit(exception=KeyboardInterrupt())
 
-    is_multiline[0] = False
-    # Removed check for approval_manager.is_globally_approved()
-    current_prompt_formatted[0] = QX_FIXED_PROMPT_FORMATTED
+    # Set initial prompt state (already done above, but this ensures it if logic changes)
+    is_multiline[0] = False 
+    if is_approve_all_active(console):
+        current_prompt_formatted[0] = QX_AUTO_APPROVE_PROMPT_FORMATTED
+    else:
+        current_prompt_formatted[0] = QX_FIXED_PROMPT_FORMATTED
 
     qx_command_completer = CommandCompleter()
     path_argument_completer = CommandArgumentPathCompleter()
@@ -302,9 +312,21 @@ async def get_user_input(
     )
 
     try:
+        # The lambda for prompt needs to be re-evaluated each time to pick up changes
+        # to current_prompt_formatted[0] if "Approve All" status changes between prompts.
+        # This is implicitly handled if current_prompt_formatted is a list and its content is changed.
+        # However, to be absolutely sure the LATEST state of is_approve_all_active is used:
+        def get_current_prompt():
+            if is_multiline[0]:
+                return QX_MULTILINE_PROMPT_FORMATTED
+            elif is_approve_all_active(console):
+                return QX_AUTO_APPROVE_PROMPT_FORMATTED
+            else:
+                return QX_FIXED_PROMPT_FORMATTED
+
         user_input = await asyncio.to_thread(
             session.prompt,
-            lambda: current_prompt_formatted[0],
+            get_current_prompt, # Use a function to dynamically get the prompt
         )
         return user_input
     except KeyboardInterrupt:
@@ -315,14 +337,10 @@ async def get_user_input(
 
 
 if __name__ == "__main__":
-    # For __main__ testing, ApprovalManager is no longer directly needed by get_user_input
-    # If the test itself needs to simulate "approve all" for other reasons,
-    # it would need its own mechanism.
-    # from qx.core.approvals import ApprovalManager # No longer needed for this test script's core functionality
+    from qx.core.user_prompts import _approve_all_until # For testing __main__
 
     async def main_test():
         console_for_test = RichConsole()
-        # approval_manager_test = ApprovalManager(console=console_for_test) # Not needed for get_user_input
 
         print("Testing qprompt. Type Ctrl-R for fzf history (if fzf is installed).")
         print("Tab for completion (commands like /help, then paths).")
@@ -332,10 +350,9 @@ if __name__ == "__main__":
         )
         print("While in multiline, Enter adds a newline.")
         print("Press Alt+Enter again to submit the multiline input.")
-        # Removed "approve all" simulation as it's no longer part of qprompt's direct logic
-        # print(
-        #     "Type 'approve all' (simulated) to test QA❯ prompt, then 'reset approve' (simulated)."
-        # )
+        print(
+            "Type 'activate approve all' to test QA⏵ prompt, then 'deactivate approve all'."
+        )
         print(f"History file will be: {Q_HISTORY_FILE}")
         Q_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
 
@@ -348,11 +365,21 @@ if __name__ == "__main__":
 
         while True:
             try:
-                # Call get_user_input without approval_manager
                 inp = await get_user_input(console_for_test) 
                 if inp == "": 
                     continue
-                # Removed "approve all" and "reset approve" test commands
+                if inp.strip().lower() == "activate approve all":
+                    # Directly manipulate the state in user_prompts for testing
+                    # This is a bit of a hack for testing; in real use, request_confirmation would set this.
+                    from qx.core import user_prompts
+                    user_prompts._approve_all_until = datetime.now() + timedelta(minutes=5)
+                    console_for_test.print("[info]Simulated 'approve all' activation for 5 minutes.[/info]")
+                    continue
+                elif inp.strip().lower() == "deactivate approve all":
+                    from qx.core import user_prompts
+                    user_prompts._approve_all_until = None
+                    console_for_test.print("[info]Simulated 'approve all' deactivation.[/info]")
+                    continue
                 if inp.lower() == "exit":
                     console_for_test.print("\nExiting test.")
                     break
