@@ -6,8 +6,7 @@ from typing import Any, List, Optional
 
 from pydantic_ai.messages import ModelMessage
 from rich.markdown import Markdown
-# rich.panel is not used, can be removed if not needed elsewhere implicitly
-# from rich.panel import Panel
+from rich.panel import Panel
 from rich.text import Text
 
 from qx.cli.console import QXConsole, qx_console, show_spinner
@@ -55,6 +54,7 @@ async def _async_main():
 
     logger.info("CLI theming system has been removed. Using default Rich console styling.")
 
+    # Determine syntax highlighting theme for Markdown code blocks AND ApprovalManager previews
     syntax_theme_from_env = os.getenv("QX_SYNTAX_HIGHLIGHT_THEME")
     code_theme_to_use = (
         syntax_theme_from_env
@@ -65,6 +65,7 @@ async def _async_main():
         f"Using syntax highlighting theme for Markdown code blocks and previews: {code_theme_to_use}"
     )
 
+    # Pass the determined theme to ApprovalManager
     approval_manager = ApprovalManager(
         console=qx_console, syntax_highlight_theme=code_theme_to_use
     )
@@ -100,16 +101,13 @@ async def _async_main():
         )
         sys.exit(1)
 
+    # Display QX version and model information
     info_text = f"QX ver:{QX_VERSION} - {model_name_from_env}"
     qx_console.print(Text(info_text, style="dim"))
 
     current_message_history: Optional[List[ModelMessage]] = None
 
     while True:
-        run_result: Optional[Any] = None
-        spinner_status = None # Initialize spinner_status to None
-        operation_completed_successfully = False # Flag to track operation success
-
         try:
             user_input = await get_user_input(qx_console, approval_manager)
 
@@ -118,73 +116,59 @@ async def _async_main():
 
             if user_input.lower() in ["exit", "quit"]:
                 break
-            if not user_input.strip(): # Skip empty input
+            if not user_input.strip():
                 continue
 
-            # Inner try/finally for spinner management
+            run_result: Optional[Any] = None
+            spinner_status = show_spinner("QX is thinking...")
+            QXConsole.set_active_status(spinner_status)
             try:
-                spinner_status = show_spinner("QX is thinking...")
-                QXConsole.set_active_status(spinner_status) # Register spinner with QXConsole
-                with spinner_status: # Rich Status context manager handles its own stop on exit/exception
+                with spinner_status:
                     run_result = await query_llm(
                         agent,
                         user_input,
                         message_history=current_message_history,
                         console=qx_console,
                     )
-                operation_completed_successfully = True # Mark as successful if query_llm completes
             finally:
-                # This ensures QXConsole's active status is cleared,
-                # even if the spinner's context manager already stopped it.
                 QXConsole.set_active_status(None)
-                # The rich.Status context manager (`with spinner_status:`) should handle stopping
-                # the spinner itself if it was started. Explicitly calling stop here
-                # could cause issues if it was already stopped or never started.
-                # However, if `show_spinner` itself fails, `spinner_status` might be None.
-                if spinner_status is not None and spinner_status.is_started:
-                     spinner_status.stop()
 
-
-            if operation_completed_successfully:
-                if run_result:
-                    if hasattr(run_result, "output"):
-                        markdown_output = Markdown(
-                            run_result.output, code_theme=code_theme_to_use
-                        )
-                        qx_console.print(markdown_output)
-                        qx_console.print("\n") # Add a newline for better separation
-                        if hasattr(run_result, "all_messages"):
-                            current_message_history = run_result.all_messages()
-                        else:
-                            logger.warning(
-                                "run_result is missing 'all_messages' attribute."
-                            )
+            if run_result:
+                if hasattr(run_result, "output"):
+                    markdown_output = Markdown(
+                        run_result.output, code_theme=code_theme_to_use
+                    )
+                    qx_console.print(markdown_output)
+                    qx_console.print("\n")
+                    if hasattr(run_result, "all_messages"):
+                        current_message_history = run_result.all_messages()
                     else:
-                        logger.error(
-                            f"run_result is missing 'output' attribute. run_result type: {type(run_result)}, value: {run_result}"
-                        )
-                        qx_console.print(
-                            "[error]Error:[/] Unexpected response structure from LLM."
+                        logger.warning(
+                            "run_result is missing 'all_messages' attribute."
                         )
                 else:
-                    # This case can be reached if query_llm returns None but no exception occurred.
-                    qx_console.print(
-                        "[warning]Info:[/] No response generated by LLM."
+                    logger.error(
+                        f"run_result is missing 'output' attribute. run_result type: {type(run_result)}, value: {run_result}"
                     )
-            # If operation_completed_successfully is False, an exception occurred in the inner try,
-            # which will be caught by the outer handlers below. Spinner cleanup is already done.
+                    qx_console.print(
+                        "[error]Error:[/] Unexpected response structure from LLM."
+                    )
+            else:
+                qx_console.print(
+                    "[warning]Info:[/] No response generated or an error occurred."
+                )
 
         except KeyboardInterrupt:
             qx_console.print(
-                "\nOperation cancelled by Ctrl+C. Returning to prompt.", style="warning"
+                "\nOperation cancelled by Ctrl+C. Returning to prompt.", style="yellow" # Changed style
             )
-            current_message_history = None # Reset history on interruption
+            current_message_history = None
             continue
         except asyncio.CancelledError:
             qx_console.print(
-                "\nOperation cancelled (async). Returning to prompt.", style="warning"
+                "\nOperation cancelled (async). Returning to prompt.", style="yellow" # Changed style
             )
-            current_message_history = None # Reset history on interruption
+            current_message_history = None
             continue
         except Exception as e:
             logger.error(
@@ -194,34 +178,17 @@ async def _async_main():
                 f"[error]Critical Error:[/] An unexpected error occurred: {e}"
             )
             qx_console.print("Exiting QX due to critical error.", style="error")
-            break # Exit the loop on unhandled critical errors
+            break
 
 def main():
     try:
         asyncio.run(_async_main())
     except KeyboardInterrupt:
-        # Ensure spinner is stopped if Ctrl+C happens during startup or very early.
-        if QXConsole._active_status is not None:
-            try:
-                QXConsole._active_status.stop()
-            except Exception as e_stop: # pylint: disable=broad-except
-                # Log if stopping fails, but don't let it hide original KeyboardInterrupt
-                logging.getLogger("qx.main.shutdown").error(f"Error stopping spinner during KeyboardInterrupt shutdown: {e_stop}")
-            finally:
-                QXConsole.set_active_status(None)
         qx_console.print("\nQX terminated by user.", style="info")
         sys.exit(0)
-    except Exception as e: # pylint: disable=broad-except
+    except Exception as e:
         fallback_logger = logging.getLogger("qx.critical")
         fallback_logger.critical(f"Critical error running QX: {e}", exc_info=True)
-        # Attempt to clean up spinner even on critical exit, if possible
-        if QXConsole._active_status is not None:
-            try:
-                QXConsole._active_status.stop()
-            except Exception as e_stop: # pylint: disable=broad-except
-                 logging.getLogger("qx.main.shutdown").error(f"Error stopping spinner during critical error shutdown: {e_stop}")
-            finally:
-                QXConsole.set_active_status(None)
         qx_console.print(f"[bold red]Critical error running QX:[/bold red] {e}")
         sys.exit(1)
 
