@@ -3,13 +3,26 @@
 
 import logging # Added for logging within QXConsole
 from typing import Optional, Any
-from rich.console import Console
+from rich.console import Console, RenderableType # For input prompt type hint
 from rich.status import Status
-from rich.console import RenderableType # For input prompt type hint
 from rich.syntax import Syntax # Added for syntax highlighting
+from rich.theme import Theme # Import Theme
+
+# Define a custom theme for QX
+# These styles can be used with console.print("message", style="stylename")
+# or with markup: console.print("[stylename]message[/stylename]")
+qx_theme = Theme({
+    "info": "dim cyan",
+    "warning": "yellow",  # Define the warning style
+    "danger": "bold red",
+    "success": "green",
+    # Add other custom styles here as needed
+    # "status.spinner": "blue", # Example if we wanted to customize spinner style via theme
+})
 
 # Create a standard Rich Console - this will be the base for qx_console
-_initial_rich_console = Console(force_terminal=True)
+# Apply the custom theme here
+_initial_rich_console = Console(force_terminal=True, theme=qx_theme)
 
 
 class QXConsole:
@@ -108,6 +121,35 @@ class QXConsole:
         )
         self._console.print(syntax)
 
+    def print_diff(
+        self,
+        diff_text: str,
+        theme: str = "vim", # Default syntax theme, consistent with print_syntax
+        line_numbers: bool = False, # Diffs usually don't have line numbers from the start of the diff
+        word_wrap: bool = True, # Diffs can have long lines
+        **kwargs: Any
+    ):
+        """
+        Prints diff text with syntax highlighting.
+
+        Args:
+            diff_text (str): The diff text to highlight.
+            theme (str, optional): The Pygments theme to use. Defaults to "vim".
+            line_numbers (bool, optional): Whether to show line numbers. Defaults to False for diffs.
+            word_wrap (bool, optional): Whether to wrap lines. Defaults to True for diffs.
+            **kwargs: Additional arguments to pass to the `Syntax` constructor.
+        """
+        # Common lexer names for diffs are "diff" or "udiff"
+        # Using "diff" as it's generally well-supported.
+        self.print_syntax(
+            diff_text,
+            lexer_name="diff",
+            theme=theme,
+            line_numbers=line_numbers,
+            word_wrap=word_wrap,
+            **kwargs
+        )
+
     def __getattr__(self, name):
         """Forward all other attribute access to the underlying console."""
         return getattr(self._console, name)
@@ -131,6 +173,8 @@ def show_spinner(
     # If "status.spinner" style was part of a custom theme, it might look different now,
     # or revert to Rich's default.
     # Consider defining a default style directly here if needed, or ensure Rich's default is acceptable.
+    # Rich's default theme usually defines "status.spinner". If we added it to qx_theme,
+    # that would take precedence.
     return qx_console.status(
         message,
         spinner=spinner_name,
@@ -140,6 +184,7 @@ def show_spinner(
 
 # Example of using syntax highlighting (can be run if this file is executed directly)
 if __name__ == "__main__":
+    # Now uses the "info" style from qx_theme
     qx_console.print("[info]Testing syntax highlighting...[/info]")
     python_code_example = """
 def hello_world():
@@ -160,4 +205,32 @@ def hello_world():
 }
 """
     qx_console.print_syntax(json_example, "json", theme="monokai", line_numbers=False, word_wrap=True)
-    qx_console.print("[green]Syntax highlighting test finished.[/green]")
+    
+    diff_example = """
+--- a/file.txt
++++ b/file.txt
+@@ -1,3 +1,4 @@
+ Some text
+ -This line is removed
+ +This line is added
+ Another line
+ +A new line at the end
+"""
+    # Now uses the "info" style from qx_theme
+    qx_console.print("[info]Testing diff highlighting...[/info]")
+    qx_console.print_diff(diff_example)
+
+    # Uses the "success" style from qx_theme (or "green" if "success" wasn't defined, but it is)
+    qx_console.print("[success]Syntax highlighting and diff test finished.[/success]")
+    
+    # Test other styles
+    qx_console.print("This is a normal print.")
+    qx_console.print("This is an info message.", style="info")
+    qx_console.print("This is a warning message.", style="warning")
+    qx_console.print("This is a danger message.", style="danger")
+    qx_console.print("This is a success message.", style="success")
+
+    qx_console.print("[info]Info via markup.[/info]")
+    qx_console.print("[warning]Warning via markup.[/warning]")
+    qx_console.print("[danger]Danger via markup.[/danger]")
+    qx_console.print("[success]Success via markup.[/success]")
