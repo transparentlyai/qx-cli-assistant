@@ -202,11 +202,12 @@ def write_file_tool(
             err_msg = f"Error: Access denied by policy for modified path: {path_to_write}"
             logger.error(f"Write access denied for modified path: {path_to_write}")
             return WriteFilePluginOutput(path=path_to_write, success=False, message=err_msg)
-    elif decision_status == "approved":
+    elif decision_status in ["approved", "session_approved"]: # MODIFIED LINE
         path_to_write = path_to_consider
     else: # denied or cancelled
         error_message = f"Write operation for '{path_to_consider}' was {decision_status} by user."
         logger.warning(error_message)
+        # request_confirmation already prints a message for denied/cancelled
         return WriteFilePluginOutput(path=path_to_consider, success=False, message=error_message)
 
     # Proceed to write
@@ -215,6 +216,10 @@ def write_file_tool(
     if error_from_impl:
         return WriteFilePluginOutput(path=path_to_write, success=False, message=error_from_impl)
     else:
+        # If session_approved, request_confirmation already printed a success message.
+        # If just "approved", it might be good to confirm the write.
+        # However, the original logic didn't print a specific success message here, relying on subsequent tool output.
+        # For now, keeping it consistent. A success message is in the return object.
         return WriteFilePluginOutput(path=path_to_write, success=True, message=f"Successfully wrote to {path_to_write}")
 
 

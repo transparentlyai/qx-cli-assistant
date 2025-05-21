@@ -92,9 +92,12 @@ def execute_shell_tool(
     command_to_execute = command_to_consider
     needs_confirmation = not _is_command_auto_approved(command_to_consider)
 
+    # Initialize decision_status and final_value to safe defaults
+    decision_status = "approved" if not needs_confirmation else "pending" # "pending" is a placeholder, will be overwritten
+    final_value = command_to_consider
+
     if needs_confirmation:
         prompt_msg = f"Allow QX to execute shell command: '{command_to_consider}'?"
-        # request_confirmation handles its own console output for prompts and user decision (denied/cancelled)
         decision_status, final_value = request_confirmation(
             prompt_message=prompt_msg,
             console=console,
@@ -111,7 +114,7 @@ def execute_shell_tool(
                 return ExecuteShellPluginOutput(command=command_to_consider, error=err_msg)
             
             logger.info(f"Shell command modified by user from '{command_to_consider}' to '{command_to_execute}'.")
-            console.print(f"[info]Command modified by user to:[/info] '{command_to_execute}'")
+            # console.print(f"[info]Command modified by user to:[/info] '{command_to_execute}'") # Covered by request_confirmation
             
             if _is_command_prohibited(command_to_execute):
                 err_msg = f"Error: Modified command '{command_to_execute}' is prohibited by policy."
@@ -119,25 +122,26 @@ def execute_shell_tool(
                 console.print(f"[error]Modified command prohibited by policy:[/error] '{command_to_execute}'")
                 return ExecuteShellPluginOutput(command=command_to_execute, error=err_msg)
         
-        elif decision_status == "approved":
-            command_to_execute = command_to_consider # Already set, but for clarity
-            # Confirmation itself is handled by request_confirmation, no extra console print here
+        elif decision_status in ["approved", "session_approved"]:
+            command_to_execute = command_to_consider
         else:  # denied or cancelled
-            # request_confirmation already prints user decision (denied/cancelled)
             error_message = f"Shell command execution for '{command_to_consider}' was {decision_status} by user."
             logger.warning(error_message)
-            # No extra console print here as request_confirmation handles it.
+            # request_confirmation already prints user decision (denied/cancelled)
             return ExecuteShellPluginOutput(command=command_to_consider, error=error_message)
     else:  # Auto-approved
         logger.info(f"Command '{command_to_execute}' is auto-approved. Executing.")
         console.print(f"[success]AUTO-APPROVED (PATTERN):[/] Executing: [info]'{command_to_execute}'[/]")
 
-    # If we reach here, command is approved (or auto-approved) and not prohibited
-    if not needs_confirmation: # Only print if it wasn't an auto-approval message already
-        pass # Auto-approval already printed its execution message
-    elif command_to_execute != command_to_consider: # It was modified and approved
+    # If we reach here, command is approved (or auto-approved or session_approved) and not prohibited
+    # Message printing for execution start:
+    if not needs_confirmation: # Auto-approved (already printed)
+        pass 
+    elif decision_status == "session_approved": # Session approved (already printed by request_confirmation)
+        pass 
+    elif command_to_execute != command_to_consider: # Manually modified and approved
         console.print(f"[info]Executing modified command:[/info] '{command_to_execute}'")
-    else: # It was approved without modification
+    else: # Manually approved without modification
         console.print(f"[info]Executing command:[/info] '{command_to_execute}'")
 
     try:
@@ -150,14 +154,14 @@ def execute_shell_tool(
         stderr = process.stderr.strip() if process.stderr else None
 
         if process.returncode == 0:
-            console.print(f"[success]Command executed successfully:[/success] '{command_to_execute}'")
+            # Avoid double printing success if already handled by session_approved or auto_approved messages
+            if not (decision_status == "session_approved" or not needs_confirmation):
+                console.print(f"[success]Command executed successfully:[/success] '{command_to_execute}'")
             return ExecuteShellPluginOutput(
                 command=command_to_execute, stdout=stdout, stderr=stderr, return_code=process.returncode
             )
         else:
             console.print(f"[warning]Command '{command_to_execute}' finished with return code {process.returncode}.[/warning]")
-            # stderr might be empty even with non-zero rc, so we don't make it an error condition here
-            # The calling agent can decide if non-zero RC is an error for its purposes.
             return ExecuteShellPluginOutput(
                 command=command_to_execute, stdout=stdout, stderr=stderr, return_code=process.returncode
             )
