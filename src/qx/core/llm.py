@@ -6,7 +6,7 @@ from typing import Any, List, Optional
 
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelMessage
-from pydantic_ai.models.gemini import GeminiModel
+from pydantic_ai.models.gemini import GeminiModel, GeminiModelSettings # Import GeminiModelSettings
 from pydantic_ai.providers.google_vertex import GoogleVertexProvider
 from rich.console import Console as RichConsole
 
@@ -115,13 +115,48 @@ def initialize_llm_agent(
             else GoogleVertexProvider(),
         )
 
+        # Read model settings from environment variables
+        model_settings: Optional[GeminiModelSettings] = None
+        try:
+            temperature = os.environ.get("QX_VERTEX_TEMPERATURE")
+            max_tokens = os.environ.get("QX_VERTEX_MAX_TOKENS")
+            thinking_budget = os.environ.get("QX_VERTEX_THINKING_BUDGET")
+
+            settings_kwargs = {}
+            if temperature is not None:
+                settings_kwargs["temperature"] = float(temperature)
+            if max_tokens is not None:
+                settings_kwargs["max_output_tokens"] = int(max_tokens)
+            if thinking_budget is not None:
+                settings_kwargs["thinking_budget"] = int(thinking_budget)
+
+            if settings_kwargs:
+                model_settings = GeminiModelSettings(**settings_kwargs)
+                logger.info(f"Gemini model settings loaded: {model_settings}")
+
+        except ValueError as e:
+            logger.error(f"Invalid value for Gemini model setting: {e}", exc_info=True)
+            console.print(f"[error]Error:[/] Invalid Gemini model setting: {e}")
+        except Exception as e:
+            logger.error(f"Failed to load Gemini model settings: {e}", exc_info=True)
+            console.print(f"[error]Error:[/] Failed to load Gemini model settings: {e}")
+
+
         agent = Agent(
             model=gemini_model_instance,
             system_prompt=system_prompt_content,
             tools=registered_tools, # Use tools loaded by PluginManager
             deps_type=QXToolDependencies, # Set the dependency type for RunContext
+            model_settings=model_settings, # Pass the loaded model settings
         )
         logger.info(f"Pydantic-AI Agent initialized with {len(registered_tools)} tools and deps_type QXToolDependencies.")
+        
+        # Add debug logging for the agent's model settings
+        if agent.model_settings:
+            logger.debug(f"Agent initialized with model settings: {agent.model_settings}")
+        else:
+            logger.debug("Agent initialized without specific model settings.")
+
         return agent
         
     except Exception as e:

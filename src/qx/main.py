@@ -84,6 +84,12 @@ async def _async_main():
         )
         location = DEFAULT_VERTEXAI_LOCATION
 
+    # Add debug logging for model parameters
+    logger.debug(f"Initializing LLM agent with parameters:")
+    logger.debug(f"  Model Name: {model_name_from_env}")
+    logger.debug(f"  Project ID: {project_id if project_id else 'Not set'}")
+    logger.debug(f"  Location: {location if location else 'Not set'}")
+
     agent = initialize_llm_agent(
         model_name_str=model_name_from_env,
         project_id=project_id,
