@@ -42,7 +42,7 @@ def main():
         help='One or more numbers (integer or decimal) to sum up.'
     )
 
-    parsed_args = parser.parse_args()
+    parsed_args: argparse.Namespace = parser.parse_args()
 
     if not parsed_args.numbers:
         # This case should ideally be handled by argparse (e.g. if nargs='*')
