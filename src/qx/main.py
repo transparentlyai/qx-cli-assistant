@@ -123,6 +123,38 @@ async def _async_main():
             if not user_input.strip():
                 continue
 
+            # Handle /model command
+            if user_input.strip().lower() == "/model":
+                model_info_content = f"[bold]Current LLM Model Configuration:[/bold]\n"
+                model_info_content += f"  Model Name: [green]{agent.model.model_name}[/green]\n"
+                
+                # Determine provider based on model_name_from_env
+                provider_name = "Unknown"
+                if model_name_from_env.startswith("google-vertex:"):
+                    provider_name = "GoogleVertexProvider"
+                # Add more provider checks here if other providers are supported
+                
+                model_info_content += f"  Provider: [green]{provider_name}[/green]\n"
+                model_info_content += f"  Project ID: [green]{project_id if project_id else 'Not set'}[/green]\n"
+                model_info_content += f"  Location: [green]{location if location else 'Not set'}[/green]\n"
+
+                if agent.model_settings:
+                    # Access model settings as a dictionary, as indicated by the error
+                    settings_dict = agent.model_settings
+                    
+                    temperature_val = settings_dict.get("temperature", "Not set")
+                    max_tokens_val = settings_dict.get("max_output_tokens", "Not set")
+                    thinking_budget_val = settings_dict.get("thinking_budget", "Not set")
+
+                    model_info_content += f"  Temperature: [green]{temperature_val}[/green]\n"
+                    model_info_content += f"  Max Output Tokens: [green]{max_tokens_val}[/green]\n"
+                    model_info_content += f"  Thinking Budget: [green]{thinking_budget_val}[/green]\n"
+                else:
+                    model_info_content += "  Model Settings: [yellow]Default (no specific settings applied)[/yellow]\n"
+
+                qx_console.print(Panel(model_info_content, title="LLM Model Info", border_style="blue"))
+                continue # Skip further processing for this command
+
             run_result: Optional[Any] = None
             spinner_status = show_spinner("QX is thinking...")
             QXConsole.set_active_status(spinner_status)
@@ -183,7 +215,7 @@ async def _async_main():
             qx_console.print(
                 f"[error]Critical Error:[/] An unexpected error occurred: {e}"
             )
-            qx_console.print("Exiting QX due to critical error.", style="error")
+            qx_console.print("Exiting QX due to critical error.", style="bold red")
             break
 
 def main():
