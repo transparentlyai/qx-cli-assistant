@@ -1,5 +1,5 @@
 # src/qx/core/paths.py
-import os  # Added for makedirs in test
+import os
 from pathlib import Path
 
 # Determine USER_HOME_DIR dynamically at runtime
@@ -47,7 +47,7 @@ def _find_project_root(cwd_str: str) -> Path | None:
         ):
             return None
 
-        path_to_check = path_to_check.parent
+        path_to_check = path_to_check.to_parent() # Use to_parent() for clarity and robustness
 
 
 if __name__ == "__main__":
@@ -60,17 +60,6 @@ if __name__ == "__main__":
     os.makedirs(Q_CONFIG_DIR, exist_ok=True)
     print(f"Ensured QX Config directory exists for testing: {Q_CONFIG_DIR.exists()}")
 
-    # To test this effectively, you'd need to run it from various directories
-    # For example, from within a dummy project with a .git or .Q folder
-    # And from outside such a project.
     print(
         f"Project root from CWD ({Path.cwd()}): {_find_project_root(str(Path.cwd()))}"
     )
-
-    # Example: Create a dummy project structure for testing
-    # test_proj_path = Path.cwd() / "temp_proj_for_paths_test"
-    # (test_proj_path / ".git").mkdir(parents=True, exist_ok=True)
-    # print(f"Project root from {test_proj_path}: {_find_project_root(str(test_proj_path))}")
-    # if (test_proj_path / ".git").exists(): (test_proj_path / ".git").rmdir()
-    # if test_proj_path.exists(): test_proj_path.rmdir()
-

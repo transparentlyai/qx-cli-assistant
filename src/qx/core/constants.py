@@ -1,7 +1,8 @@
 # qx/core/constants.py
 
 # Default model name if not specified by the user
-DEFAULT_MODEL = "gemini-2.0-flash"  # Example, adjust as needed
+# This will now be an OpenRouter-compatible model string
+DEFAULT_MODEL = "google/gemini-2.5-flash-preview-05-20:thinking"
 
 # Default tree ignore patterns
 DEFAULT_TREE_IGNORE_PATTERNS = [
@@ -247,13 +248,6 @@ DEFAULT_ANTHROPIC_TEMPERATURE = 0.7
 DEFAULT_ANTHROPIC_MAX_TOKENS = 4096
 DEFAULT_ANTHROPIC_TOKENS_PER_MIN = 25000  # Example TPM
 
-# Google Vertex AI
-DEFAULT_VERTEXAI_MODEL = "gemini-1.5-pro-001"  # Or "gemini-1.0-pro"
-DEFAULT_VERTEXAI_LOCATION = "us-central1"  # Example location
-DEFAULT_VERTEXAI_TEMPERATURE = 0.7
-DEFAULT_VERTEXAI_MAX_TOKENS = 8192
-DEFAULT_VERTEXAI_TOKENS_PER_MIN = 60000  # Example TPM
-
 # Groq
 DEFAULT_GROQ_MODEL = "llama3-70b-8192"
 DEFAULT_GROQ_TEMPERATURE = 0.7
@@ -265,4 +259,3 @@ DEFAULT_GROQ_TOKENS_PER_MIN = 300000  # Example TPM (Groq is fast)
 DEFAULT_SYNTAX_HIGHLIGHT_THEME = (
     "rrt"  # Default theme for syntax highlighting in Markdown code blocks
 )
-
