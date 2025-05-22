@@ -11,13 +11,10 @@ from rich.text import Text
 
 from qx.cli.console import QXConsole, qx_console, show_spinner
 from qx.cli.qprompt import get_user_input
-# ApprovalManager import removed
-# from qx.core.approvals import ApprovalManager 
 from qx.core.config_manager import load_runtime_configurations
 from qx.core.constants import (
     DEFAULT_MODEL,
     DEFAULT_SYNTAX_HIGHLIGHT_THEME,
-    DEFAULT_VERTEXAI_LOCATION,
 )
 from qx.core.llm import initialize_llm_agent, query_llm
 
@@ -63,39 +60,19 @@ async def _async_main():
         f"Using syntax highlighting theme for Markdown code blocks: {code_theme_to_use}"
     )
 
-    # ApprovalManager instantiation removed.
-    # The console is passed to initialize_llm_agent, which then includes it
-    # in QXToolDependencies for plugins that need it for request_confirmation.
-
     model_name_from_env = os.environ.get("QX_MODEL_NAME", DEFAULT_MODEL)
-    project_id = os.environ.get("QX_VERTEX_PROJECT_ID")
-    location = os.environ.get(
-        "QX_VERTEX_LOCATION", DEFAULT_VERTEXAI_LOCATION if project_id else None
-    )
-
+    
     if not model_name_from_env:
-        qx_console.print("[error]Critical Error:[/] QX_MODEL_NAME missing.")
+        qx_console.print("[error]Critical Error:[/] QX_MODEL_NAME environment variable not set. Please set it to an OpenRouter model string (e.g., 'google/gemini-2.5-flash-preview-05-20:thinking').")
         sys.exit(1)
-
-    if project_id and not location:
-        qx_console.print(
-            f"[warning]Warning:[/] QX_VERTEX_PROJECT_ID ('{project_id}') set, "
-            f"but QX_VERTEX_LOCATION is not. Using default: '{DEFAULT_VERTEXAI_LOCATION}'.",
-        )
-        location = DEFAULT_VERTEXAI_LOCATION
 
     # Add debug logging for model parameters
     logger.debug(f"Initializing LLM agent with parameters:")
     logger.debug(f"  Model Name: {model_name_from_env}")
-    logger.debug(f"  Project ID: {project_id if project_id else 'Not set'}")
-    logger.debug(f"  Location: {location if location else 'Not set'}")
 
     agent = initialize_llm_agent(
         model_name_str=model_name_from_env,
-        project_id=project_id,
-        location=location,
-        console=qx_console, # Pass console for QXToolDependencies
-        # approval_manager argument removed
+        console=qx_console,
     )
 
     if agent is None:
@@ -111,10 +88,8 @@ async def _async_main():
 
     while True:
         try:
-            # get_user_input no longer takes approval_manager
             user_input = await get_user_input(qx_console) 
 
-            # Simplified check as is_globally_approved is removed from qprompt
             if user_input == "": 
                 continue
 
@@ -127,17 +102,8 @@ async def _async_main():
             if user_input.strip().lower() == "/model":
                 model_info_content = f"[bold]Current LLM Model Configuration:[/bold]\n"
                 model_info_content += f"  Model Name: [green]{agent.model.model_name}[/green]\n"
+                model_info_content += f"  Provider Base URL: [green]{agent.model.provider.base_url}[/green]\n"
                 
-                # Determine provider based on model_name_from_env
-                provider_name = "Unknown"
-                if model_name_from_env.startswith("google-vertex:"):
-                    provider_name = "GoogleVertexProvider"
-                # Add more provider checks here if other providers are supported
-                
-                model_info_content += f"  Provider: [green]{provider_name}[/green]\n"
-                model_info_content += f"  Project ID: [green]{project_id if project_id else 'Not set'}[/green]\n"
-                model_info_content += f"  Location: [green]{location if location else 'Not set'}[/green]\n"
-
                 if agent.model_settings:
                     # Access model settings as a dictionary, as indicated by the error
                     settings_dict = agent.model_settings
@@ -164,20 +130,19 @@ async def _async_main():
                         agent,
                         user_input,
                         message_history=current_message_history,
-                        console=qx_console, # query_llm now needs console to create QXToolDependencies
+                        console=qx_console,
                     )
             finally:
                 QXConsole.set_active_status(None)
 
             if run_result:
                 if hasattr(run_result, "output"):
-                    # Ensure output is a string before passing to Markdown
                     output_content = str(run_result.output) if run_result.output is not None else ""
                     markdown_output = Markdown(
                         output_content, code_theme=code_theme_to_use
                     )
                     qx_console.print(markdown_output)
-                    qx_console.print("\n") # Add a newline for better separation
+                    qx_console.print("\n")
                     if hasattr(run_result, "all_messages"):
                         current_message_history = run_result.all_messages()
                     else:
@@ -229,7 +194,6 @@ def main():
         fallback_logger.critical(f"Critical error running QX: {e}", exc_info=True)
         qx_console.print(f"[bold red]Critical error running QX:[/bold red] {e}")
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()
