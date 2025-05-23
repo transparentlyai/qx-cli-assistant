@@ -17,7 +17,7 @@ from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.styles import Style
-from prompt_toolkit.shortcuts import prompt_async # Corrected import path
+# from prompt_toolkit.shortcuts import prompt_async # Removed incorrect import path
 from pyfzf.pyfzf import FzfPrompt
 from rich.console import Console as RichConsole
 
@@ -131,6 +131,31 @@ class CommandArgumentPathCompleter(Completer):
                     style=comp.style,
                     selected_style=comp.selected_style,
                 )
+
+async def _execute_prompt_with_live_suspend( # Made async
+    console: RichConsole, session: PromptSession, *args: Any, **kwargs: Any
+) -> Any:
+    """
+    Executes a prompt_toolkit prompt, suspending any active Rich Live display.
+    """
+    live_display = getattr(console, "_live", None)
+    live_was_active_and_started = live_display is not None and getattr(live_display, "is_started", False)
+    
+    prompt_result = None
+    try:
+        if live_was_active_and_started:
+            live_display.stop()
+            if hasattr(console, "clear_live"):
+                console.clear_live()
+            else:
+                pass
+        
+        prompt_result = await session.prompt_async(*args, **kwargs) # Directly call and await session.prompt_async
+    finally:
+        if live_was_active_and_started:
+            live_display.start(refresh=True)
+    return prompt_result
+
 
 async def get_user_input(
     console: RichConsole,
@@ -325,8 +350,10 @@ async def get_user_input(
             else:
                 return QX_FIXED_PROMPT_FORMATTED
 
-        user_input = await session.prompt_async(
-            get_current_prompt, # Use a function to dynamically get the prompt
+        user_input = await _execute_prompt_with_live_suspend(
+            console,
+            session, # Pass the session object
+            get_current_prompt(), # Use a function to dynamically get the prompt
         )
         return user_input
     except KeyboardInterrupt:

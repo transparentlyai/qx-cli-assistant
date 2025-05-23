@@ -2,8 +2,7 @@ import logging
 import datetime
 from typing import Callable, List, Literal, Optional, Tuple, Union, Any
 
-# from prompt_toolkit import prompt as prompt_toolkit_prompt # Removed synchronous import
-from prompt_toolkit.shortcuts import prompt_async # Import the async version
+from prompt_toolkit import PromptSession # Import PromptSession
 from rich.console import Console as RichConsole
 from rich.console import RenderableType
 from rich.text import Text
@@ -26,7 +25,7 @@ ApprovalDecisionStatus = Literal["approved", "denied", "modified", "cancelled", 
 
 
 async def _execute_prompt_with_live_suspend( # Made async
-    console: RichConsole, *args: Any, **kwargs: Any # Removed prompt_callable
+    console: RichConsole, *args: Any, **kwargs: Any
 ) -> Any:
     """
     Executes a prompt_toolkit prompt, suspending any active Rich Live display.
@@ -43,7 +42,9 @@ async def _execute_prompt_with_live_suspend( # Made async
             else:
                 pass
         
-        prompt_result = await prompt_async(*args, **kwargs) # Directly call and await prompt_async
+        # Create a new PromptSession for this specific prompt
+        session = PromptSession()
+        prompt_result = await session.prompt_async(*args, **kwargs) # Directly call and await session.prompt_async
     finally:
         if live_was_active_and_started:
             live_display.start(refresh=True)
@@ -276,6 +277,7 @@ if __name__ == "__main__":
     test_console.rule("[bold green]Testing request_confirmation with Approve All[/]")
 
     async def run_tests():
+        global _approve_all_until # Moved to top of function
         # Test 1: Approve All
         test_console.print("\n[bold]Test 1: Choose 'Approve All'[/]")
         status, val = await request_confirmation("Allow critical action (Test 1)?", test_console, can_approve_all=True)
@@ -294,7 +296,6 @@ if __name__ == "__main__":
 
         # Test 3: Test expiry (manual simulation)
         test_console.print("\n[bold]Test 3: Simulate 'Approve All' expiry[/]")
-        global _approve_all_until # Need to access global for modification
         if _approve_all_until:
             _approve_all_until = datetime.datetime.now() - datetime.timedelta(seconds=1)
             is_active_after_expiry = is_approve_all_active(test_console)
