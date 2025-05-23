@@ -65,7 +65,7 @@ class QXLLMAgent:
         console: RichConsole,
         temperature: float = 0.7,
         max_output_tokens: Optional[int] = None,
-        reasoning_effort: Optional[str] = None, # Changed type hint back to Optional[str]
+        reasoning_effort: Optional[str] = None,
     ):
         self.model_name = model_name
         self.system_prompt = system_prompt
@@ -305,10 +305,14 @@ def initialize_llm_agent(
     try:
         temperature = float(os.environ.get("QX_MODEL_TEMPERATURE", "0.7"))
         max_output_tokens = int(os.environ.get("QX_MODEL_MAX_TOKENS", "4096"))
-        
+
         # Retrieve reasoning_effort as a string directly
         reasoning_effort: Optional[str] = os.environ.get("QX_MODEL_REASONING_EFFORT")
-        if reasoning_effort and reasoning_effort.lower() not in ["high", "medium", "low"]:
+        if reasoning_effort and reasoning_effort.lower() not in [
+            "high",
+            "medium",
+            "low",
+        ]:
             logger.warning(
                 f"Invalid value for QX_MODEL_REASONING_EFFORT: '{reasoning_effort}'. Expected 'high', 'medium', or 'low'. Setting to None."
             )
@@ -350,3 +354,4 @@ async def query_llm(
         logger.error(f"Error during LLM query: {e}", exc_info=True)
         console.print(f"[error]Error:[/] LLM query: {e}")
         return None
+

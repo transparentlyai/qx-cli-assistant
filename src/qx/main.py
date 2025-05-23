@@ -84,11 +84,11 @@ def _handle_model_command(agent: QXLLMAgent):
     # Access model settings directly from agent attributes
     temperature_val = agent.temperature
     max_tokens_val = agent.max_output_tokens
-    thinking_budget_val = agent.thinking_budget
+    reasoning_effort_val = agent.reasoning_effort # Changed from thinking_budget
 
     model_info_content += f"  Temperature: [green]{temperature_val}[/green]\n"
     model_info_content += f"  Max Output Tokens: [green]{max_tokens_val}[/green]\n"
-    model_info_content += f"  Thinking Budget: [green]{thinking_budget_val}[/green]\n"
+    model_info_content += f"  Reasoning Effort: [green]{reasoning_effort_val if reasoning_effort_val else 'None'}[/green]\n" # Changed from Thinking Budget
 
     qx_console.print(Panel(model_info_content, title="LLM Model Info", border_style="blue"))
 
