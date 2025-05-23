@@ -1,16 +1,16 @@
 import asyncio
-import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type
-
+from typing import Any, Dict, List, Optional, Tuple, Callable, Type
+import json
 import httpx
+
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam, ChatCompletionToolParam
-from pydantic import BaseModel
 from rich.console import Console as RichConsole
 from rich.text import Text
+from pydantic import BaseModel
 
 from qx.core.plugin_manager import PluginManager
 from qx.core.user_prompts import request_confirmation
@@ -60,24 +60,22 @@ class QXLLMAgent:
         console: RichConsole,
         temperature: float = 0.7,
         max_output_tokens: Optional[int] = None,
-        reasoning_effort: Optional[int] = None,
+        thinking_budget: Optional[int] = None,
     ):
         self.model_name = model_name
         self.system_prompt = system_prompt
         self.console = console
         self.temperature = temperature
         self.max_output_tokens = max_output_tokens
-        self.reasoning_effort = reasoning_effort
-
+        self.thinking_budget = thinking_budget
+        
         self._tool_functions: Dict[str, Callable] = {}
         self._openai_tools_schema: List[ChatCompletionToolParam] = []
         self._tool_input_models: Dict[str, Type[BaseModel]] = {}
-
+        
         for func, schema, input_model_class in tools:
             self._tool_functions[func.__name__] = func
-            self._openai_tools_schema.append(
-                ChatCompletionToolParam(type="function", function=schema)
-            )
+            self._openai_tools_schema.append(ChatCompletionToolParam(type="function", function=schema))
             self._tool_input_models[func.__name__] = input_model_class
 
         self.client = self._initialize_openai_client()
@@ -113,13 +111,13 @@ class QXLLMAgent:
 
         if message_history:
             messages.extend(message_history)
-
+        
         messages.append({"role": "user", "content": user_input})
 
         # Parameters for the chat completion
         chat_params: Dict[str, Any] = {
             "model": self.model_name,
-            "messages": messages,
+            "messages": [msg.model_dump() if isinstance(msg, BaseModel) else msg for msg in messages], # Convert messages to dicts
             "temperature": self.temperature,
             "tools": self._openai_tools_schema,
             "tool_choice": "auto",
@@ -127,15 +125,21 @@ class QXLLMAgent:
 
         if self.max_output_tokens is not None:
             chat_params["max_tokens"] = self.max_output_tokens
+        
+        # OpenRouter-specific parameters like 'reasoning' go into extra_body
+        extra_body_params = {}
+        if self.thinking_budget is not None:
+            extra_body_params["reasoning"] = {"max_tokens": self.thinking_budget}
 
-        if self.reasoning_effort is not None:
-            chat_params["reasoning_effort"] = self.reasoning_effort
+        if extra_body_params:
+            chat_params["extra_body"] = extra_body_params
+
 
         try:
             logger.debug(f"LLM Request Parameters: {json.dumps(chat_params, indent=2)}")
             response = await self.client.chat.completions.create(**chat_params)
             logger.debug(f"LLM Raw Response: {response.model_dump_json(indent=2)}")
-
+            
             response_message = response.choices[0].message
             messages.append(response_message)
 
@@ -145,24 +149,20 @@ class QXLLMAgent:
                     function_args = tool_call.function.arguments
 
                     if function_name not in self._tool_functions:
-                        error_msg = (
-                            f"LLM attempted to call unknown tool: {function_name}"
-                        )
+                        error_msg = f"LLM attempted to call unknown tool: {function_name}"
                         logger.error(error_msg)
                         self.console.print(f"[error]{error_msg}[/error]")
-                        messages.append(
-                            {
-                                "role": "tool",
-                                "tool_call_id": tool_call.id,
-                                "name": function_name,
-                                "content": f"Error: Unknown tool '{function_name}'",
-                            }
-                        )
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "name": function_name,
+                            "content": f"Error: Unknown tool '{function_name}'"
+                        })
                         return await self.run(user_input, messages)
-
+                    
                     tool_func = self._tool_functions[function_name]
                     tool_input_model = self._tool_input_models[function_name]
-
+                    
                     try:
                         parsed_args = {}
                         if function_args:
@@ -172,62 +172,49 @@ class QXLLMAgent:
                                 error_msg = f"LLM provided invalid JSON arguments for tool '{function_name}': {function_args}"
                                 logger.error(error_msg)
                                 self.console.print(f"[error]{error_msg}[/error]")
-                                messages.append(
-                                    {
-                                        "role": "tool",
-                                        "tool_call_id": tool_call.id,
-                                        "name": function_name,
-                                        "content": f"Error: Invalid arguments for tool '{function_name}'",
-                                    }
-                                )
+                                messages.append({
+                                    "role": "tool",
+                                    "tool_call_id": tool_call.id,
+                                    "name": function_name,
+                                    "content": f"Error: Invalid arguments for tool '{function_name}'"
+                                })
                                 return await self.run(user_input, messages)
 
                         tool_args_instance = tool_input_model(**parsed_args)
 
-                        tool_output = await tool_func(
-                            console=self.console, args=tool_args_instance
-                        )
-
-                        if hasattr(tool_output, "model_dump_json"):
+                        tool_output = await tool_func(console=self.console, args=tool_args_instance)
+                        
+                        if hasattr(tool_output, 'model_dump_json'):
                             tool_output_content = tool_output.model_dump_json()
                         else:
                             tool_output_content = str(tool_output)
 
-                        messages.append(
-                            {
-                                "role": "tool",
-                                "tool_call_id": tool_call.id,
-                                "name": function_name,
-                                "content": tool_output_content,
-                            }
-                        )
-
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "name": function_name,
+                            "content": tool_output_content
+                        })
+                        
                         return await self.run(user_input, messages)
 
                     except Exception as e:
                         error_msg = f"Error executing tool '{function_name}': {e}"
                         logger.error(error_msg, exc_info=True)
                         self.console.print(f"[error]{error_msg}[/error]")
-                        messages.append(
-                            {
-                                "role": "tool",
-                                "tool_call_id": tool_call.id,
-                                "name": function_name,
-                                "content": f"Error: Tool execution failed: {e}",
-                            }
-                        )
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "name": function_name,
+                            "content": f"Error: Tool execution failed: {e}"
+                        })
                         return await self.run(user_input, messages)
             else:
-
                 class QXRunResult:
-                    def __init__(
-                        self,
-                        output_content: str,
-                        all_msgs: List[ChatCompletionMessageParam],
-                    ):
+                    def __init__(self, output_content: str, all_msgs: List[ChatCompletionMessageParam]):
                         self.output = output_content
                         self._all_messages = all_msgs
-
+                    
                     def all_messages(self) -> List[ChatCompletionMessageParam]:
                         return self._all_messages
 
@@ -251,7 +238,6 @@ def initialize_llm_agent(
     plugin_manager = PluginManager()
     try:
         import sys
-
         src_path = Path(__file__).parent.parent.parent
         if str(src_path) not in sys.path:
             sys.path.insert(0, str(src_path))
@@ -270,9 +256,9 @@ def initialize_llm_agent(
         registered_tools = []
 
     try:
-        temperature = float(os.environ.get("QX_MODEL_TEMPERATURE", "0.2"))
+        temperature = float(os.environ.get("QX_MODEL_TEMPERATURE", "0.7"))
         max_output_tokens = int(os.environ.get("QX_MODEL_MAX_TOKENS", "4096"))
-        reasoning_effort = os.environ.get("QX_MODEL_REASONING_EFFORT", "medium")
+        thinking_budget = int(os.environ.get("QX_MODEL_REASONING_MAX_TOKENS", "2000"))
 
         agent = QXLLMAgent(
             model_name=model_name_str,
@@ -281,7 +267,7 @@ def initialize_llm_agent(
             console=console,
             temperature=temperature,
             max_output_tokens=max_output_tokens,
-            reasoning_effort=reasoning_effort,
+            thinking_budget=thinking_budget,
         )
         return agent
 
