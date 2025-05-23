@@ -1,9 +1,10 @@
 import datetime
 import logging
-from typing import Optional  # For potential future use, not strictly needed now
 
 from pydantic import BaseModel, Field
-from rich.console import Console as RichConsole # Import RichConsole for consistency in tool signatures
+from rich.console import (
+    Console as RichConsole,
+)  # Import RichConsole for consistency in tool signatures
 
 logger = logging.getLogger(__name__)
 
@@ -50,10 +51,10 @@ def get_current_time_tool(console: RichConsole) -> CurrentTimePluginOutput:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    test_console = RichConsole() # Create a dummy console for testing
+    test_console = RichConsole()  # Create a dummy console for testing
 
     # Test the tool function directly
-    output = get_current_time_tool(test_console) # Pass dummy console
+    output = get_current_time_tool(test_console)  # Pass dummy console
     print("Testing GetCurrentTimeTool directly:")
     print(f"  Time: {output.current_time}")
     print(f"  Timezone: {output.timezone}")
