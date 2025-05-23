@@ -3,6 +3,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Callable
+import json # Import json for parsing tool arguments
 
 from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam, ChatCompletionToolParam
@@ -120,8 +121,14 @@ class QXLLMAgent:
         if self.max_output_tokens:
             chat_params["max_tokens"] = self.max_output_tokens
         
+        # OpenRouter-specific parameters like 'reasoning' go into extra_body
+        extra_body_params = {}
         if self.thinking_budget:
-            chat_params["reasoning"] = {"max_tokens": self.thinking_budget}
+            extra_body_params["reasoning"] = {"max_tokens": self.thinking_budget}
+
+        if extra_body_params:
+            chat_params["extra_body"] = extra_body_params
+
 
         try:
             response = await self.client.chat.completions.create(**chat_params)
