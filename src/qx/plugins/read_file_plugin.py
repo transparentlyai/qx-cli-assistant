@@ -108,8 +108,8 @@ class ReadFilePluginOutput(BaseModel):
     )
 
 
-def read_file_tool(
-    console: RichConsole, # Updated signature
+async def read_file_tool( # Made async
+    console: RichConsole,
     args: ReadFilePluginInput,
 ) -> ReadFilePluginOutput:
     """
@@ -171,7 +171,7 @@ def read_file_tool(
 
     if needs_confirmation:
         prompt_msg = f"Allow QX to read file: '{expanded_path_arg}' (located outside the project, in your home directory)?"
-        decision_status, _ = request_confirmation(
+        decision_status, _ = await request_confirmation( # Await
             prompt_message=prompt_msg,
             console=console,
             allow_modify=False, # Read operations typically don't modify the path
@@ -212,6 +212,7 @@ def read_file_tool(
 
 
 if __name__ == "__main__":
+    import asyncio
     import shutil
     from rich.console import Console as RichConsole
 
@@ -297,70 +298,73 @@ if __name__ == "__main__":
     test_console.print(f"Simulated .Q file: {dot_q_file_path}")
 
 
-    test_console.print("\n[bold cyan]Test 1: Read project file (relative path)[/]")
-    input1 = ReadFilePluginInput(path="project_file.txt")
-    output1 = read_file_tool(test_console, input1) # Updated call
-    test_console.print(f"Output 1: {output1}")
-    assert output1.content == "This is a project file." and output1.error is None
+    async def run_tests(): # Wrapped tests in an async function
+        test_console.print("\n[bold cyan]Test 1: Read project file (relative path)[/]")
+        input1 = ReadFilePluginInput(path="project_file.txt")
+        output1 = await read_file_tool(test_console, input1) # Updated call
+        test_console.print(f"Output 1: {output1}")
+        assert output1.content == "This is a project file." and output1.error is None
 
-    test_console.print("\n[bold cyan]Test 2: Read .Q file (relative path)[/]")
-    input2 = ReadFilePluginInput(path=".Q/q_file.txt")
-    output2 = read_file_tool(test_console, input2) # Updated call
-    test_console.print(f"Output 2: {output2}")
-    assert output2.content == "This is a .Q file." and output2.error is None
+        test_console.print("\n[bold cyan]Test 2: Read .Q file (relative path)[/]")
+        input2 = ReadFilePluginInput(path=".Q/q_file.txt")
+        output2 = await read_file_tool(test_console, input2) # Updated call
+        test_console.print(f"Output 2: {output2}")
+        assert output2.content == "This is a .Q file." and output2.error is None
 
-    test_console.print("\n[bold cyan]Test 3: Read non-existent file[/]")
-    input3 = ReadFilePluginInput(path="non_existent_file.txt")
-    output3 = read_file_tool(test_console, input3) # Updated call
-    test_console.print(f"Output 3: {output3}")
-    assert output3.content is None and output3.error is not None
-    assert "not a file or does not exist" in output3.error or "File not found" in output3.error
-
-
-    # Test reading from outside project (in actual user home) - requires confirmation
-    # Change CWD outside the project to ensure it's not resolved as a project path
-    os.chdir(original_cwd)
-    test_console.print(f"Changed CWD to: {Path.cwd()} for home directory test")
-
-    test_console.print(f"\n[bold cyan]Test 4: Read file in user home ('{real_home_test_file_path}') - requires confirmation[/]")
-    input4 = ReadFilePluginInput(path=str(real_home_test_file_path)) # Absolute path to real home file
-    test_console.print(f"Path for Test 4: {str(real_home_test_file_path)}")
-    test_console.print("Please respond 'y' (approve) to the upcoming prompt for the test to pass.")
-    output4 = read_file_tool(test_console, input4) # Updated call
-    test_console.print(f"Output 4: {output4}")
-    if output4.error and "denied by user" in output4.error:
-        test_console.print("[yellow]Test 4 skipped or user denied - this is acceptable if you chose 'n'.[/yellow]")
-    else:
-        assert output4.content == "Real home test content." and output4.error is None
-    
-    # Test policy denial (e.g., /etc/hosts)
-    # This test might fail on systems where /etc/hosts is not readable by the user,
-    # but the policy denial should be caught first.
-    test_console.print("\n[bold cyan]Test 5: Read /etc/hosts (expect policy denial)[/]")
-    # Note: _find_project_root from original_cwd might still find the main QX project.
-    # The policy check is absolute, so this should be fine.
-    input5 = ReadFilePluginInput(path="/etc/hosts")
-    output5 = read_file_tool(test_console, input5) # Updated call
-    test_console.print(f"Output 5: {output5}")
-    assert output5.content is None and output5.error is not None
-    assert "Access denied by policy" in output5.error
-
-    # Test reading a directory
-    test_console.print("\n[bold cyan]Test 6: Attempt to read a directory[/]")
-    input6 = ReadFilePluginInput(path=str(test_project)) # Path to the directory
-    output6 = read_file_tool(test_console, input6) # Updated call
-    test_console.print(f"Output 6: {output6}")
-    assert output6.content is None and output6.error is not None
-    # Error message might vary slightly depending on when the check catches it
-    assert "Path is not a file" in output6.error or "is a directory" in output6.error
+        test_console.print("\n[bold cyan]Test 3: Read non-existent file[/]")
+        input3 = ReadFilePluginInput(path="non_existent_file.txt")
+        output3 = await read_file_tool(test_console, input3) # Updated call
+        test_console.print(f"Output 3: {output3}")
+        assert output3.content is None and output3.error is not None
+        assert "not a file or does not exist" in output3.error or "File not found" in output3.error
 
 
-    # --- Cleanup ---
-    test_console.print("\nCleaning up test files and directories...")
-    real_home_test_file_path.unlink(missing_ok=True)
-    os.chdir(original_cwd) # Change back to original CWD before removing test_base
-    if test_base.exists():
-        shutil.rmtree(test_base)
-    
-    test_console.print(f"Removed test base: {test_base}")
-    test_console.rule("Read_file_plugin tests finished.")
+        # Test reading from outside project (in actual user home) - requires confirmation
+        # Change CWD outside the project to ensure it's not resolved as a project path
+        os.chdir(original_cwd)
+        test_console.print(f"Changed CWD to: {Path.cwd()} for home directory test")
+
+        test_console.print(f"\n[bold cyan]Test 4: Read file in user home ('{real_home_test_file_path}') - requires confirmation[/]")
+        input4 = ReadFilePluginInput(path=str(real_home_test_file_path)) # Absolute path to real home file
+        test_console.print(f"Path for Test 4: {str(real_home_test_file_path)}")
+        test_console.print("Please respond 'y' (approve) to the upcoming prompt for the test to pass.")
+        output4 = await read_file_tool(test_console, input4) # Updated call
+        test_console.print(f"Output 4: {output4}")
+        if output4.error and "denied by user" in output4.error:
+            test_console.print("[yellow]Test 4 skipped or user denied - this is acceptable if you chose 'n'.[/yellow]")
+        else:
+            assert output4.content == "Real home test content." and output4.error is None
+        
+        # Test policy denial (e.g., /etc/hosts)
+        # This test might fail on systems where /etc/hosts is not readable by the user,
+        # but the policy denial should be caught first.
+        test_console.print("\n[bold cyan]Test 5: Read /etc/hosts (expect policy denial)[/]")
+        # Note: _find_project_root from original_cwd might still find the main QX project.
+        # The policy check is absolute, so this should be fine.
+        input5 = ReadFilePluginInput(path="/etc/hosts")
+        output5 = await read_file_tool(test_console, input5) # Updated call
+        test_console.print(f"Output 5: {output5}")
+        assert output5.content is None and output5.error is not None
+        assert "Access denied by policy" in output5.error
+
+        # Test reading a directory
+        test_console.print("\n[bold cyan]Test 6: Attempt to read a directory[/]")
+        input6 = ReadFilePluginInput(path=str(test_project)) # Path to the directory
+        output6 = await read_file_tool(test_console, input6) # Updated call
+        test_console.print(f"Output 6: {output6}")
+        assert output6.content is None and output6.error is not None
+        # Error message might vary slightly depending on when the check catches it
+        assert "Path is not a file" in output6.error or "is a directory" in output6.error
+
+
+        # --- Cleanup ---
+        test_console.print("\nCleaning up test files and directories...")
+        real_home_test_file_path.unlink(missing_ok=True)
+        os.chdir(original_cwd) # Change back to original CWD before removing test_base
+        if test_base.exists():
+            shutil.rmtree(test_base)
+        
+        test_console.print(f"Removed test base: {test_base}")
+        test_console.rule("Read_file_plugin tests finished.")
+
+    asyncio.run(run_tests())
