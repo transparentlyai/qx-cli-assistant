@@ -4,7 +4,7 @@ import subprocess
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
-from rich.console import Console as RichConsole # Import RichConsole directly
+from rich.console import Console as RichConsole  # Import RichConsole directly
 
 from qx.core.user_prompts import request_confirmation
 
@@ -202,12 +202,14 @@ DEFAULT_AUTO_APPROVED_SHELL_PATTERNS: List[str] = [
 
 
 class ExecuteShellPluginInput(BaseModel):
-    command: str = Field(..., description="The shell command to execute.")
+    command: str = Field(
+        ..., description="The shell command to execute. Non-interactive commands only."
+    )
 
 
 class ExecuteShellPluginOutput(BaseModel):
     command: str = Field(
-        description="The command that was attempted (possibly modified)."
+        description="The command that was attempted (possibly modified by the user)."
     )
     stdout: Optional[str] = Field(None, description="Standard output.")
     stderr: Optional[str] = Field(None, description="Standard error.")
@@ -235,7 +237,7 @@ def _is_command_auto_approved(command: str) -> bool:
     return False
 
 
-async def execute_shell_tool( # Made async
+async def execute_shell_tool(  # Made async
     console: RichConsole, args: ExecuteShellPluginInput
 ) -> ExecuteShellPluginOutput:
     """Tool for executing shell commands."""
@@ -276,7 +278,7 @@ async def execute_shell_tool( # Made async
 
     if needs_confirmation:
         prompt_msg = f"Allow QX to execute shell command: '{command_to_consider}'?"
-        decision_status, final_value = await request_confirmation( # Await
+        decision_status, final_value = await request_confirmation(  # Await
             prompt_message=prompt_msg,
             console=console,
             allow_modify=True,
@@ -409,13 +411,16 @@ async def execute_shell_tool( # Made async
 
 if __name__ == "__main__":
     import asyncio
+
     from rich.console import Console as RichConsole
 
     logging.basicConfig(level=logging.INFO)
     test_console = RichConsole()
 
     async def run_tests():
-        test_console.rule("Testing execute_shell_tool plugin with direct console passing")
+        test_console.rule(
+            "Testing execute_shell_tool plugin with direct console passing"
+        )
 
         # Test 1: Auto-approved command
         test_console.print(
@@ -424,7 +429,7 @@ if __name__ == "__main__":
         input1 = ExecuteShellPluginInput(
             command="echo 'auto hello'"
         )  # Using echo for predictable output
-        output1 = await execute_shell_tool(test_console, input1) # Updated call
+        output1 = await execute_shell_tool(test_console, input1)  # Updated call
         test_console.print(f"Output 1 STDOUT: {output1.stdout}")
         assert (
             output1.stdout == "auto hello"
@@ -437,7 +442,7 @@ if __name__ == "__main__":
             "\n[bold cyan]Test 2: Prohibited command (sudo reboot)[/bold cyan]"
         )
         input2 = ExecuteShellPluginInput(command="sudo reboot")
-        output2 = await execute_shell_tool(test_console, input2) # Updated call
+        output2 = await execute_shell_tool(test_console, input2)  # Updated call
         test_console.print(f"Output 2: {output2}")
         assert output2.error is not None and "prohibited by policy" in output2.error
         assert (
@@ -452,7 +457,7 @@ if __name__ == "__main__":
         )
         input3 = ExecuteShellPluginInput(command="echo 'Hello QX Shell'")
         test_console.print("Please respond 'y' to the prompt.")
-        output3 = await execute_shell_tool(test_console, input3) # Updated call
+        output3 = await execute_shell_tool(test_console, input3)  # Updated call
         test_console.print(f"Output 3 STDOUT: {output3.stdout}")
         assert (
             output3.stdout == "Hello QX Shell"
@@ -467,7 +472,7 @@ if __name__ == "__main__":
         )
         input4 = ExecuteShellPluginInput(command="echo 'wont run'")
         test_console.print("Please respond 'n' to the prompt.")
-        output4 = await execute_shell_tool(test_console, input4) # Updated call
+        output4 = await execute_shell_tool(test_console, input4)  # Updated call
         test_console.print(f"Output 4: {output4}")
         assert output4.error is not None and "denied by user" in output4.error
         assert (
@@ -486,7 +491,7 @@ if __name__ == "__main__":
         test_console.print(
             f"Please respond 'm', then enter '{modified_cmd}', then 'y' if asked to confirm modified."
         )
-        output5 = await execute_shell_tool(test_console, input5) # Updated call
+        output5 = await execute_shell_tool(test_console, input5)  # Updated call
         test_console.print(f"Output 5 STDOUT: {output5.stdout}")
         assert output5.command == modified_cmd and output5.stdout == "modified command"
         assert output5.return_code == 0 and output5.error is None
@@ -499,21 +504,25 @@ if __name__ == "__main__":
         input6 = ExecuteShellPluginInput(command=failing_cmd)
         # This command is not auto-approved, so it will require confirmation
         test_console.print("Please respond 'y' to the prompt for the failing command.")
-        output6 = await execute_shell_tool(test_console, input6) # Updated call
+        output6 = await execute_shell_tool(test_console, input6)  # Updated call
         test_console.print(f"Output 6: {output6}")
         assert output6.command == failing_cmd and output6.return_code != 0
-        assert output6.stderr is not None  # ls to non-existent usually outputs to stderr
+        assert (
+            output6.stderr is not None
+        )  # ls to non-existent usually outputs to stderr
         assert output6.error is None  # Not a pre-execution error
 
         # Test 7: Command modified to empty string
         test_console.print(
             "\n[bold cyan]Test 7: Command modified to empty string[/bold cyan]"
         )
-        input7 = ExecuteShellPluginInput(command="echo 'this will be modified to empty'")
+        input7 = ExecuteShellPluginInput(
+            command="echo 'this will be modified to empty'"
+        )
         test_console.print(
             "Please respond 'm', then enter an empty string (just press Enter)."
         )
-        output7 = await execute_shell_tool(test_console, input7) # Updated call
+        output7 = await execute_shell_tool(test_console, input7)  # Updated call
         test_console.print(f"Output 7: {output7}")
         assert output7.error == "Error: Command modified to an empty string."
         assert (
@@ -528,16 +537,19 @@ if __name__ == "__main__":
             command="echo 'this will be modified to sudo false'"
         )
         test_console.print("Please respond 'm', then enter 'sudo false'.")
-        output8 = await execute_shell_tool(test_console, input8) # Updated call
+        output8 = await execute_shell_tool(test_console, input8)  # Updated call
         test_console.print(f"Output 8: {output8}")
         assert (
-            output8.error == "Error: Modified command 'sudo false' is prohibited by policy."
+            output8.error
+            == "Error: Modified command 'sudo false' is prohibited by policy."
         )
         assert output8.command == "sudo false"
 
-        test_console.print("\n[bold cyan]Test 9: Empty command string input[/bold cyan]")
+        test_console.print(
+            "\n[bold cyan]Test 9: Empty command string input[/bold cyan]"
+        )
         input9 = ExecuteShellPluginInput(command="  ")  # Whitespace only
-        output9 = await execute_shell_tool(test_console, input9) # Updated call
+        output9 = await execute_shell_tool(test_console, input9)  # Updated call
         test_console.print(f"Output 9: {output9}")
         assert output9.error == "Error: Empty command provided."
         assert output9.command == ""
@@ -545,3 +557,4 @@ if __name__ == "__main__":
         test_console.rule("Execute_shell_plugin tests finished.")
 
     asyncio.run(run_tests())
+
