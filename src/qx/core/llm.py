@@ -65,14 +65,14 @@ class QXLLMAgent:
         console: RichConsole,
         temperature: float = 0.7,
         max_output_tokens: Optional[int] = None,
-        thinking_budget: Optional[int] = None,
+        reasoning_effort: Optional[int] = None, # Changed type hint to Optional[int]
     ):
         self.model_name = model_name
         self.system_prompt = system_prompt
         self.console = console
         self.temperature = temperature
         self.max_output_tokens = max_output_tokens
-        self.thinking_budget = thinking_budget
+        self.reasoning_effort = reasoning_effort
 
         self._tool_functions: Dict[str, Callable] = {}
         self._openai_tools_schema: List[ChatCompletionToolParam] = []
@@ -149,8 +149,9 @@ class QXLLMAgent:
 
         # OpenRouter-specific parameters like 'reasoning' go into extra_body
         extra_body_params = {}
-        if self.thinking_budget is not None:
-            extra_body_params["reasoning"] = {"max_tokens": self.thinking_budget}
+        if self.reasoning_effort is not None:
+            # Ensure reasoning_effort is an integer for max_tokens
+            extra_body_params["reasoning"] = {"max_tokens": self.reasoning_effort}
 
         if extra_body_params:
             chat_params["extra_body"] = extra_body_params
@@ -304,7 +305,16 @@ def initialize_llm_agent(
     try:
         temperature = float(os.environ.get("QX_MODEL_TEMPERATURE", "0.7"))
         max_output_tokens = int(os.environ.get("QX_MODEL_MAX_TOKENS", "4096"))
-        thinking_budget = int(os.environ.get("QX_MODEL_REASONING_MAX_TOKENS", "2000"))
+        
+        reasoning_effort_str = os.environ.get("QX_MODEL_REASONING_EFFORT")
+        reasoning_effort: Optional[int] = None
+        if reasoning_effort_str:
+            try:
+                reasoning_effort = int(reasoning_effort_str)
+            except ValueError:
+                logger.warning(
+                    f"Invalid value for QX_MODEL_REASONING_EFFORT: '{reasoning_effort_str}'. Expected an integer. Setting to None."
+                )
 
         agent = QXLLMAgent(
             model_name=model_name_str,
@@ -313,7 +323,7 @@ def initialize_llm_agent(
             console=console,
             temperature=temperature,
             max_output_tokens=max_output_tokens,
-            thinking_budget=thinking_budget,
+            reasoning_effort=reasoning_effort,
         )
         return agent
 
