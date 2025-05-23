@@ -2,18 +2,15 @@ import asyncio
 import logging
 import os
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Callable
 
-from pydantic_ai import Agent
-from pydantic_ai.messages import ModelMessage
-from pydantic_ai.models.openai import OpenAIModel  # Import OpenAIModel
-from pydantic_ai.providers.openai import OpenAIProvider  # Import OpenAIProvider
+from openai import OpenAI
+from openai.types.chat import ChatCompletionMessageParam, ChatCompletionToolParam
 from rich.console import Console as RichConsole
+from rich.text import Text
 
-from qx.core.context import QXToolDependencies
-
-# New imports for plugin system and dependencies
 from qx.core.plugin_manager import PluginManager
+from qx.core.user_prompts import request_confirmation
 
 logger = logging.getLogger(__name__)
 
@@ -47,27 +44,197 @@ def load_and_format_system_prompt() -> str:
         return "You are a helpful AI assistant."
 
 
-def initialize_llm_agent(
-    model_name_str: str,  # This will now be the full OpenRouter model string
-    console: RichConsole,  # Console is kept as it's needed for QXToolDependencies
-) -> Optional[Agent]:
+class QXLLMAgent:
     """
-    Initializes the Pydantic-AI Agent using the new plugin architecture,
-    configured for OpenRouter.
+    Encapsulates the LLM client and manages interactions, including tool calling.
+    """
+
+    def __init__(
+        self,
+        model_name: str,
+        system_prompt: str,
+        tools: List[Tuple[Callable, Dict[str, Any]]], # List of (function, openai_tool_schema)
+        console: RichConsole,
+        temperature: float = 0.7,
+        max_output_tokens: Optional[int] = None,
+        thinking_budget: Optional[int] = None,
+    ):
+        self.model_name = model_name
+        self.system_prompt = system_prompt
+        self.console = console
+        self.temperature = temperature
+        self.max_output_tokens = max_output_tokens
+        self.thinking_budget = thinking_budget # This maps to OpenRouter's reasoning.max_tokens
+        
+        self._tool_functions: Dict[str, Callable] = {}
+        self._openai_tools_schema: List[ChatCompletionToolParam] = []
+        
+        for func, schema in tools:
+            self._tool_functions[func.__name__] = func
+            self._openai_tools_schema.append(ChatCompletionToolParam(type="function", function=schema))
+
+        self.client = self._initialize_openai_client()
+        logger.info(f"QXLLMAgent initialized with model: {self.model_name}")
+        logger.info(f"Registered {len(self._tool_functions)} tool functions.")
+
+    def _initialize_openai_client(self) -> OpenAI:
+        """Initializes the OpenAI client for OpenRouter."""
+        openrouter_api_key = os.environ.get("OPENROUTER_API_KEY")
+        if not openrouter_api_key:
+            self.console.print(
+                "[error]Error:[/] OPENROUTER_API_KEY environment variable not set."
+            )
+            raise ValueError("OPENROUTER_API_KEY not set.")
+
+        return OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=openrouter_api_key,
+        )
+
+    async def run(
+        self,
+        user_input: str,
+        message_history: Optional[List[ChatCompletionMessageParam]] = None,
+    ) -> Any:
+        """
+        Runs the LLM agent, handling conversation turns and tool calls.
+        Returns the final message content or tool output.
+        """
+        messages: List[ChatCompletionMessageParam] = []
+        messages.append({"role": "system", "content": self.system_prompt})
+
+        if message_history:
+            messages.extend(message_history)
+        
+        messages.append({"role": "user", "content": user_input})
+
+        # Parameters for the chat completion
+        chat_params: Dict[str, Any] = {
+            "model": self.model_name,
+            "messages": messages,
+            "temperature": self.temperature,
+            "tools": self._openai_tools_schema,
+            "tool_choice": "auto", # Allow model to choose tools
+        }
+
+        if self.max_output_tokens:
+            chat_params["max_tokens"] = self.max_output_tokens
+        
+        if self.thinking_budget:
+            chat_params["reasoning"] = {"max_tokens": self.thinking_budget}
+
+        try:
+            response = await self.client.chat.completions.create(**chat_params)
+            
+            response_message = response.choices[0].message
+            messages.append(response_message) # Add assistant's response to history
+
+            if response_message.tool_calls:
+                for tool_call in response_message.tool_calls:
+                    function_name = tool_call.function.name
+                    function_args = tool_call.function.arguments
+
+                    if function_name not in self._tool_functions:
+                        error_msg = f"LLM attempted to call unknown tool: {function_name}"
+                        logger.error(error_msg)
+                        self.console.print(f"[error]{error_msg}[/error]")
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "name": function_name,
+                            "content": f"Error: Unknown tool '{function_name}'"
+                        })
+                        # Continue to next turn with error message
+                        return await self.run(user_input, messages) # Pass updated messages
+                    
+                    tool_func = self._tool_functions[function_name]
+                    
+                    try:
+                        # Parse arguments. LLM might provide invalid JSON.
+                        parsed_args = {}
+                        if function_args:
+                            try:
+                                parsed_args = json.loads(function_args)
+                            except json.JSONDecodeError:
+                                error_msg = f"LLM provided invalid JSON arguments for tool '{function_name}': {function_args}"
+                                logger.error(error_msg)
+                                self.console.print(f"[error]{error_msg}[/error]")
+                                messages.append({
+                                    "role": "tool",
+                                    "tool_call_id": tool_call.id,
+                                    "name": function_name,
+                                    "content": f"Error: Invalid arguments for tool '{function_name}'"
+                                })
+                                return await self.run(user_input, messages) # Pass updated messages
+
+                        # Execute the tool function
+                        # Pass console directly to tool functions
+                        tool_output = tool_func(console=self.console, **parsed_args)
+                        
+                        # Tool output is expected to be a Pydantic BaseModel.
+                        # Convert it to a dictionary for the LLM.
+                        if hasattr(tool_output, 'model_dump_json'):
+                            tool_output_content = tool_output.model_dump_json()
+                        else:
+                            tool_output_content = str(tool_output) # Fallback for non-Pydantic outputs
+
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "name": function_name,
+                            "content": tool_output_content
+                        })
+                        
+                        # Recursively call run with updated messages to allow LLM to process tool output
+                        return await self.run(user_input, messages)
+
+                    except Exception as e:
+                        error_msg = f"Error executing tool '{function_name}': {e}"
+                        logger.error(error_msg, exc_info=True)
+                        self.console.print(f"[error]{error_msg}[/error]")
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "name": function_name,
+                            "content": f"Error: Tool execution failed: {e}"
+                        })
+                        return await self.run(user_input, messages) # Pass updated messages
+            else:
+                # If no tool calls, it's a final message
+                # Return a simple object that mimics pydantic_ai.RunResult for main.py
+                class QXRunResult:
+                    def __init__(self, output_content: str, all_msgs: List[ChatCompletionMessageParam]):
+                        self.output = output_content
+                        self._all_messages = all_msgs
+                    
+                    def all_messages(self) -> List[ChatCompletionMessageParam]:
+                        return self._all_messages
+
+                return QXRunResult(response_message.content, messages)
+
+        except Exception as e:
+            logger.error(f"Error during LLM chat completion: {e}", exc_info=True)
+            self.console.print(f"[error]Error during LLM chat completion: {e}[/error]")
+            return None
+
+
+def initialize_llm_agent(
+    model_name_str: str,
+    console: RichConsole,
+) -> Optional[QXLLMAgent]:
+    """
+    Initializes the QXLLMAgent with system prompt and discovered tools.
     """
     system_prompt_content = load_and_format_system_prompt()
 
-    # Instantiate PluginManager and load plugins
     plugin_manager = PluginManager()
     try:
         import sys
-
-        src_path = Path(
-            __file__
-        ).parent.parent.parent  # Assuming llm.py is in src/qx/core
+        src_path = Path(__file__).parent.parent.parent
         if str(src_path) not in sys.path:
             sys.path.insert(0, str(src_path))
 
+        # load_plugins now returns (function, openai_tool_schema) tuples
         registered_tools = plugin_manager.load_plugins(plugin_package_path="qx.plugins")
         if not registered_tools:
             logger.warning(
@@ -82,89 +249,42 @@ def initialize_llm_agent(
         registered_tools = []
 
     try:
-        openrouter_api_key = os.environ.get("OPENROUTER_API_KEY")
-        if not openrouter_api_key:
-            console.print(
-                "[error]Error:[/] OPENROUTER_API_KEY environment variable not set."
-            )
-            return None
+        # Default model settings (can be made configurable later)
+        temperature = float(os.environ.get("QX_LLM_TEMPERATURE", "0.7"))
+        max_output_tokens = int(os.environ.get("QX_LLM_MAX_OUTPUT_TOKENS", "4096"))
+        thinking_budget = int(os.environ.get("QX_LLM_THINKING_BUDGET", "2000")) # OpenRouter specific
 
-        # OpenRouter uses the OpenAI-compatible API
-        openrouter_base_url = "https://openrouter.ai/api/v1"
-
-        # Initialize OpenAIProvider for OpenRouter
-        provider = OpenAIProvider(
-            api_key=openrouter_api_key,
-            base_url=openrouter_base_url,
-        )
-
-        # Initialize OpenAIModel with the full model name from QX_MODEL_NAME
-        # and the configured OpenRouter provider.
-        model = OpenAIModel(
+        agent = QXLLMAgent(
             model_name=model_name_str,
-            provider=provider,
-        )
-
-        # Model settings (temperature, max_tokens, thinking_budget) are not directly
-        # supported by OpenAIModel in the same way as GeminiModelSettings.
-        # If these need to be passed, they would typically be part of the model's
-        # extra_body or model_kwargs, which would require a more complex mapping
-        # or a custom PydanticAI model wrapper if PydanticAI doesn't expose them
-        # uniformly across all OpenAI-compatible models.
-        # For now, we omit them as they were specific to GeminiModelSettings.
-        model_settings = None
-
-        agent = Agent(
-            model=model,
             system_prompt=system_prompt_content,
             tools=registered_tools,
-            deps_type=QXToolDependencies,
-            model_settings=model_settings,  # This will be None for now
+            console=console,
+            temperature=temperature,
+            max_output_tokens=max_output_tokens,
+            thinking_budget=thinking_budget,
         )
-        logger.info(
-            f"Pydantic-AI Agent initialized with {len(registered_tools)} tools and deps_type QXToolDependencies."
-        )
-
-        if agent.model_settings:
-            logger.debug(
-                f"Agent initialized with model settings: {agent.model_settings}"
-            )
-        else:
-            logger.debug("Agent initialized without specific model settings.")
-
         return agent
 
     except Exception as e:
-        logger.error(f"Failed to initialize Pydantic-AI Agent: {e}", exc_info=True)
+        logger.error(f"Failed to initialize QXLLMAgent: {e}", exc_info=True)
         console.print(f"[error]Error:[/] Init LLM Agent: {e}")
         return None
 
 
 async def query_llm(
-    agent: Agent,
+    agent: QXLLMAgent,
     user_input: str,
-    console: RichConsole,  # Keep console to create QXToolDependencies
-    message_history: Optional[List[ModelMessage]] = None,
+    console: RichConsole, # Kept for consistency, but agent has its own console
+    message_history: Optional[List[ChatCompletionMessageParam]] = None,
 ) -> Optional[Any]:
     """
     Queries the LLM agent.
-    Injects QXToolDependencies (containing the console) into the agent run.
     """
     try:
-        # Create the dependencies instance to be passed to the agent run
-        tool_deps = QXToolDependencies(console=console)
-
-        if message_history:
-            result = await agent.run(
-                user_input,
-                message_history=message_history,
-                deps=tool_deps,  # Pass dependencies
-            )
-        else:
-            result = await agent.run(
-                user_input,
-                deps=tool_deps,  # Pass dependencies
-            )
+        result = await agent.run(
+            user_input,
+            message_history=message_history,
+        )
         return result
     except Exception as e:
         logger.error(f"Error during LLM query: {e}", exc_info=True)
