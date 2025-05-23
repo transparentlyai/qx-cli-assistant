@@ -3,32 +3,35 @@ import inspect
 import logging
 import pkgutil
 from pathlib import Path
-from typing import Callable, List, Any
+from typing import Callable, List, Any, Dict, Tuple
+
+from pydantic import BaseModel, Field # Import BaseModel and Field for schema extraction
 
 logger = logging.getLogger(__name__)
 
 class PluginManager:
     """
     Manages the discovery and loading of QX plugins.
-    Plugins are expected to be PydanticAI-compatible tools (functions).
+    Plugins are expected to be functions with Pydantic BaseModel input arguments.
     """
 
     def __init__(self):
         pass
 
-    def load_plugins(self, plugin_package_path: str = "qx.plugins") -> List[Callable[..., Any]]:
+    def load_plugins(self, plugin_package_path: str = "qx.plugins") -> List[Tuple[Callable[..., Any], Dict[str, Any]]]:
         """
         Scans the specified plugin package directory for modules, imports them,
-        and collects PydanticAI-compatible tool functions.
+        and collects QX-compatible tool functions along with their OpenAI-compatible schemas.
 
         Args:
             plugin_package_path: The dot-separated path to the plugins package
                                  (e.g., "qx.plugins").
 
         Returns:
-            A list of callable tool functions.
+            A list of tuples, where each tuple contains:
+            (callable_tool_function, openai_tool_json_schema_dict).
         """
-        loaded_tools: List[Callable[..., Any]] = []
+        loaded_tools: List[Tuple[Callable[..., Any], Dict[str, Any]]] = []
         
         try:
             package = importlib.import_module(plugin_package_path)
@@ -48,8 +51,37 @@ class PluginManager:
                     # Convention: tool functions are named like '*_tool'
                     for name, func in inspect.getmembers(plugin_module, inspect.isfunction):
                         if name.endswith("_tool"):
-                            logger.info(f"Discovered tool: '{name}' in module '{full_module_name}'")
-                            loaded_tools.append(func)
+                            # Extract schema from the tool function's signature
+                            signature = inspect.signature(func)
+                            parameters = signature.parameters
+
+                            # Look for a parameter annotated with a Pydantic BaseModel
+                            input_model: Optional[BaseModel] = None
+                            for param_name, param in parameters.items():
+                                if param_name == "console": # Skip console parameter
+                                    continue
+                                if inspect.isclass(param.annotation) and issubclass(param.annotation, BaseModel):
+                                    input_model = param.annotation
+                                    break
+                            
+                            if input_model is None:
+                                logger.warning(f"Tool '{name}' in module '{full_module_name}' does not have a Pydantic BaseModel input argument. Skipping.")
+                                continue
+
+                            # Construct OpenAI-compatible tool schema
+                            tool_name = func.__name__
+                            tool_description = inspect.getdoc(func) or ""
+                            tool_parameters_schema = input_model.model_json_schema()
+
+                            openai_tool_schema = {
+                                "name": tool_name,
+                                "description": tool_description,
+                                "parameters": tool_parameters_schema,
+                            }
+                            
+                            logger.info(f"Discovered tool: '{name}' in module '{full_module_name}' with schema.")
+                            loaded_tools.append((func, openai_tool_schema))
+
                 except ImportError as e:
                     logger.error(f"Failed to import plugin module '{module_name}': {e}", exc_info=True)
                 except Exception as e:
@@ -66,30 +98,45 @@ if __name__ == "__main__":
     
     # Create dummy structure for testing if it doesn't exist
     # (This part is for local testing of this script, not part of QX runtime)
-    from qx.core.paths import PROJECT_ROOT_PATH
+    from qx.core.paths import USER_HOME_DIR # Using USER_HOME_DIR for a safe temp location
     
-    # Assuming PROJECT_ROOT_PATH is correctly set to the root of your qx project
-    # e.g., /home/mauro/projects/qx
-    
-    # Construct the path to src/qx/plugins
-    plugins_dir = PROJECT_ROOT_PATH / "src" / "qx" / "plugins"
+    # Construct a temporary plugins directory for testing
+    temp_test_dir = USER_HOME_DIR / ".qx_test_plugins"
+    plugins_dir = temp_test_dir / "qx" / "plugins"
     plugins_dir.mkdir(parents=True, exist_ok=True)
     (plugins_dir / "__init__.py").touch(exist_ok=True) # Ensure it's a package
 
     # Dummy plugin 1
     dummy_plugin_1_content = """
 from pydantic import BaseModel, Field
-def dummy_read_tool(path: str) -> str:
-    '''Reads a dummy file.'''
-    return f"Content of {path}"
+from rich.console import Console as RichConsole
+
+class DummyReadInput(BaseModel):
+    path: str = Field(..., description="Path to read.")
+
+class DummyReadOutput(BaseModel):
+    content: str
+
+def dummy_read_tool(console: RichConsole, args: DummyReadInput) -> DummyReadOutput:
+    '''Reads a dummy file content.'''
+    console.print(f"Dummy reading {args.path}")
+    return DummyReadOutput(content=f"Content of {args.path}")
 """
     (plugins_dir / "dummy_read_plugin.py").write_text(dummy_plugin_1_content)
 
     # Dummy plugin 2
     dummy_plugin_2_content = """
-def dummy_write_tool(path: str, content: str) -> str:
-    '''Writes dummy content.'''
-    return f"Wrote to {path}"
+from pydantic import BaseModel, Field
+from rich.console import Console as RichConsole
+
+class DummyWriteInput(BaseModel):
+    path: str = Field(..., description="Path to write.")
+    data: str = Field(..., description="Data to write.")
+
+def dummy_write_tool(console: RichConsole, args: DummyWriteInput) -> str:
+    '''Writes dummy content to a file.'''
+    console.print(f"Dummy writing to {args.path}")
+    return f"Wrote '{args.data}' to {args.path}"
 
 def another_utility_func(): # Should not be picked up
     pass
@@ -103,41 +150,42 @@ def not_a_tool_function():
 """
     (plugins_dir / "dummy_other_plugin.py").write_text(dummy_plugin_3_content)
 
+    # Dummy plugin 4 (tool without Pydantic input)
+    dummy_plugin_4_content = """
+from rich.console import Console as RichConsole
+def no_pydantic_tool(console: RichConsole, some_arg: str) -> str:
+    '''A tool without Pydantic input.'''
+    return f"Processed {some_arg}"
+"""
+    (plugins_dir / "no_pydantic_plugin.py").write_text(dummy_plugin_4_content)
+
 
     print("Testing PluginManager...")
     logging.basicConfig(level=logging.INFO)
     manager = PluginManager()
-    # We need to ensure qx.plugins is in sys.path or discoverable
-    # For this test, assuming the script is run from a context where qx.plugins is importable
     
-    # Adjust path for importlib if necessary, or ensure PYTHONPATH is set
-    # For direct execution, if qx is in the parent of src, this might work:
+    # Add the temporary test directory to sys.path so importlib can find 'qx.plugins'
     import sys
-    sys.path.insert(0, str(PROJECT_ROOT_PATH / "src")) # Add src to path for qx.plugins
+    sys.path.insert(0, str(temp_test_dir))
     
-    discovered_tools = manager.load_plugins() # Default path is "qx.plugins"
+    discovered_tools = manager.load_plugins()
     
     print(f"\nDiscovered {len(discovered_tools)} tools:")
-    for tool_func in discovered_tools:
+    for tool_func, tool_schema in discovered_tools:
         print(f"  - {tool_func.__name__} (from module: {tool_func.__module__})")
+        print(f"    Schema: {tool_schema}")
         if hasattr(tool_func, "__doc__") and tool_func.__doc__:
              print(f"    Doc: {tool_func.__doc__.strip()}")
 
-    # Expected output:
-    # Discovered 2 tools:
-    #   - dummy_read_tool (from module: qx.plugins.dummy_read_plugin)
-    #     Doc: Reads a dummy file.
-    #   - dummy_write_tool (from module: qx.plugins.dummy_write_plugin)
-    #     Doc: Writes dummy content.
+    # Expected output should include dummy_read_tool and dummy_write_tool with their schemas.
+    # no_pydantic_tool should be skipped with a warning.
 
-    # Cleanup dummy files (optional, for cleanliness)
-    # (plugins_dir / "dummy_read_plugin.py").unlink(missing_ok=True)
-    # (plugins_dir / "dummy_write_plugin.py").unlink(missing_ok=True)
-    # (plugins_dir / "dummy_other_plugin.py").unlink(missing_ok=True)
-    # if not any(plugins_dir.iterdir()): # if __init__.py is the only thing left
-    #     (plugins_dir / "__init__.py").unlink(missing_ok=True)
-    #     try:
-    #         plugins_dir.rmdir()
-    #     except OSError:
-    #         pass # might not be empty if other files were created
+    # Cleanup dummy files
+    import shutil
+    if temp_test_dir.exists():
+        shutil.rmtree(temp_test_dir)
+    
+    # Remove the added path from sys.path
+    sys.path.remove(str(temp_test_dir))
+
     print("\nPluginManager test finished.")

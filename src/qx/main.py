@@ -4,7 +4,7 @@ import os
 import sys
 from typing import Any, List, Optional
 
-from pydantic_ai.messages import ModelMessage
+from openai.types.chat import ChatCompletionMessageParam # Import for message history type
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.text import Text
@@ -16,7 +16,7 @@ from qx.core.constants import (
     DEFAULT_MODEL,
     DEFAULT_SYNTAX_HIGHLIGHT_THEME,
 )
-from qx.core.llm import initialize_llm_agent, query_llm
+from qx.core.llm import initialize_llm_agent, query_llm, QXLLMAgent # Import QXLLMAgent
 
 # --- QX Version ---
 QX_VERSION = "0.3.3" # Updated for this refactor
@@ -70,7 +70,7 @@ async def _async_main():
     logger.debug(f"Initializing LLM agent with parameters:")
     logger.debug(f"  Model Name: {model_name_from_env}")
 
-    agent = initialize_llm_agent(
+    agent: Optional[QXLLMAgent] = initialize_llm_agent( # Type hint agent as QXLLMAgent
         model_name_str=model_name_from_env,
         console=qx_console,
     )
@@ -84,7 +84,7 @@ async def _async_main():
     info_text = f"QX ver:{QX_VERSION} - {model_name_from_env}"
     qx_console.print(Text(info_text, style="dim"))
 
-    current_message_history: Optional[List[ModelMessage]] = None
+    current_message_history: Optional[List[ChatCompletionMessageParam]] = None # Updated type hint
 
     while True:
         try:
@@ -101,22 +101,20 @@ async def _async_main():
             # Handle /model command
             if user_input.strip().lower() == "/model":
                 model_info_content = f"[bold]Current LLM Model Configuration:[/bold]\n"
-                model_info_content += f"  Model Name: [green]{agent.model.model_name}[/green]\n"
-                model_info_content += f"  Provider Base URL: [green]{agent.model.provider.base_url}[/green]\n"
+                model_info_content += f"  Model Name: [green]{agent.model_name}[/green]\n"
+                # OpenRouter models don't have a direct "provider.base_url" attribute on the agent itself
+                # The base_url is part of the internal client configuration.
+                # For simplicity, we can just state it's OpenRouter.
+                model_info_content += f"  Provider: [green]OpenRouter (https://openrouter.ai/api/v1)[/green]\n"
                 
-                if agent.model_settings:
-                    # Access model settings as a dictionary, as indicated by the error
-                    settings_dict = agent.model_settings
-                    
-                    temperature_val = settings_dict.get("temperature", "Not set")
-                    max_tokens_val = settings_dict.get("max_output_tokens", "Not set")
-                    thinking_budget_val = settings_dict.get("thinking_budget", "Not set")
+                # Access model settings directly from agent attributes
+                temperature_val = agent.temperature
+                max_tokens_val = agent.max_output_tokens
+                thinking_budget_val = agent.thinking_budget
 
-                    model_info_content += f"  Temperature: [green]{temperature_val}[/green]\n"
-                    model_info_content += f"  Max Output Tokens: [green]{max_tokens_val}[/green]\n"
-                    model_info_content += f"  Thinking Budget: [green]{thinking_budget_val}[/green]\n"
-                else:
-                    model_info_content += "  Model Settings: [yellow]Default (no specific settings applied)[/yellow]\n"
+                model_info_content += f"  Temperature: [green]{temperature_val}[/green]\n"
+                model_info_content += f"  Max Output Tokens: [green]{max_tokens_val}[/green]\n"
+                model_info_content += f"  Thinking Budget: [green]{thinking_budget_val}[/green]\n"
 
                 qx_console.print(Panel(model_info_content, title="LLM Model Info", border_style="blue"))
                 continue # Skip further processing for this command

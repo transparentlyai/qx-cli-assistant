@@ -4,9 +4,8 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 from pydantic import BaseModel, Field
-from pydantic_ai import RunContext  # Import RunContext
+from rich.console import Console as RichConsole # Import RichConsole directly
 
-from qx.core.context import QXToolDependencies  # Import dependencies context
 from qx.core.paths import USER_HOME_DIR, _find_project_root
 from qx.core.user_prompts import request_confirmation
 
@@ -110,7 +109,7 @@ class ReadFilePluginOutput(BaseModel):
 
 
 def read_file_tool(
-    ctx: RunContext[QXToolDependencies],
+    console: RichConsole, # Updated signature
     args: ReadFilePluginInput,
 ) -> ReadFilePluginOutput:
     """
@@ -119,7 +118,7 @@ def read_file_tool(
     If the file is outside the project but within the user's home directory, user confirmation is requested.
     Outputs status messages to the console during operation.
     """
-    console = ctx.deps.console
+    # console is now directly available, no need for ctx.deps.console
 
     original_path_arg = args.path
     expanded_path_arg = os.path.expanduser(original_path_arg)
@@ -191,7 +190,7 @@ def read_file_tool(
             )
 
     # If all checks passed and confirmed (if needed):
-    console.print(f"[info]Reading file:[/info] {expanded_path_arg}")
+    console.print(f"[info]Reading file:[/info] {absolute_path_to_evaluate}") # Use absolute path for clarity
 
     # Ensure the path passed to core logic is the fully resolved absolute path
     # and that it has been verified to be a file before calling.
@@ -208,7 +207,7 @@ def read_file_tool(
         console.print(f"[error]Failed to read '{expanded_path_arg}':[/error] {error_from_core}")
         return ReadFilePluginOutput(path=expanded_path_arg, content=content, error=error_from_core) # content will be None
     else:
-        console.print(f"[success]Successfully read file:[/success] {expanded_path_arg}")
+        console.print(f"[success]Successfully read file:[/success] {absolute_path_to_evaluate}") # Use absolute path for clarity
         return ReadFilePluginOutput(path=expanded_path_arg, content=content, error=None)
 
 
@@ -226,14 +225,8 @@ if __name__ == "__main__":
 
     test_console = RichConsole()
 
-    # Create dummy context for testing
-    test_deps = QXToolDependencies(console=test_console)
-
-    class DummyRunContext(RunContext[QXToolDependencies]):
-        def __init__(self, deps: QXToolDependencies):
-            super().__init__(deps=deps, usage=None) # type: ignore
-
-    dummy_ctx = DummyRunContext(deps=test_deps)
+    # No RunContext or QXToolDependencies needed for testing tool directly
+    # dummy_ctx = DummyRunContext(deps=test_deps) # Removed
 
     # --- Test Setup ---
     # Use a temporary directory within the project's ./tmp for tests
@@ -280,7 +273,7 @@ if __name__ == "__main__":
     # or the test environment would be more isolated. For now, we'll patch it.
     
     # Monkeypatch USER_HOME_DIR for the duration of the tests
-    # This requires careful handling if tests run in parallel or if USER_HOME_DIR is imported elsewhere
+    # This is a bit of a hack for testing; in real use, request_confirmation would set this.
     # For this self-contained test, it's manageable.
     
     # To properly test USER_HOME_DIR logic, we need to adjust where `is_path_allowed` and
@@ -306,19 +299,19 @@ if __name__ == "__main__":
 
     test_console.print("\n[bold cyan]Test 1: Read project file (relative path)[/]")
     input1 = ReadFilePluginInput(path="project_file.txt")
-    output1 = read_file_tool(dummy_ctx, input1)
+    output1 = read_file_tool(test_console, input1) # Updated call
     test_console.print(f"Output 1: {output1}")
     assert output1.content == "This is a project file." and output1.error is None
 
     test_console.print("\n[bold cyan]Test 2: Read .Q file (relative path)[/]")
     input2 = ReadFilePluginInput(path=".Q/q_file.txt")
-    output2 = read_file_tool(dummy_ctx, input2)
+    output2 = read_file_tool(test_console, input2) # Updated call
     test_console.print(f"Output 2: {output2}")
     assert output2.content == "This is a .Q file." and output2.error is None
 
     test_console.print("\n[bold cyan]Test 3: Read non-existent file[/]")
     input3 = ReadFilePluginInput(path="non_existent_file.txt")
-    output3 = read_file_tool(dummy_ctx, input3)
+    output3 = read_file_tool(test_console, input3) # Updated call
     test_console.print(f"Output 3: {output3}")
     assert output3.content is None and output3.error is not None
     assert "not a file or does not exist" in output3.error or "File not found" in output3.error
@@ -333,7 +326,7 @@ if __name__ == "__main__":
     input4 = ReadFilePluginInput(path=str(real_home_test_file_path)) # Absolute path to real home file
     test_console.print(f"Path for Test 4: {str(real_home_test_file_path)}")
     test_console.print("Please respond 'y' (approve) to the upcoming prompt for the test to pass.")
-    output4 = read_file_tool(dummy_ctx, input4)
+    output4 = read_file_tool(test_console, input4) # Updated call
     test_console.print(f"Output 4: {output4}")
     if output4.error and "denied by user" in output4.error:
         test_console.print("[yellow]Test 4 skipped or user denied - this is acceptable if you chose 'n'.[/yellow]")
@@ -347,7 +340,7 @@ if __name__ == "__main__":
     # Note: _find_project_root from original_cwd might still find the main QX project.
     # The policy check is absolute, so this should be fine.
     input5 = ReadFilePluginInput(path="/etc/hosts")
-    output5 = read_file_tool(dummy_ctx, input5)
+    output5 = read_file_tool(test_console, input5) # Updated call
     test_console.print(f"Output 5: {output5}")
     assert output5.content is None and output5.error is not None
     assert "Access denied by policy" in output5.error
@@ -355,7 +348,7 @@ if __name__ == "__main__":
     # Test reading a directory
     test_console.print("\n[bold cyan]Test 6: Attempt to read a directory[/]")
     input6 = ReadFilePluginInput(path=str(test_project)) # Path to the directory
-    output6 = read_file_tool(dummy_ctx, input6)
+    output6 = read_file_tool(test_console, input6) # Updated call
     test_console.print(f"Output 6: {output6}")
     assert output6.content is None and output6.error is not None
     # Error message might vary slightly depending on when the check catches it
@@ -371,4 +364,3 @@ if __name__ == "__main__":
     
     test_console.print(f"Removed test base: {test_base}")
     test_console.rule("Read_file_plugin tests finished.")
-

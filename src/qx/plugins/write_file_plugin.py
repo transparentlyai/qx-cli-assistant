@@ -5,14 +5,12 @@ from pathlib import Path
 from typing import Optional, Union
 
 from pydantic import BaseModel, Field
-from pydantic_ai import RunContext
 from pygments.lexers import get_lexer_by_name
 from pygments.util import ClassNotFound
 from rich.console import Console as RichConsole  # For type hint and direct use
 from rich.syntax import Syntax
 from rich.text import Text
 
-from qx.core.context import QXToolDependencies
 from qx.core.paths import USER_HOME_DIR, _find_project_root
 from qx.core.user_prompts import request_confirmation
 
@@ -199,14 +197,14 @@ class WriteFilePluginOutput(BaseModel):
 
 
 def write_file_tool(
-    ctx: RunContext[QXToolDependencies], args: WriteFilePluginInput
+    console: RichConsole, args: WriteFilePluginInput # Updated signature
 ) -> WriteFilePluginOutput:
     """
     Tool to write content to a file.
     Allows path modification by user.
     Restricted by policy to project or user's home directory.
     """
-    console = ctx.deps.console
+    # console is now directly available, no need for ctx.deps.console
     original_path_arg = args.path
     path_to_consider = os.path.expanduser(
         original_path_arg
@@ -307,13 +305,8 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     test_console = RichConsole()
 
-    test_deps = QXToolDependencies(console=test_console)
-
-    class DummyRunContext(RunContext[QXToolDependencies]):
-        def __init__(self, deps: QXToolDependencies):
-            super().__init__(deps=deps, usage=None)  # type: ignore
-
-    dummy_ctx = DummyRunContext(deps=test_deps)
+    # No RunContext or QXToolDependencies needed for testing tool directly
+    # dummy_ctx = DummyRunContext(deps=test_deps) # Removed
 
     test_base = Path("./tmp_write_plugin_test_ctx").resolve()
     if test_base.exists():
@@ -327,7 +320,7 @@ if __name__ == "__main__":
     original_cwd = Path.cwd()
     os.chdir(test_project)
 
-    test_console.rule("Testing write_file_tool plugin with RunContext")
+    test_console.rule("Testing write_file_tool plugin with direct console passing")
 
     # Test 1: Write new file in project (user approves)
     test_console.print("\n[bold]Test 1: Write new project file (approve path)[/]")
@@ -335,7 +328,7 @@ if __name__ == "__main__":
         path="new_project_file.txt", content="Hello from write plugin!"
     )
     test_console.print("Please respond 'y' to the prompt.")
-    output1 = write_file_tool(dummy_ctx, input1)
+    output1 = write_file_tool(test_console, input1) # Updated call
     test_console.print(f"Output 1: {output1}")
     if output1.success:
         assert (
@@ -350,7 +343,7 @@ if __name__ == "__main__":
         path="existing_project_file.txt", content="New line 1\nOld line 2\nNew line 3"
     )
     test_console.print("Please respond 'y' to the prompt.")
-    output2 = write_file_tool(dummy_ctx, input2)
+    output2 = write_file_tool(test_console, input2) # Updated call
     test_console.print(f"Output 2: {output2}")
     if output2.success:
         assert (
@@ -373,7 +366,7 @@ if __name__ == "__main__":
     test_console.print(
         f"At the prompt: respond 'm', then enter '~/{home_test_file_modified_name}', then 'y' (if a second confirm appears) or just enter."
     )
-    output3 = write_file_tool(dummy_ctx, input3)
+    output3 = write_file_tool(test_console, input3) # Updated call
     test_console.print(f"Output 3: {output3}")
     if output3.success:
         assert (USER_HOME_DIR / home_test_file_modified_name).exists()
@@ -390,7 +383,7 @@ if __name__ == "__main__":
     input4 = WriteFilePluginInput(
         path="/etc/this_should_fail.txt", content="Forbidden content"
     )
-    output4 = write_file_tool(dummy_ctx, input4)  # No prompt expected, direct denial
+    output4 = write_file_tool(test_console, input4)  # No prompt expected, direct denial
     test_console.print(f"Output 4: {output4}")
     assert not output4.success and "Access denied by policy" in output4.message
 
@@ -401,7 +394,7 @@ if __name__ == "__main__":
         path="user_denies_this.txt", content="This won't be written."
     )
     test_console.print("Please respond 'n' to the prompt.")
-    output5 = write_file_tool(dummy_ctx, input5)
+    output5 = write_file_tool(test_console, input5) # Updated call
     test_console.print(f"Output 5: {output5}")
     assert not output5.success and "denied by user" in output5.message
     assert not (test_project / "user_denies_this.txt").exists()
