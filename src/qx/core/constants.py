@@ -232,28 +232,6 @@ DEFAULT_APPROVED_COMMANDS = [
 # Shell command execution timeout in seconds
 SHELL_COMMAND_TIMEOUT = 60
 
-# --- Default LLM Provider Settings (Example values, primarily for reference) ---
-# These are not directly used by QX core logic if PydanticAI handles defaults,
-# but can be useful for documentation or future direct API integrations.
-
-# OpenAI
-DEFAULT_OPENAI_MODEL = "gpt-4-turbo"
-DEFAULT_OPENAI_TEMPERATURE = 0.7
-DEFAULT_OPENAI_MAX_TOKENS = 2048
-DEFAULT_OPENAI_TOKENS_PER_MIN = 40000  # Example TPM for some models
-
-# Anthropic
-DEFAULT_ANTHROPIC_MODEL = "claude-3-opus-20240229"
-DEFAULT_ANTHROPIC_TEMPERATURE = 0.7
-DEFAULT_ANTHROPIC_MAX_TOKENS = 4096
-DEFAULT_ANTHROPIC_TOKENS_PER_MIN = 25000  # Example TPM
-
-# Groq
-DEFAULT_GROQ_MODEL = "llama3-70b-8192"
-DEFAULT_GROQ_TEMPERATURE = 0.7
-DEFAULT_GROQ_MAX_TOKENS = 8192
-DEFAULT_GROQ_TOKENS_PER_MIN = 300000  # Example TPM (Groq is fast)
-
 
 # --- Rich CLI Theme Configuration ---
 DEFAULT_SYNTAX_HIGHLIGHT_THEME = (
