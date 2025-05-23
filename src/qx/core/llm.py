@@ -65,7 +65,7 @@ class QXLLMAgent:
         console: RichConsole,
         temperature: float = 0.7,
         max_output_tokens: Optional[int] = None,
-        reasoning_effort: Optional[int] = None, # Changed type hint to Optional[int]
+        reasoning_effort: Optional[str] = None, # Changed type hint back to Optional[str]
     ):
         self.model_name = model_name
         self.system_prompt = system_prompt
@@ -150,8 +150,8 @@ class QXLLMAgent:
         # OpenRouter-specific parameters like 'reasoning' go into extra_body
         extra_body_params = {}
         if self.reasoning_effort is not None:
-            # Ensure reasoning_effort is an integer for max_tokens
-            extra_body_params["reasoning"] = {"max_tokens": self.reasoning_effort}
+            # Pass reasoning_effort as 'effort' string
+            extra_body_params["reasoning"] = {"effort": self.reasoning_effort}
 
         if extra_body_params:
             chat_params["extra_body"] = extra_body_params
@@ -306,15 +306,13 @@ def initialize_llm_agent(
         temperature = float(os.environ.get("QX_MODEL_TEMPERATURE", "0.7"))
         max_output_tokens = int(os.environ.get("QX_MODEL_MAX_TOKENS", "4096"))
         
-        reasoning_effort_str = os.environ.get("QX_MODEL_REASONING_EFFORT")
-        reasoning_effort: Optional[int] = None
-        if reasoning_effort_str:
-            try:
-                reasoning_effort = int(reasoning_effort_str)
-            except ValueError:
-                logger.warning(
-                    f"Invalid value for QX_MODEL_REASONING_EFFORT: '{reasoning_effort_str}'. Expected an integer. Setting to None."
-                )
+        # Retrieve reasoning_effort as a string directly
+        reasoning_effort: Optional[str] = os.environ.get("QX_MODEL_REASONING_EFFORT")
+        if reasoning_effort and reasoning_effort.lower() not in ["high", "medium", "low"]:
+            logger.warning(
+                f"Invalid value for QX_MODEL_REASONING_EFFORT: '{reasoning_effort}'. Expected 'high', 'medium', or 'low'. Setting to None."
+            )
+            reasoning_effort = None
 
         agent = QXLLMAgent(
             model_name=model_name_str,
