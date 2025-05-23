@@ -2,13 +2,15 @@ import asyncio
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Callable
-import json # Import json for parsing tool arguments
+from typing import Any, Dict, List, Optional, Tuple, Callable, Type # Import Type
+import json
+import httpx # Import httpx
 
-from openai import OpenAI
+from openai import AsyncOpenAI # Changed from OpenAI to AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam, ChatCompletionToolParam
 from rich.console import Console as RichConsole
 from rich.text import Text
+from pydantic import BaseModel # Import BaseModel
 
 from qx.core.plugin_manager import PluginManager
 from qx.core.user_prompts import request_confirmation
@@ -54,7 +56,7 @@ class QXLLMAgent:
         self,
         model_name: str,
         system_prompt: str,
-        tools: List[Tuple[Callable, Dict[str, Any]]], # List of (function, openai_tool_schema)
+        tools: List[Tuple[Callable, Dict[str, Any], Type[BaseModel]]], # Updated type hint for tools
         console: RichConsole,
         temperature: float = 0.7,
         max_output_tokens: Optional[int] = None,
@@ -69,16 +71,18 @@ class QXLLMAgent:
         
         self._tool_functions: Dict[str, Callable] = {}
         self._openai_tools_schema: List[ChatCompletionToolParam] = []
+        self._tool_input_models: Dict[str, Type[BaseModel]] = {} # Store input models
         
-        for func, schema in tools:
+        for func, schema, input_model_class in tools: # Unpack input_model_class
             self._tool_functions[func.__name__] = func
             self._openai_tools_schema.append(ChatCompletionToolParam(type="function", function=schema))
+            self._tool_input_models[func.__name__] = input_model_class # Store input model
 
         self.client = self._initialize_openai_client()
         logger.info(f"QXLLMAgent initialized with model: {self.model_name}")
         logger.info(f"Registered {len(self._tool_functions)} tool functions.")
 
-    def _initialize_openai_client(self) -> OpenAI:
+    def _initialize_openai_client(self) -> AsyncOpenAI: # Changed return type to AsyncOpenAI
         """Initializes the OpenAI client for OpenRouter."""
         openrouter_api_key = os.environ.get("OPENROUTER_API_KEY")
         if not openrouter_api_key:
@@ -87,9 +91,10 @@ class QXLLMAgent:
             )
             raise ValueError("OPENROUTER_API_KEY not set.")
 
-        return OpenAI(
+        return AsyncOpenAI( # Changed to AsyncOpenAI
             base_url="https://openrouter.ai/api/v1",
             api_key=openrouter_api_key,
+            http_client=httpx.AsyncClient(), # Use httpx.AsyncClient for async operations
         )
 
     async def run(
@@ -131,6 +136,11 @@ class QXLLMAgent:
 
 
         try:
+            # Debugging: Print types before the await call
+            logger.debug(f"DEBUG: Type of self.client: {type(self.client)}")
+            logger.debug(f"DEBUG: Type of self.client.chat: {type(self.client.chat)}")
+            logger.debug(f"DEBUG: Type of self.client.chat.completions: {type(self.client.chat.completions)}")
+
             response = await self.client.chat.completions.create(**chat_params)
             
             response_message = response.choices[0].message
@@ -155,6 +165,7 @@ class QXLLMAgent:
                         return await self.run(user_input, messages) # Pass updated messages
                     
                     tool_func = self._tool_functions[function_name]
+                    tool_input_model = self._tool_input_models[function_name] # Get the input model class
                     
                     try:
                         # Parse arguments. LLM might provide invalid JSON.
@@ -174,9 +185,13 @@ class QXLLMAgent:
                                 })
                                 return await self.run(user_input, messages) # Pass updated messages
 
+                        # Instantiate the Pydantic input model with the parsed arguments
+                        # This ensures arguments are validated and correctly structured
+                        tool_args_instance = tool_input_model(**parsed_args)
+
                         # Execute the tool function
-                        # Pass console directly to tool functions
-                        tool_output = tool_func(console=self.console, **parsed_args)
+                        # Pass console directly to tool functions and the Pydantic args instance
+                        tool_output = await tool_func(console=self.console, args=tool_args_instance) # Await tool_func
                         
                         # Tool output is expected to be a Pydantic BaseModel.
                         # Convert it to a dictionary for the LLM.
@@ -241,7 +256,7 @@ def initialize_llm_agent(
         if str(src_path) not in sys.path:
             sys.path.insert(0, str(src_path))
 
-        # load_plugins now returns (function, openai_tool_schema) tuples
+        # load_plugins now returns (function, openai_tool_schema, input_model_class) tuples
         registered_tools = plugin_manager.load_plugins(plugin_package_path="qx.plugins")
         if not registered_tools:
             logger.warning(

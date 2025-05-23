@@ -17,6 +17,7 @@ from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.styles import Style
+from prompt_toolkit.shortcuts import prompt_async # Corrected import path
 from pyfzf.pyfzf import FzfPrompt
 from rich.console import Console as RichConsole
 
@@ -324,8 +325,7 @@ async def get_user_input(
             else:
                 return QX_FIXED_PROMPT_FORMATTED
 
-        user_input = await asyncio.to_thread(
-            session.prompt,
+        user_input = await session.prompt_async(
             get_current_prompt, # Use a function to dynamically get the prompt
         )
         return user_input

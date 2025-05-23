@@ -1,8 +1,9 @@
 import logging
-import datetime # Added for approve all timer
+import datetime
 from typing import Callable, List, Literal, Optional, Tuple, Union, Any
 
-from prompt_toolkit import prompt as prompt_toolkit_prompt
+# from prompt_toolkit import prompt as prompt_toolkit_prompt # Removed synchronous import
+from prompt_toolkit.shortcuts import prompt_async # Import the async version
 from rich.console import Console as RichConsole
 from rich.console import RenderableType
 from rich.text import Text
@@ -18,14 +19,14 @@ DEFAULT_APPROVE_ALL_DURATION_MINUTES: int = 15
 CHOICE_YES = ("y", "Yes", "yes")
 CHOICE_NO = ("n", "No", "no")
 CHOICE_MODIFY = ("m", "Modify", "modify")
-CHOICE_APPROVE_ALL = ("a", "Approve All", "all") # Added Approve All choice
-CHOICE_CANCEL = ("c", "Cancel", "cancel") # Implicitly handled by Ctrl+C/D
+CHOICE_APPROVE_ALL = ("a", "Approve All", "all")
+CHOICE_CANCEL = ("c", "Cancel", "cancel")
 
 ApprovalDecisionStatus = Literal["approved", "denied", "modified", "cancelled", "session_approved"]
 
 
-def _execute_prompt_with_live_suspend(
-    console: RichConsole, prompt_callable: Callable[..., Any], *args: Any, **kwargs: Any
+async def _execute_prompt_with_live_suspend( # Made async
+    console: RichConsole, *args: Any, **kwargs: Any # Removed prompt_callable
 ) -> Any:
     """
     Executes a prompt_toolkit prompt, suspending any active Rich Live display.
@@ -42,7 +43,7 @@ def _execute_prompt_with_live_suspend(
             else:
                 pass
         
-        prompt_result = prompt_callable(*args, **kwargs)
+        prompt_result = await prompt_async(*args, **kwargs) # Directly call and await prompt_async
     finally:
         if live_was_active_and_started:
             live_display.start(refresh=True)
@@ -76,16 +77,15 @@ def is_approve_all_active(console: RichConsole) -> bool:
                 live_display.start(refresh=True)
     return False
 
-def _ask_duration(console: RichConsole, prompt_message_text: str, default: int) -> int:
+async def _ask_duration(console: RichConsole, prompt_message_text: str, default: int) -> int: # Made async
     """
     Asks the user for a duration in minutes. Adapted from old ApprovalManager.
     """
     pt_prompt_message = f"{prompt_message_text}: "
     while True:
         try:
-            duration_str = _execute_prompt_with_live_suspend(
+            duration_str = await _execute_prompt_with_live_suspend( # Await
                 console,
-                prompt_toolkit_prompt, 
                 pt_prompt_message, 
                 default=str(default)
             )
@@ -115,7 +115,7 @@ def _ask_duration(console: RichConsole, prompt_message_text: str, default: int) 
             )
             return default
 
-def _ask_basic_confirmation(
+async def _ask_basic_confirmation( # Made async
     console: RichConsole,
     prompt_query_message: str,
     available_choices: List[Tuple[str, str, str]]
@@ -135,9 +135,8 @@ def _ask_basic_confirmation(
 
     while True:
         try:
-            raw_choice = _execute_prompt_with_live_suspend(
+            raw_choice = await _execute_prompt_with_live_suspend( # Await
                 console,
-                prompt_toolkit_prompt,
                 pt_prompt_message
             )
             choice = raw_choice.strip().lower()
@@ -165,22 +164,21 @@ def _ask_basic_confirmation(
             console.print(Text.from_markup("[error]An error occurred during input. Defaulting to Cancel.[/]"),)
             return CHOICE_CANCEL[0]
 
-def request_confirmation(
+async def request_confirmation( # Made async
     prompt_message: str,
     console: RichConsole,
     content_to_display: Optional[Union[str, RenderableType]] = None,
     allow_modify: bool = False,
     current_value_for_modification: Optional[str] = None,
-    can_approve_all: bool = True, # New flag to control if "Approve All" is an option
+    can_approve_all: bool = True,
 ) -> Tuple[ApprovalDecisionStatus, Optional[str]]:
     """
     Requests user confirmation for an action. Handles "Approve All" session.
     """
-    global _approve_all_until # To modify the global state
+    global _approve_all_until
 
     if is_approve_all_active(console):
         logger.info(f"SESSION_APPROVED (via 'Approve All'): {prompt_message}")
-        # It might be good to still print a less verbose confirmation to the console
         console.print(Text.from_markup(f"[success]SESSION APPROVED:[/] {prompt_message.split('?')[0]} [dim](Approve All active)[/dim]"))
         return "session_approved", current_value_for_modification if allow_modify else ""
 
@@ -195,10 +193,10 @@ def request_confirmation(
     choices = [CHOICE_YES, CHOICE_NO]
     if allow_modify:
         choices.append(CHOICE_MODIFY)
-    if can_approve_all: # Only add "Approve All" if the operation type allows it
+    if can_approve_all:
         choices.append(CHOICE_APPROVE_ALL)
 
-    user_choice_key = _ask_basic_confirmation(console, "Confirm?", choices)
+    user_choice_key = await _ask_basic_confirmation(console, "Confirm?", choices) # Await
 
     if user_choice_key == CHOICE_YES[0]:
         logger.info(f"User approved action: {prompt_message}")
@@ -212,12 +210,12 @@ def request_confirmation(
     elif user_choice_key == CHOICE_MODIFY[0] and allow_modify:
         pt_modify_prompt = "Enter the modified value: "
         try:
-            modified_value = _execute_prompt_with_live_suspend(
+            modified_value = await _execute_prompt_with_live_suspend( # Await
                 console,
-                prompt_toolkit_prompt,
                 pt_modify_prompt,
                 default=current_value_for_modification or "",
-            ).strip()
+            )
+            modified_value = modified_value.strip() # Strip after getting value
 
             if not modified_value:
                 console.print(Text.from_markup("[warning]Modification cancelled (empty value). Action denied.[/warning]"))
@@ -233,7 +231,7 @@ def request_confirmation(
             console.print(Text.from_markup(f"[success]Value modified. Proceeding with:[/] [info]{modified_value}[/]"))
             return "modified", modified_value
             
-        except EOFError: # ... (rest of modify error handling remains same)
+        except EOFError:
             logger.warning(f"EOFError (Ctrl+D) during modification for: {prompt_message}. Action cancelled.")
             console.print(Text.from_markup("[warning]Modification cancelled (Ctrl+D). Action cancelled.[/warning]"))
             return "cancelled", None
@@ -248,7 +246,7 @@ def request_confirmation(
 
     elif user_choice_key == CHOICE_APPROVE_ALL[0] and can_approve_all:
         logger.info(f"User chose 'Approve All' for: {prompt_message}")
-        duration_minutes = _ask_duration(
+        duration_minutes = await _ask_duration( # Await
             console,
             "Approve all subsequent operations for how many minutes?",
             default=DEFAULT_APPROVE_ALL_DURATION_MINUTES,
@@ -257,7 +255,6 @@ def request_confirmation(
             _approve_all_until = datetime.datetime.now() + datetime.timedelta(minutes=duration_minutes)
             logger.info(f"'Approve All' activated until {_approve_all_until}")
             console.print(Text.from_markup(f"\n[success]▶▶▶ Auto-approval enabled for {duration_minutes} minutes.[/]\n"))
-            # Current operation is also approved
             return "approved", current_value_for_modification if allow_modify else ""
         else:
             logger.info("User entered 0 or negative duration for 'Approve All'. Not activating. Current operation denied.")
@@ -278,36 +275,40 @@ if __name__ == "__main__":
     test_console = RichConsole()
     test_console.rule("[bold green]Testing request_confirmation with Approve All[/]")
 
-    # Test 1: Approve All
-    test_console.print("\n[bold]Test 1: Choose 'Approve All'[/]")
-    status, val = request_confirmation("Allow critical action (Test 1)?", test_console, can_approve_all=True)
-    test_console.print(f"Test 1 Result: Status='{status}', Value='{val}'")
-    if status == "approved" and _approve_all_until: # Check if approve all was set
-        test_console.print(f"Approve All is active until: {_approve_all_until}")
+    async def run_tests():
+        # Test 1: Approve All
+        test_console.print("\n[bold]Test 1: Choose 'Approve All'[/]")
+        status, val = await request_confirmation("Allow critical action (Test 1)?", test_console, can_approve_all=True)
+        test_console.print(f"Test 1 Result: Status='{status}', Value='{val}'")
+        if status == "approved" and _approve_all_until:
+            test_console.print(f"Approve All is active until: {_approve_all_until}")
 
-    # Test 2: Check if Approve All is active
-    test_console.print("\n[bold]Test 2: Action during 'Approve All'[/]")
-    if _approve_all_until: # Only run if approve all was set in Test 1
-        status, val = request_confirmation("Allow another action (Test 2)?", test_console, can_approve_all=True)
-        test_console.print(f"Test 2 Result: Status='{status}', Value='{val}'")
-        assert status == "session_approved"
-    else:
-        test_console.print("Skipping Test 2 as 'Approve All' was not activated in Test 1.")
+        # Test 2: Check if Approve All is active
+        test_console.print("\n[bold]Test 2: Action during 'Approve All'[/]")
+        if _approve_all_until:
+            status, val = await request_confirmation("Allow another action (Test 2)?", test_console, can_approve_all=True)
+            test_console.print(f"Test 2 Result: Status='{status}', Value='{val}'")
+            assert status == "session_approved"
+        else:
+            test_console.print("Skipping Test 2 as 'Approve All' was not activated in Test 1.")
 
-    # Test 3: Test expiry (manual simulation)
-    test_console.print("\n[bold]Test 3: Simulate 'Approve All' expiry[/]")
-    if _approve_all_until:
-        _approve_all_until = datetime.datetime.now() - datetime.timedelta(seconds=1) # Set to past
-        is_active_after_expiry = is_approve_all_active(test_console) # This should print expiry
-        test_console.print(f"Is 'Approve All' active after simulated expiry? {is_active_after_expiry}")
-        assert not is_active_after_expiry
-        assert _approve_all_until is None # Should be reset by is_approve_all_active
-    else:
-        test_console.print("Skipping Test 3 as 'Approve All' was not active.")
+        # Test 3: Test expiry (manual simulation)
+        test_console.print("\n[bold]Test 3: Simulate 'Approve All' expiry[/]")
+        global _approve_all_until # Need to access global for modification
+        if _approve_all_until:
+            _approve_all_until = datetime.datetime.now() - datetime.timedelta(seconds=1)
+            is_active_after_expiry = is_approve_all_active(test_console)
+            test_console.print(f"Is 'Approve All' active after simulated expiry? {is_active_after_expiry}")
+            assert not is_active_after_expiry
+            assert _approve_all_until is None
+        else:
+            test_console.print("Skipping Test 3 as 'Approve All' was not active.")
 
-    # Test 4: Simple Yes/No after expiry
-    test_console.print("\n[bold]Test 4: Simple Yes/No after expiry[/]")
-    status, val = request_confirmation("Allow simple action post-expiry (Test 4)?", test_console, can_approve_all=True)
-    test_console.print(f"Test 4 Result: Status='{status}', Value='{val}'")
+        # Test 4: Simple Yes/No after expiry
+        test_console.print("\n[bold]Test 4: Simple Yes/No after expiry[/]")
+        status, val = await request_confirmation("Allow simple action post-expiry (Test 4)?", test_console, can_approve_all=True)
+        test_console.print(f"Test 4 Result: Status='{status}', Value='{val}'")
 
-    test_console.print("\n[bold green]Finished testing request_confirmation with Approve All.[/]")
+        test_console.print("\n[bold green]Finished testing request_confirmation with Approve All.[/]")
+
+    asyncio.run(run_tests())

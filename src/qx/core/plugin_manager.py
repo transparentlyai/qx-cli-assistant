@@ -3,7 +3,7 @@ import inspect
 import logging
 import pkgutil
 from pathlib import Path
-from typing import Callable, List, Any, Dict, Tuple
+from typing import Callable, List, Any, Dict, Tuple, Type, Optional
 
 from pydantic import BaseModel, Field # Import BaseModel and Field for schema extraction
 
@@ -18,10 +18,11 @@ class PluginManager:
     def __init__(self):
         pass
 
-    def load_plugins(self, plugin_package_path: str = "qx.plugins") -> List[Tuple[Callable[..., Any], Dict[str, Any]]]:
+    def load_plugins(self, plugin_package_path: str = "qx.plugins") -> List[Tuple[Callable[..., Any], Dict[str, Any], Type[BaseModel]]]:
         """
         Scans the specified plugin package directory for modules, imports them,
-        and collects QX-compatible tool functions along with their OpenAI-compatible schemas.
+        and collects QX-compatible tool functions along with their OpenAI-compatible schemas
+        and their Pydantic input model classes.
 
         Args:
             plugin_package_path: The dot-separated path to the plugins package
@@ -29,9 +30,9 @@ class PluginManager:
 
         Returns:
             A list of tuples, where each tuple contains:
-            (callable_tool_function, openai_tool_json_schema_dict).
+            (callable_tool_function, openai_tool_json_schema_dict, pydantic_input_model_class).
         """
-        loaded_tools: List[Tuple[Callable[..., Any], Dict[str, Any]]] = []
+        loaded_tools: List[Tuple[Callable[..., Any], Dict[str, Any], Type[BaseModel]]] = []
         
         try:
             package = importlib.import_module(plugin_package_path)
@@ -56,22 +57,22 @@ class PluginManager:
                             parameters = signature.parameters
 
                             # Look for a parameter annotated with a Pydantic BaseModel
-                            input_model: Optional[BaseModel] = None
+                            input_model_class: Optional[Type[BaseModel]] = None
                             for param_name, param in parameters.items():
                                 if param_name == "console": # Skip console parameter
                                     continue
                                 if inspect.isclass(param.annotation) and issubclass(param.annotation, BaseModel):
-                                    input_model = param.annotation
+                                    input_model_class = param.annotation
                                     break
                             
-                            if input_model is None:
+                            if input_model_class is None:
                                 logger.warning(f"Tool '{name}' in module '{full_module_name}' does not have a Pydantic BaseModel input argument. Skipping.")
                                 continue
 
                             # Construct OpenAI-compatible tool schema
                             tool_name = func.__name__
                             tool_description = inspect.getdoc(func) or ""
-                            tool_parameters_schema = input_model.model_json_schema()
+                            tool_parameters_schema = input_model_class.model_json_schema()
 
                             openai_tool_schema = {
                                 "name": tool_name,
@@ -80,7 +81,7 @@ class PluginManager:
                             }
                             
                             logger.info(f"Discovered tool: '{name}' in module '{full_module_name}' with schema.")
-                            loaded_tools.append((func, openai_tool_schema))
+                            loaded_tools.append((func, openai_tool_schema, input_model_class))
 
                 except ImportError as e:
                     logger.error(f"Failed to import plugin module '{module_name}': {e}", exc_info=True)
@@ -171,9 +172,10 @@ def no_pydantic_tool(console: RichConsole, some_arg: str) -> str:
     discovered_tools = manager.load_plugins()
     
     print(f"\nDiscovered {len(discovered_tools)} tools:")
-    for tool_func, tool_schema in discovered_tools:
+    for tool_func, tool_schema, input_model_class in discovered_tools:
         print(f"  - {tool_func.__name__} (from module: {tool_func.__module__})")
         print(f"    Schema: {tool_schema}")
+        print(f"    Input Model Class: {input_model_class.__name__}")
         if hasattr(tool_func, "__doc__") and tool_func.__doc__:
              print(f"    Doc: {tool_func.__doc__.strip()}")
 
