@@ -115,8 +115,7 @@ class QXLLMAgent:
         openrouter_api_key = os.environ.get("OPENROUTER_API_KEY")
         if not openrouter_api_key:
             self.console.print(
-                "[error]Error:[/] OPENROUTER_API_KEY environment variable not set.",
-                markup=False # Added markup=False
+                "[error]Error:[/] OPENROUTER_API_KEY environment variable not set."
             )
             raise ValueError("OPENROUTER_API_KEY not set.")
 
@@ -194,7 +193,7 @@ class QXLLMAgent:
                             f"LLM attempted to call unknown tool: {function_name}"
                         )
                         logger.error(error_msg)
-                        self.console.print(f"[error]{error_msg}[/error]", markup=False) # Added markup=False
+                        self.console.print(f"[error]{error_msg}[/error]")
                         messages.append(
                             cast(
                                 ChatCompletionToolMessageParam,
@@ -218,7 +217,7 @@ class QXLLMAgent:
                             except json.JSONDecodeError:
                                 error_msg = f"LLM provided invalid JSON arguments for tool '{function_name}': {function_args}"
                                 logger.error(error_msg)
-                                self.console.print(f"[error]{error_msg}[/error]", markup=False) # Added markup=False
+                                self.console.print(f"[error]{error_msg}[/error]")
                                 messages.append(
                                     cast(
                                         ChatCompletionToolMessageParam,
@@ -236,7 +235,7 @@ class QXLLMAgent:
                         except ValidationError as ve:
                             error_msg = f"LLM provided invalid parameters for tool '{function_name}'. Validation errors: {ve}"
                             logger.error(error_msg, exc_info=True)
-                            self.console.print(f"[error]{error_msg}[/error]", markup=False) # Added markup=False
+                            self.console.print(f"[error]{error_msg}[/error]")
                             messages.append(
                                 cast(
                                     ChatCompletionToolMessageParam,
@@ -274,7 +273,7 @@ class QXLLMAgent:
                     except Exception as e:
                         error_msg = f"Error executing tool '{function_name}': {e}"
                         logger.error(error_msg, exc_info=True)
-                        self.console.print(f"[error]{error_msg}[/error]", markup=False) # Added markup=False
+                        self.console.print(f"[error]{error_msg}[/error]")
                         messages.append(
                             cast(
                                 ChatCompletionToolMessageParam,
@@ -304,7 +303,7 @@ class QXLLMAgent:
 
         except Exception as e:
             logger.error(f"Error during LLM chat completion: {e}", exc_info=True)
-            self.console.print(f"[error]Error:[/] LLM chat completion: {e}[/error]", markup=False) # Added markup=False
+            self.console.print(f"[error]Error:[/] LLM chat completion: {e}[/error]")
             return None
 
 
@@ -336,7 +335,7 @@ def initialize_llm_agent(
 
     except Exception as e:
         logger.error(f"Failed to load plugins: {e}", exc_info=True)
-        console.print(f"[error]Error:[/] Failed to load tools: {e}", markup=False) # Added markup=False
+        console.print(f"[error]Error:[/] Failed to load tools: {e}")
         registered_tools = []
 
     # Add MCP tools to the list of registered tools
@@ -374,7 +373,7 @@ def initialize_llm_agent(
 
     except Exception as e:
         logger.error(f"Failed to initialize QXLLMAgent: {e}", exc_info=True)
-        console.print(f"[error]Error:[/] Init LLM Agent: {e}", markup=False) # Added markup=False
+        console.print(f"[error]Error:[/] Init LLM Agent: {e}")
         return None
 
 
@@ -395,5 +394,5 @@ async def query_llm(
         return result
     except Exception as e:
         logger.error(f"Error during LLM query: {e}", exc_info=True)
-        console.print(f"[error]Error:[/] LLM query: {e}", markup=False) # Added markup=False
+        console.print(f"[error]Error:[/] LLM query: {e}")
         return None

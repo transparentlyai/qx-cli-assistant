@@ -13,6 +13,7 @@ DEFAULT_COMMANDS = [
     "/save-session",
     "/mcp-connect",
     "/mcp-disconnect",
+    "/mcp-tools",
 ]
 
 

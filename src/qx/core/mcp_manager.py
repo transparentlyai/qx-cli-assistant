@@ -60,7 +60,7 @@ class MCPManager:
                     logger.info(f"Loaded MCP configurations from {path}")
                 except (json.JSONDecodeError, ValueError, FileNotFoundError) as e:
                     logger.warning(f"Failed to load MCP configurations from {path}: {e}")
-                    self.console.print(f"[warning]Warning:[/] Failed to load MCP configurations from {path}: {e}", markup=False)
+                    self.console.print(f"[warning]Warning:[/] Failed to load MCP configurations from {path}: {e}")
             else:
                 logger.debug(f"MCP configuration file not found at {path}")
 
@@ -79,15 +79,15 @@ class MCPManager:
         Manages the connection within a dedicated AnyIO task.
         """
         if self._parent_task_group is None:
-            self.console.print("[error]Error:[/] MCPManager not initialized with a parent task group. Cannot connect.", markup=False)
+            self.console.print("[error]Error:[/] MCPManager not initialized with a parent task group. Cannot connect.")
             return False
 
         if server_name not in self._available_servers:
-            self.console.print(f"[error]Error:[/] MCP server '{server_name}' not found in configurations.", markup=False)
+            self.console.print(f"[error]Error:[/] MCP server '{server_name}' not found in configurations.")
             return False
 
         if server_name in self._active_tasks: # Check _active_tasks for running session
-            self.console.print(f"[info]Info:[/] MCP server '{server_name}' is already connected or connecting.", markup=False)
+            self.console.print(f"[info]Info:[/] MCP server '{server_name}' is already connected or connecting.")
             return True
 
         config = self._available_servers[server_name]
@@ -135,21 +135,21 @@ class MCPManager:
                         logger.info(f"Converted tool '{mcp_tool.name}' from MCP server '{server_name}'.")
                     except Exception as e:
                         logger.error(f"Failed to convert or register tool '{mcp_tool.name}' from '{server_name}': {e}", exc_info=True)
-                        self.console.print(f"[error]Error:[/] Failed to register tool '{mcp_tool.name}' from '{server_name}': {e}", markup=False)
+                        self.console.print(f"[error]Error:[/] Failed to register tool '{mcp_tool.name}' from '{server_name}': {e}")
                 
                 self._tools_by_server[server_name] = new_tools # Store tools for this server
 
-                self.console.print(f"[success]Success:[/] Connected to MCP server '{server_name}' and loaded {len(new_tools)} tools.", markup=False)
+                self.console.print(f"[success]Success:[/] Connected to MCP server '{server_name}' and loaded {len(new_tools)} tools.")
                 
                 task_status.started() # Signal successful startup to TaskGroup.start()
 
                 await anyio.sleep_forever() # Keep the session alive until cancelled
 
-            except anyio.Cancelled:
+            except asyncio.CancelledError:
                 logger.info(f"MCP session management task for '{server_name}' cancelled.")
             except Exception as e:
                 logger.error(f"Error in MCP session management task for '{server_name}': {e}", exc_info=True)
-                self.console.print(f"[error]Error:[/] MCP session for '{server_name}' encountered an error: {e}", markup=False)
+                self.console.print(f"[error]Error:[/] MCP session for '{server_name}' encountered an error: {e}")
                 # If task_status.started() hasn't been called, TaskGroup.start() will raise this.
                 # Otherwise, the TaskGroup's general error handling applies.
                 if not task_status.future.done(): # Check if started() was called (AnyIO internal detail)
@@ -181,14 +181,14 @@ class MCPManager:
             return True
         except Exception as e: # Catches errors from _manage_session_task BEFORE task_status.started()
             logger.error(f"Failed to start MCP session task for '{server_name}' (during startup phase): {e}", exc_info=True)
-            self.console.print(f"[error]Error:[/] Failed to start MCP session for '{server_name}': {e}", markup=False)
+            self.console.print(f"[error]Error:[/] Failed to start MCP session for '{server_name}': {e}")
             # _manage_session_task's finally block should handle cleanup of any partial registrations.
             return False
 
     async def disconnect_server(self, server_name: str) -> bool:
         """Disconnects from a specified MCP server."""
         if server_name not in self._active_tasks:
-            self.console.print(f"[info]Info:[/] MCP server '{server_name}' is not currently connected or already disconnected.", markup=False)
+            self.console.print(f"[info]Info:[/] MCP server '{server_name}' is not currently connected or already disconnected.")
             return False
 
         task_to_cancel = self._active_tasks.pop(server_name) # Remove before cancelling
@@ -219,7 +219,7 @@ class MCPManager:
         # - _tools_by_server[server_name]
         # - _active_tasks[server_name] (already popped above, but defensive removal in finally is good)
 
-        self.console.print(f"[success]Success:[/] Disconnection requested for MCP server '{server_name}'.", markup=False)
+        self.console.print(f"[success]Success:[/] Disconnection requested for MCP server '{server_name}'.")
         return True
 
 
@@ -279,7 +279,7 @@ class MCPManager:
                 error_msg = f"Error during MCP tool '{tool_name}' execution: {e}"
                 logger.error(error_msg, exc_info=True)
                 if console: # Check if console is provided (it should be)
-                    console.print(f"[error]Error:[/] {error_msg}", markup=False)
+                    console.print(f"[error]Error:[/] {error_msg}")
                 raise # Re-raise the exception to be handled by the caller
 
         wrapper_func.__name__ = tool_name # Set for better introspection
