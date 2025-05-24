@@ -81,17 +81,34 @@ class QXLLMAgent:
 
         for func, schema, input_model_class in tools:
             self._tool_functions[func.__name__] = func
+            
+            # Handle different schema formats (regular plugins vs MCP tools)
+            if "function" in schema:
+                # MCP tools format: {"type": "function", "function": {...}}
+                function_def = schema["function"]
+            else:
+                # Regular plugins format: {"name": ..., "description": ..., "parameters": ...}
+                function_def = schema
+                
             self._openai_tools_schema.append(
                 ChatCompletionToolParam(
-                    type="function", function=FunctionDefinition(**schema)
+                    type="function", function=FunctionDefinition(**function_def)
                 )
             )
             self._tool_input_models[func.__name__] = input_model_class
-            logger.debug(f"QXLLMAgent: Registered tool function '{func.__name__}' with schema name '{schema.get('name')}'")
+            logger.debug(f"QXLLMAgent: Registered tool function '{func.__name__}' with schema name '{function_def.get('name')}'")
 
         self.client = self._initialize_openai_client()
         logger.info(f"QXLLMAgent initialized with model: {self.model_name}")
         logger.info(f"Registered {len(self._tool_functions)} tool functions.")
+        
+        # Debug: Log all registered tools for troubleshooting
+        logger.info("Registered tool functions:")
+        for tool_name in self._tool_functions.keys():
+            logger.info(f"  - {tool_name}")
+        logger.info("OpenAI tool schemas:")
+        for schema in self._openai_tools_schema:
+            logger.info(f"  - {schema['function']['name'] if 'function' in schema and 'name' in schema['function'] else 'unnamed'}")
 
     def _initialize_openai_client(self) -> AsyncOpenAI:
         """Initializes the OpenAI client for OpenRouter."""
