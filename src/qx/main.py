@@ -18,7 +18,7 @@ from qx.cli.qprompt import get_user_input
 from qx.core.config_manager import ConfigManager # Changed from load_runtime_configurations
 from qx.core.constants import DEFAULT_MODEL, DEFAULT_SYNTAX_HIGHLIGHT_THEME
 from qx.core.llm import QXLLMAgent, initialize_llm_agent, query_llm
-from qx.core.session_manager import save_session, clean_old_sessions, load_session_from_path # Import session management functions
+from qx.core.session_manager import save_session, clean_old_sessions, load_session_from_path, reset_session # Import session management functions
 from qx.core.mcp_manager import MCPManager # New import
 
 # --- QX Version ---
@@ -315,6 +315,7 @@ async def _async_main(
                     elif command_name == "/reset":
                         qx_console.clear()
                         current_message_history = None
+                        reset_session()  # Reset session tracking for new conversation
                         llm_agent = await _initialize_agent_with_mcp(config_manager.mcp_manager) # Reload system prompt and agent
                         qx_console.print("[info]Session reset, system prompt reloaded, and terminal cleared.[/info]")
                     elif command_name == "/compress-context":
@@ -450,6 +451,11 @@ async def _async_main(
                 current_message_history = await _handle_llm_interaction(
                     llm_agent, user_input, current_message_history, code_theme_to_use
                 )
+                
+                # Save session after each turn
+                if current_message_history:
+                    save_session(current_message_history)
+                    clean_old_sessions(keep_sessions)
 
             except KeyboardInterrupt:
                 qx_console.print(
@@ -460,6 +466,7 @@ async def _async_main(
                     save_session(current_message_history)
                     clean_old_sessions(keep_sessions)
                 current_message_history = None
+                reset_session()  # Reset session tracking
                 continue
             except asyncio.CancelledError:
                 qx_console.print(
@@ -470,6 +477,7 @@ async def _async_main(
                     save_session(current_message_history)
                     clean_old_sessions(keep_sessions)
                 current_message_history = None
+                reset_session()  # Reset session tracking
                 continue
             except Exception as e:
                 logger.error(

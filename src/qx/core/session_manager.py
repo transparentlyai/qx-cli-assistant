@@ -11,18 +11,30 @@ from qx.core.paths import QX_SESSIONS_DIR
 
 logger = logging.getLogger(__name__)
 
+# Global variable to track current session filename
+_current_session_file = None
+
+def get_or_create_session_filename():
+    """
+    Returns the current session filename, creating a new one if needed.
+    """
+    global _current_session_file
+    if _current_session_file is None:
+        QX_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        _current_session_file = QX_SESSIONS_DIR / f"qx_session_{timestamp}.json"
+    return _current_session_file
+
 def save_session(message_history: List[ChatCompletionMessageParam]):
     """
-    Saves the given message history to a new file in the sessions directory.
-    The filename will be qx_session_{timestamp}.json.
+    Saves the given message history to the current session file.
+    Creates a new session file only if one doesn't exist for this conversation.
     """
     if not message_history:
         logger.info("No message history to save. Skipping session save.")
         return
 
-    QX_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    session_filename = QX_SESSIONS_DIR / f"qx_session_{timestamp}.json"
+    session_filename = get_or_create_session_filename()
 
     # Convert ChatCompletionMessageParam objects to dictionaries for JSON serialization
     serializable_history = [
@@ -36,6 +48,13 @@ def save_session(message_history: List[ChatCompletionMessageParam]):
         logger.info(f"Session saved to {session_filename}")
     except Exception as e:
         logger.error(f"Failed to save session to {session_filename}: {e}", exc_info=True)
+
+def reset_session():
+    """
+    Resets the current session, forcing creation of a new session file on next save.
+    """
+    global _current_session_file
+    _current_session_file = None
 
 def clean_old_sessions(keep_sessions: int):
     """
@@ -52,7 +71,7 @@ def clean_old_sessions(keep_sessions: int):
         )
 
         if len(session_files) > keep_sessions:
-            files_to_delete = session_files[: len(session_files) - keep_sessions]
+            files_to_delete = session_files[: -(keep_sessions)]
             for file_path in files_to_delete:
                 try:
                     file_path.unlink()
