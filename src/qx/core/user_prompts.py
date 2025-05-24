@@ -178,7 +178,8 @@ async def request_confirmation( # Made async
     """
     global _approve_all_until
 
-    if is_approve_all_active(console):
+    # Only auto-approve if can_approve_all is True AND approve_all is active
+    if can_approve_all and is_approve_all_active(console):
         logger.info(f"SESSION_APPROVED (via 'Approve All'): {prompt_message}")
         console.print(Text.from_markup(f"[success]SESSION APPROVED:[/] {prompt_message.split('?')[0]} [dim](Approve All active)[/dim]"))
         return "session_approved", current_value_for_modification if allow_modify else ""

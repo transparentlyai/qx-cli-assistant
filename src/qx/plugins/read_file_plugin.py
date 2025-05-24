@@ -51,6 +51,7 @@ def _read_file_core_logic(path_str: str) -> Tuple[Optional[str], Optional[str]]:
     Core logic to read file content. Does not handle approval or console output.
     Returns (content, error_message). content is None if error.
     """
+    logger.debug(f"_read_file_core_logic received path_str: {path_str}")
     try:
         # Path expansion and resolution are expected to be done by the caller
         # This core logic now assumes path_str is an absolute, resolved path string
@@ -81,9 +82,9 @@ def _read_file_core_logic(path_str: str) -> Tuple[Optional[str], Optional[str]]:
         return None, f"Error: Path is a directory, not a file: {path_str}"
     except Exception as e:
         logger.error(
-            f"Error reading file '{path_str}' (core logic): {e}", exc_info=True
+            f"Error reading file \'{path_str}\' (core logic): {e}", exc_info=True
         )
-        return None, f"Error reading file '{path_str}': {e}"
+        return None, f"Error reading file \'{path_str}\': {e}"
 
 
 # --- End of _read_file_core_logic ---
@@ -135,6 +136,8 @@ async def read_file_tool(  # Made async
     else:
         absolute_path_to_evaluate = absolute_path_to_evaluate.resolve()
 
+    logger.debug(f"read_file_tool evaluating path: {absolute_path_to_evaluate}")
+
     if not is_path_allowed(absolute_path_to_evaluate, project_root, USER_HOME_DIR):
         err_msg = (
             f"Error: Access denied by policy for path: {absolute_path_to_evaluate}"
@@ -166,7 +169,6 @@ async def read_file_tool(  # Made async
                 absolute_path_to_evaluate == user_home_abs
                 or user_home_abs in absolute_path_to_evaluate.parents
             ):
-                # Ensure it's not part of a project that happens to be in home, which is already covered.
                 # This logic assumes `is_path_allowed` permits it, so it must be in home.
                 needs_confirmation = True
     elif (  # No project_root found, check if path is in user home
@@ -176,14 +178,15 @@ async def read_file_tool(  # Made async
         needs_confirmation = True
 
     if needs_confirmation:
-        prompt_msg = f"Allow QX to read file: '{expanded_path_arg}' (located outside the project, in your home directory)?"
+        prompt_msg = f"Allow QX to read file: \'{expanded_path_arg}\' (located outside the project, in your home directory)?"
         decision_status, _ = await request_confirmation(  # Await
             prompt_message=prompt_msg,
             console=console,
             allow_modify=False,  # Read operations typically don't modify the path
+            can_approve_all=False, # Force confirmation for out-of-project home directory reads
         )
-        if decision_status not in ["approved"]:
-            error_message = f"Read operation for '{expanded_path_arg}' was {decision_status} by user."
+        if decision_status not in ["approved", "session_approved"]:
+            error_message = f"Read operation for \'{expanded_path_arg}\' was {decision_status} by user."
             logger.warning(error_message)
             if decision_status == "denied":
                 console.print(
@@ -195,7 +198,7 @@ async def read_file_tool(  # Made async
                 )
             else:  # Should not happen with current request_confirmation for non-modify
                 console.print(
-                    f"[warning]Read operation for '{expanded_path_arg}' was {decision_status} by user.[/warning]"
+                    f"[warning]Read operation for \'{expanded_path_arg}\' was {decision_status} by user.[/warning]"
                 )
             return ReadFilePluginOutput(
                 path=expanded_path_arg, content=None, error=error_message
@@ -214,7 +217,7 @@ async def read_file_tool(  # Made async
         )
         logger.error(err_msg)
         console.print(
-            f"[error]Failed to read '{expanded_path_arg}':[/error] Path is not a file or does not exist."
+            f"[error]Failed to read \'{expanded_path_arg}\':[/error] Path is not a file or does not exist."
         )
         return ReadFilePluginOutput(path=expanded_path_arg, content=None, error=err_msg)
 
@@ -223,7 +226,7 @@ async def read_file_tool(  # Made async
     if error_from_core:
         # _read_file_core_logic already logs its specific errors.
         console.print(
-            f"[error]Failed to read '{expanded_path_arg}':[/error] {error_from_core}"
+            f"[error]Failed to read \'{expanded_path_arg}\':[/error] {error_from_core}"
         )
         return ReadFilePluginOutput(
             path=expanded_path_arg, content=content, error=error_from_core
@@ -255,12 +258,12 @@ if __name__ == "__main__":
     # dummy_ctx = DummyRunContext(deps=test_deps) # Removed
 
     # --- Test Setup ---
-    # Use a temporary directory within the project's ./tmp for tests
+    # Use a temporary directory within the project\'s ./tmp for tests
     # This makes paths more predictable and easier to clean up.
     # It also ensures that _find_project_root behaves as expected if tests are run from project root.
     original_cwd = Path.cwd()
     # Assuming the project root has a pyproject.toml or .git folder for _find_project_root
-    # For this test, we'll simulate a project structure within ./tmp
+    # For this test, we\'ll simulate a project structure within ./tmp
 
     # Ensure ./tmp exists
     tmp_dir = Path("./tmp").resolve()
@@ -289,7 +292,7 @@ if __name__ == "__main__":
     dot_q_file_path.write_text("This is a .Q file.")
 
     # File in simulated user home (but outside project)
-    # To avoid actually writing to user's real home, create a 'fake_home' inside test_base
+    # To avoid actually writing to user\'s real home, create a \'fake_home\' inside test_base
     fake_home_dir = test_base / "fake_user_home"
     fake_home_dir.mkdir(exist_ok=True)
     home_test_file_name = "qx_read_plugin_home_test.txt"
@@ -298,14 +301,14 @@ if __name__ == "__main__":
 
     # Temporarily override USER_HOME_DIR for testing purposes
     # This is a bit hacky for a plugin test; ideally, USER_HOME_DIR would be injectable
-    # or the test environment would be more isolated. For now, we'll patch it.
+    # or the test environment would be more isolated. For now, we\'ll patch it.
 
     # Monkeypatch USER_HOME_DIR for the duration of the tests
     # This is a bit of a hack for testing; in real use, request_confirmation would set this.
-    # For this self-contained test, it's manageable.
+    # For this self-contained test, it\'s manageable.
 
     # To properly test USER_HOME_DIR logic, we need to adjust where `is_path_allowed` and
-    # `read_file_tool` get USER_HOME_DIR from. If they import it directly, we'd need to
+    # `read_file_tool` get USER_HOME_DIR from. If they import it directly, we\'d need to
     # monkeypatch `qx.plugins.read_file_plugin.USER_HOME_DIR`.
 
     # For simplicity in this example, we will test reading from the REAL user home
@@ -347,25 +350,25 @@ if __name__ == "__main__":
         )
 
         # Test reading from outside project (in actual user home) - requires confirmation
-        # Change CWD outside the project to ensure it's not resolved as a project path
+        # Change CWD outside the project to ensure it\'s not resolved as a project path
         os.chdir(original_cwd)
         test_console.print(f"Changed CWD to: {Path.cwd()} for home directory test")
 
         test_console.print(
-            f"\n[bold cyan]Test 4: Read file in user home ('{real_home_test_file_path}') - requires confirmation[/]"
+            f"\n[bold cyan]Test 4: Read file in user home (\'{real_home_test_file_path}\') - requires confirmation[/]"
         )
         input4 = ReadFilePluginInput(
             path=str(real_home_test_file_path)
         )  # Absolute path to real home file
         test_console.print(f"Path for Test 4: {str(real_home_test_file_path)}")
         test_console.print(
-            "Please respond 'y' (approve) to the upcoming prompt for the test to pass."
+            "Please respond \'y\' (approve) to the upcoming prompt for the test to pass."
         )
         output4 = await read_file_tool(test_console, input4)  # Updated call
         test_console.print(f"Output 4: {output4}")
         if output4.error and "denied by user" in output4.error:
             test_console.print(
-                "[yellow]Test 4 skipped or user denied - this is acceptable if you chose 'n'.[/yellow]"
+                "[yellow]Test 4 skipped or user denied - this is acceptable if you chose \'n\'.[/yellow]"
             )
         else:
             assert (
