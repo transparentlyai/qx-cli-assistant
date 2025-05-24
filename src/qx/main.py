@@ -6,6 +6,7 @@ import sys
 from typing import Any, List, Optional
 
 from openai.types.chat import ChatCompletionMessageParam
+from rich.console import Console # Import Console for plain text output
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.text import Text
@@ -124,16 +125,29 @@ async def _handle_llm_interaction(
     user_input: str,
     current_message_history: Optional[List[ChatCompletionMessageParam]],
     code_theme_to_use: str,
+    plain_text_output: bool = False,
 ) -> Optional[List[ChatCompletionMessageParam]]:
     """
     Handles the interaction with the LLM, including spinner display and response processing.
     Returns the updated message history.
     """
     run_result: Optional[Any] = None
-    spinner_status = show_spinner("QX is thinking...")
-    QXConsole.set_active_status(spinner_status)
+    spinner_status = None
+
+    if not plain_text_output:
+        spinner_status = show_spinner("QX is thinking...")
+        QXConsole.set_active_status(spinner_status)
+
     try:
-        with spinner_status:
+        if spinner_status:
+            with spinner_status:
+                run_result = await query_llm(
+                    agent,
+                    user_input,
+                    message_history=current_message_history,
+                    console=qx_console,
+                )
+        else:
             run_result = await query_llm(
                 agent,
                 user_input,
@@ -141,16 +155,23 @@ async def _handle_llm_interaction(
                 console=qx_console,
             )
     finally:
-        QXConsole.set_active_status(None)
+        if not plain_text_output:
+            QXConsole.set_active_status(None)
 
     if run_result:
         if hasattr(run_result, "output"):
             output_content = (
                 str(run_result.output) if run_result.output is not None else ""
             )
-            markdown_output = Markdown(output_content, code_theme=code_theme_to_use)
-            qx_console.print(markdown_output)
-            qx_console.print("\n")
+            if plain_text_output:
+                # Create a new Console instance that forces no color/markup
+                plain_console = Console(force_terminal=False, no_color=True, highlight=False)
+                plain_console.print(output_content)
+                # Do NOT print the extra newline from qx_console here, as it would add Rich formatting.
+            else:
+                markdown_output = Markdown(output_content, code_theme=code_theme_to_use)
+                qx_console.print(markdown_output)
+                qx_console.print("\n")
             if hasattr(run_result, "all_messages"):
                 return run_result.all_messages()
             else:
@@ -160,19 +181,27 @@ async def _handle_llm_interaction(
             logger.error(
                 f"run_result is missing 'output' attribute. run_result type: {type(run_result)}, value: {run_result}"
             )
-            qx_console.print("[error]Error:[/] Unexpected response structure from LLM.")
+            if plain_text_output:
+                sys.stderr.write("Error: Unexpected response structure from LLM.\n")
+            else:
+                qx_console.print("[error]Error:[/] Unexpected response structure from LLM.")
             return current_message_history
     else:
-        qx_console.print(
-            "[warning]Info:[/] No response generated or an error occurred."
-        )
+        if plain_text_output:
+            sys.stdout.write("Info: No response generated or an error occurred.\n")
+        else:
+            qx_console.print(
+                "[warning]Info:[/] No response generated or an error occurred."
+            )
         return current_message_history
 
 
 async def _async_main(
     initial_prompt: Optional[str] = None, exit_after_response: bool = False
 ):
-    """Asynchronous main function to handle the QX agent logic."""
+    """
+    Asynchronous main function to handle the QX agent logic.
+    """
     _configure_logging()
     load_runtime_configurations()
 
@@ -192,14 +221,17 @@ async def _async_main(
 
     agent = _initialize_agent()
 
-    info_text = f"QX ver:{QX_VERSION} - {agent.model_name}"
-    qx_console.print(Text(info_text, style="dim"))
+    if not exit_after_response:
+        info_text = f"QX ver:{QX_VERSION} - {agent.model_name}"
+        qx_console.print(Text(info_text, style="dim"))
 
     current_message_history: Optional[List[ChatCompletionMessageParam]] = None
 
     if initial_prompt:
+        if not exit_after_response:
+            qx_console.print(f"[bold]Initial Prompt:[/bold] {initial_prompt}")
         current_message_history = await _handle_llm_interaction(
-            agent, initial_prompt, current_message_history, code_theme_to_use
+            agent, initial_prompt, current_message_history, code_theme_to_use, plain_text_output=exit_after_response
         )
         if exit_after_response:
             sys.exit(0)
@@ -296,4 +328,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
