@@ -11,10 +11,10 @@ from qx.core.paths import USER_HOME_DIR, _find_project_root, QX_CONFIG_DIR # Imp
 def load_runtime_configurations():
     """
     Loads various configurations into environment variables.
-    - Ensures ~/.config/q directory exists.
-    - User-specific .env: ~/.config/q/q.conf
+    - Ensures ~/.config/qx directory exists.
+    - User-specific .env: ~/.config/qx/q.conf
     - Project-specific .env: project_root/.env
-    - User context: ~/.config/q/user.md -> QX_USER_CONTEXT
+    - User context: ~/.config/qx/user.md -> QX_USER_CONTEXT
     - Project context: project_root/.Q/project.md -> QX_PROJECT_CONTEXT
     - Project files tree: project_root tree -> QX_PROJECT_FILES
     """
@@ -28,13 +28,13 @@ def load_runtime_configurations():
         # Proceeding, but history and user.md might fail.
 
     # 1. Load User-Specific Dotenv Configuration
-    # user_conf_path = USER_HOME_DIR / ".config" / "q" / "q.conf" # Replaced by QX_CONFIG_DIR
+    # user_conf_path = USER_HOME_DIR / ".config" / "qx" / "q.conf" # Replaced by QX_CONFIG_DIR
     user_conf_path = QX_CONFIG_DIR / "q.conf"
     if user_conf_path.is_file():
         load_dotenv(dotenv_path=user_conf_path, override=True)
 
     # 2. Load User Context
-    # user_context_path = USER_HOME_DIR / ".config" / "q" / "user.md" # Replaced by QX_CONFIG_DIR
+    # user_context_path = USER_HOME_DIR / ".config" / "qx" / "user.md" # Replaced by QX_CONFIG_DIR
     user_context_path = QX_CONFIG_DIR / "user.md"
     qx_user_context = ""
     if user_context_path.is_file():
@@ -149,8 +149,8 @@ if __name__ == "__main__":
 
 
     # Create dummy files for testing if they don't exist
-    # dummy_q_conf = USER_HOME_DIR / ".config" / "q" / "q.conf" # Replaced by QX_CONFIG_DIR
-    # dummy_user_md = USER_HOME_DIR / ".config" / "q" / "user.md" # Replaced by QX_CONFIG_DIR
+    # dummy_q_conf = USER_HOME_DIR / ".config" / "qx" / "q.conf" # Replaced by QX_CONFIG_DIR
+    # dummy_user_md = USER_HOME_DIR / ".config" / "qx" / "user.md" # Replaced by QX_CONFIG_DIR
     dummy_q_conf = QX_CONFIG_DIR / "q.conf"
     dummy_user_md = QX_CONFIG_DIR / "user.md"
 
