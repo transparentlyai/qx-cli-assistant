@@ -98,7 +98,7 @@ class CommandArgumentPathCompleter(Completer):
                     for item in matches:
                         full_item_path = os.path.join(base_path, item)
                         display_text = item
-                        completion_text = path_prefix + item
+                        completion_text = f"{path_prefix}{item}"
                         try:
                             is_dir = os.path.isdir(os.path.expanduser(full_item_path))
                         except OSError:
@@ -156,7 +156,7 @@ async def _execute_prompt_with_live_suspend(
 
 
 async def get_user_input(
-    console: RichConsole,
+    console: RichConsole, mcp_manager: Any
 ) -> str:
     try:
         QX_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -323,7 +323,7 @@ async def get_user_input(
     else:
         current_prompt_formatted[0] = QX_FIXED_PROMPT_FORMATTED
 
-    qx_command_completer = CommandCompleter()
+    qx_command_completer = CommandCompleter(mcp_manager=mcp_manager)
     path_argument_completer = CommandArgumentPathCompleter()
     merged_completer = merge_completers([qx_command_completer, path_argument_completer])
 
@@ -359,9 +359,12 @@ async def get_user_input(
 
 if __name__ == "__main__":
     from qx.core.user_prompts import _approve_all_until
+    from qx.core.mcp_manager import MCPManager
 
     async def main_test():
         console_for_test = RichConsole()
+        mcp_manager_for_test = MCPManager(console_for_test)
+        mcp_manager_for_test.load_mcp_configs()
 
         print("Testing qprompt. Type Ctrl-R for fzf history (if fzf is installed).")
         print("Tab for completion (commands like /help, then paths).")
@@ -386,7 +389,7 @@ if __name__ == "__main__":
 
         while True:
             try:
-                inp = await get_user_input(console_for_test) 
+                inp = await get_user_input(console_for_test, mcp_manager_for_test) 
                 if inp == "": 
                     continue
                 if inp.strip().lower() == "activate approve all":

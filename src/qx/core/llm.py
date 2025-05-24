@@ -19,6 +19,7 @@ from pydantic import BaseModel, ValidationError
 from rich.console import Console as RichConsole
 
 from qx.core.plugin_manager import PluginManager
+from qx.core.mcp_manager import MCPManager # New import
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +87,7 @@ class QXLLMAgent:
                 )
             )
             self._tool_input_models[func.__name__] = input_model_class
+            logger.debug(f"QXLLMAgent: Registered tool function '{func.__name__}' with schema name '{schema.get('name')}'")
 
         self.client = self._initialize_openai_client()
         logger.info(f"QXLLMAgent initialized with model: {self.model_name}")
@@ -292,6 +294,7 @@ class QXLLMAgent:
 def initialize_llm_agent(
     model_name_str: str,
     console: RichConsole,
+    mcp_manager: MCPManager, # New parameter
 ) -> Optional[QXLLMAgent]:
     """
     Initializes the QXLLMAgent with system prompt and discovered tools.
@@ -319,6 +322,12 @@ def initialize_llm_agent(
         console.print(f"[error]Error:[/] Failed to load tools: {e}", markup=False) # Added markup=False
         registered_tools = []
 
+    # Add MCP tools to the list of registered tools
+    mcp_tools = mcp_manager.get_active_tools()
+    if mcp_tools:
+        registered_tools.extend(mcp_tools)
+        logger.info(f"Added {len(mcp_tools)} tools from active MCP servers.")
+
     try:
         temperature = float(os.environ.get("QX_MODEL_TEMPERATURE", "0.7"))
         max_output_tokens = int(os.environ.get("QX_MODEL_MAX_TOKENS", "4096"))
@@ -338,7 +347,7 @@ def initialize_llm_agent(
         agent = QXLLMAgent(
             model_name=model_name_str,
             system_prompt=system_prompt_content,
-            tools=registered_tools,
+            tools=registered_tools, # Pass combined tools
             console=console,
             temperature=temperature,
             max_output_tokens=max_output_tokens,
@@ -371,4 +380,3 @@ async def query_llm(
         logger.error(f"Error during LLM query: {e}", exc_info=True)
         console.print(f"[error]Error:[/] LLM query: {e}", markup=False) # Added markup=False
         return None
-
