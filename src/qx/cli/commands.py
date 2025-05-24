@@ -9,6 +9,8 @@ DEFAULT_COMMANDS = [
     "/save-last-response",
     "/model",
     "/reset", # Added new /reset command
+    "/compress-context", # Added new /compress-context command
+    "/save-session", # Added new /save-session command
 ]
 
 
