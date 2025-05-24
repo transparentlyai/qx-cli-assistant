@@ -293,6 +293,13 @@ async def _async_main(
                     if current_message_history:
                         save_session(current_message_history)
                         clean_old_sessions(keep_sessions)
+                    
+                    # Disconnect all active MCP servers before exiting
+                    active_servers = list(config_manager.mcp_manager._active_tasks.keys())
+                    for server_name in active_servers:
+                        logger.info(f"Disconnecting MCP server '{server_name}' before exit.")
+                        await config_manager.mcp_manager.disconnect_server(server_name)
+                    
                     break
                 if not user_input.strip():
                     continue
@@ -413,6 +420,29 @@ async def _async_main(
                             qx_console.print(f"[success]Successfully disconnected from MCP server '{command_args}' and reloaded LLM agent tools.[/success]")
                         else:
                             qx_console.print(f"[error]Failed to disconnect from MCP server '{command_args}'. Check logs for details.[/error]")
+                    elif command_name == "/mcp-tools": # New MCP Tools List Command
+                        mcp_tools = config_manager.mcp_manager.get_active_tools()
+                        
+                        if not mcp_tools:
+                            qx_console.print("[info]No MCP tools are currently active. Connect to an MCP server first using /mcp-connect.[/info]")
+                            continue
+                        
+                        tools_info = f"[bold]Active MCP Tools ({len(mcp_tools)}):[/bold]\n"
+                        
+                        for tool_func, tool_schema, tool_input_model in mcp_tools:
+                            # Handle different schema formats
+                            if "function" in tool_schema:
+                                function_def = tool_schema["function"]
+                            else:
+                                function_def = tool_schema
+                            
+                            tool_name = function_def.get("name", tool_func.__name__)
+                            tool_description = function_def.get("description", "No description available")
+                            
+                            tools_info += f"  • [green]{tool_name}[/green]: {tool_description}\n"
+                        
+                        from rich.panel import Panel
+                        qx_console.print(Panel(tools_info.strip(), title="MCP Tools", border_style="blue"))
                     else:
                         qx_console.print(f"[error]Unknown command: {command_name}[/error]")
                     continue
@@ -453,6 +483,13 @@ async def _async_main(
                 if current_message_history:
                     save_session(current_message_history)
                     clean_old_sessions(keep_sessions)
+                
+                # Disconnect all active MCP servers before exiting
+                active_servers = list(config_manager.mcp_manager._active_tasks.keys())
+                for server_name in active_servers:
+                    logger.info(f"Disconnecting MCP server '{server_name}' before exit due to error.")
+                    await config_manager.mcp_manager.disconnect_server(server_name)
+                
                 break
 
 
