@@ -3,7 +3,7 @@ import shutil
 import subprocess
 import os
 from datetime import datetime, timedelta
-from typing import Any, List, Optional, Tuple, Iterator
+from typing import Any, List, Optional, Tuple, Iterator, Callable
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import (
@@ -17,13 +17,11 @@ from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.styles import Style
-# from prompt_toolkit.shortcuts import prompt_async # Removed incorrect import path
 from pyfzf.pyfzf import FzfPrompt
 from rich.console import Console as RichConsole
 
 from qx.core.paths import Q_HISTORY_FILE
 from qx.cli.commands import CommandCompleter
-# Import for "Approve All" status check
 from qx.core.user_prompts import is_approve_all_active 
 
 prompt_style = Style.from_dict(
@@ -36,12 +34,12 @@ prompt_style = Style.from_dict(
 )
 
 QX_FIXED_PROMPT_TEXT = "Q⏵ "
-QX_AUTO_APPROVE_PROMPT_TEXT = "QA⏵ " # Reinstated for "Approve All" mode
+QX_AUTO_APPROVE_PROMPT_TEXT = "QA⏵ "
 QX_MULTILINE_PROMPT_TEXT = "M⏵ "
 QX_MULTILINE_HINT_TEXT = "[Alt+Enter to submit] "
 
 QX_FIXED_PROMPT_FORMATTED = FormattedText([("class:prompt", QX_FIXED_PROMPT_TEXT)])
-QX_AUTO_APPROVE_PROMPT_FORMATTED = FormattedText( # Reinstated
+QX_AUTO_APPROVE_PROMPT_FORMATTED = FormattedText(
     [("class:prompt", QX_AUTO_APPROVE_PROMPT_TEXT)]
 )
 QX_MULTILINE_PROMPT_FORMATTED = FormattedText(
@@ -132,8 +130,8 @@ class CommandArgumentPathCompleter(Completer):
                     selected_style=comp.selected_style,
                 )
 
-async def _execute_prompt_with_live_suspend( # Made async
-    console: RichConsole, session: PromptSession, *args: Any, **kwargs: Any
+async def _execute_prompt_with_live_suspend(
+    console: RichConsole, session: PromptSession, prompt_callable: Callable[[], Any]
 ) -> Any:
     """
     Executes a prompt_toolkit prompt, suspending any active Rich Live display.
@@ -150,7 +148,7 @@ async def _execute_prompt_with_live_suspend( # Made async
             else:
                 pass
         
-        prompt_result = await session.prompt_async(*args, **kwargs) # Directly call and await session.prompt_async
+        prompt_result = await session.prompt_async(prompt_callable) # Pass the callable here
     finally:
         if live_was_active_and_started:
             live_display.start(refresh=True)
@@ -172,7 +170,7 @@ async def get_user_input(
     is_multiline = [False]
     
     # Determine prompt based on "Approve All" status
-    if is_approve_all_active(console): # Pass console to is_approve_all_active
+    if is_approve_all_active(console):
         current_prompt_formatted: List[Any] = [QX_AUTO_APPROVE_PROMPT_FORMATTED]
     else:
         current_prompt_formatted: List[Any] = [QX_FIXED_PROMPT_FORMATTED]
@@ -303,22 +301,22 @@ async def get_user_input(
     def _handle_alt_enter(event):
         if is_multiline[0]:
             is_multiline[0] = False
-            # Update prompt based on "Approve All" status when exiting multiline
             if is_approve_all_active(console):
                 current_prompt_formatted[0] = QX_AUTO_APPROVE_PROMPT_FORMATTED
             else:
                 current_prompt_formatted[0] = QX_FIXED_PROMPT_FORMATTED
             event.app.current_buffer.validate_and_handle()
+            event.app.invalidate()
         else:
             is_multiline[0] = True
             current_prompt_formatted[0] = QX_MULTILINE_PROMPT_FORMATTED
             event.app.current_buffer.insert_text("\n")
+            event.app.invalidate()
 
     @kb.add("c-c")
     def _handle_ctrl_c(event):
         event.app.exit(exception=KeyboardInterrupt())
 
-    # Set initial prompt state (already done above, but this ensures it if logic changes)
     is_multiline[0] = False 
     if is_approve_all_active(console):
         current_prompt_formatted[0] = QX_AUTO_APPROVE_PROMPT_FORMATTED
@@ -338,10 +336,6 @@ async def get_user_input(
     )
 
     try:
-        # The lambda for prompt needs to be re-evaluated each time to pick up changes
-        # to current_prompt_formatted[0] if "Approve All" status changes between prompts.
-        # This is implicitly handled if current_prompt_formatted is a list and its content is changed.
-        # However, to be absolutely sure the LATEST state of is_approve_all_active is used:
         def get_current_prompt():
             if is_multiline[0]:
                 return QX_MULTILINE_PROMPT_FORMATTED
@@ -352,8 +346,8 @@ async def get_user_input(
 
         user_input = await _execute_prompt_with_live_suspend(
             console,
-            session, # Pass the session object
-            get_current_prompt(), # Use a function to dynamically get the prompt
+            session,
+            get_current_prompt,
         )
         return user_input
     except KeyboardInterrupt:
@@ -364,7 +358,7 @@ async def get_user_input(
 
 
 if __name__ == "__main__":
-    from qx.core.user_prompts import _approve_all_until # For testing __main__
+    from qx.core.user_prompts import _approve_all_until
 
     async def main_test():
         console_for_test = RichConsole()
@@ -396,8 +390,6 @@ if __name__ == "__main__":
                 if inp == "": 
                     continue
                 if inp.strip().lower() == "activate approve all":
-                    # Directly manipulate the state in user_prompts for testing
-                    # This is a bit of a hack for testing; in real use, request_confirmation would set this.
                     from qx.core import user_prompts
                     user_prompts._approve_all_until = datetime.now() + timedelta(minutes=5)
                     console_for_test.print("[info]Simulated 'approve all' activation for 5 minutes.[/info]")
