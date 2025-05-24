@@ -18,9 +18,9 @@ REQUEST_TIMEOUT = 10  # seconds
 class WebFetchPluginInput(BaseModel):
     """Input model for the WebFetchTool."""
 
-    url: str = Field(..., description="The URL to fetch content from.")
+    url: str = Field(..., description="The URL of the web page to fetch content from. Must be a valid and accessible URL.")
     format: str = Field(
-        "markdown", description="The desired output format: 'markdown' or 'raw'."
+        "markdown", description="The desired output format for the fetched content. Can be 'markdown' (default) to convert HTML to Markdown, or 'raw' to return the content as-is."
     )
 
 
