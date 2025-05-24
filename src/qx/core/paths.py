@@ -11,6 +11,9 @@ QX_CONFIG_DIR = USER_HOME_DIR / ".config" / "q"
 # History file path
 QX_HISTORY_FILE = QX_CONFIG_DIR / "history"
 
+# Session files directory
+QX_SESSIONS_DIR = Path(".Q") / "sessions"
+
 
 def _find_project_root(cwd_str: str) -> Path | None:
     """
@@ -55,10 +58,15 @@ if __name__ == "__main__":
     print(f"User home directory: {USER_HOME_DIR}")
     print(f"QX Config directory: {QX_CONFIG_DIR}")
     print(f"QX History file: {QX_HISTORY_FILE}")
+    print(f"QX Sessions directory: {QX_SESSIONS_DIR}")
 
     # Ensure config dir exists for testing other modules that might import this
     os.makedirs(QX_CONFIG_DIR, exist_ok=True)
     print(f"Ensured QX Config directory exists for testing: {QX_CONFIG_DIR.exists()}")
+
+    # Ensure sessions dir exists for testing
+    os.makedirs(QX_SESSIONS_DIR, exist_ok=True)
+    print(f"Ensured QX Sessions directory exists for testing: {QX_SESSIONS_DIR.exists()}")
 
     print(
         f"Project root from CWD ({Path.cwd()}): {_find_project_root(str(Path.cwd()))}"
