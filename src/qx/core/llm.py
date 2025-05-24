@@ -15,7 +15,7 @@ from openai.types.chat import (
     ChatCompletionUserMessageParam,
 )
 from openai.types.shared_params.function_definition import FunctionDefinition
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from rich.console import Console as RichConsole
 
 from qx.core.plugin_manager import PluginManager
@@ -205,13 +205,29 @@ class QXLLMAgent:
                                         {
                                             "role": "tool",
                                             "tool_call_id": tool_call.id,
-                                            "content": f"Error: Invalid arguments for tool '{function_name}'",
+                                            "content": f"Error: Invalid JSON arguments for tool '{function_name}'. Please ensure arguments are valid JSON.",
                                         },
                                     )
                                 )
                                 return await self.run(user_input, messages)
 
-                        tool_args_instance = tool_input_model(**parsed_args)
+                        try:
+                            tool_args_instance = tool_input_model(**parsed_args)
+                        except ValidationError as ve:
+                            error_msg = f"LLM provided invalid parameters for tool '{function_name}'. Validation errors: {ve}"
+                            logger.error(error_msg, exc_info=True)
+                            self.console.print(f"[error]{error_msg}[/error]")
+                            messages.append(
+                                cast(
+                                    ChatCompletionToolMessageParam,
+                                    {
+                                        "role": "tool",
+                                        "tool_call_id": tool_call.id,
+                                        "content": f"Error: Invalid parameters for tool '{function_name}'. Details: {ve}",
+                                    },
+                                )
+                            )
+                            return await self.run(user_input, messages)
 
                         tool_output = await tool_func(
                             console=self.console, args=tool_args_instance
@@ -245,7 +261,7 @@ class QXLLMAgent:
                                 {
                                     "role": "tool",
                                     "tool_call_id": tool_call.id,
-                                    "content": f"Error: Tool execution failed: {e}",
+                                    "content": f"Error: Tool execution failed: {e}. This might be due to an internal tool error or an unexpected argument type.",
                                 },
                             )
                         )
@@ -268,7 +284,7 @@ class QXLLMAgent:
 
         except Exception as e:
             logger.error(f"Error during LLM chat completion: {e}", exc_info=True)
-            self.console.print(f"[error]Error during LLM chat completion: {e}[/error]")
+            self.console.print(f"[error]Error:[/] LLM chat completion: {e}[/error]")
             return None
 
 
