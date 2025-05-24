@@ -290,6 +290,92 @@ async def _async_main(
                 qx_console.print("[info]Session reset, system prompt reloaded, and terminal cleared.[/info]")
                 continue
 
+            if user_input.strip().lower() == "/compress-context":
+                if not current_message_history:
+                    qx_console.print("[warning]No conversation history to compress.[/warning]")
+                    continue
+                
+                # Read the context compression prompt
+                try:
+                    prompt_path = Path(__file__).parent / "prompts" / "context_compression_prompt.md"
+                    with open(prompt_path, 'r', encoding='utf-8') as f:
+                        compression_prompt = f.read().strip()
+                except Exception as e:
+                    qx_console.print(f"[error]Error reading compression prompt: {e}[/error]")
+                    continue
+                
+                qx_console.print("[info]Compressing conversation context...[/info]")
+                
+                # Send the compression prompt to the LLM
+                compressed_result = await _handle_llm_interaction(
+                    agent, compression_prompt, current_message_history, code_theme_to_use
+                )
+                
+                if compressed_result and len(compressed_result) > 0:
+                    # Extract the compressed context (the last assistant message)
+                    compressed_context = ""
+                    for msg in reversed(compressed_result):
+                        if hasattr(msg, 'role') and msg.role == "assistant":
+                            compressed_context = msg.content if hasattr(msg, 'content') else ""
+                            break
+                    
+                    if compressed_context:
+                        # Reset the session (like /reset command)
+                        qx_console.clear()
+                        agent = _initialize_agent()
+                        
+                        # Start new session with compressed context
+                        current_message_history = await _handle_llm_interaction(
+                            agent, compressed_context, None, code_theme_to_use
+                        )
+                        
+                        qx_console.print("[info]Context compressed and session reset with compressed history.[/info]")
+                    else:
+                        qx_console.print("[error]Failed to extract compressed context from LLM response.[/error]")
+                else:
+                    qx_console.print("[error]Failed to compress context.[/error]")
+                continue
+
+            if user_input.strip().lower().startswith("/save-session"):
+                if not current_message_history:
+                    qx_console.print("[warning]No conversation history to save.[/warning]")
+                    continue
+                
+                # Parse the filename argument
+                parts = user_input.strip().split(maxsplit=1)
+                if len(parts) < 2:
+                    qx_console.print("[error]Usage: /save-session <filename>[/error]")
+                    continue
+                
+                filename = parts[1].strip()
+                if not filename:
+                    qx_console.print("[error]Filename cannot be empty.[/error]")
+                    continue
+                
+                # Ensure .json extension
+                if not filename.endswith('.json'):
+                    filename += '.json'
+                
+                # Create sessions directory if it doesn't exist
+                from qx.core.paths import QX_SESSIONS_DIR
+                QX_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+                session_path = QX_SESSIONS_DIR / filename
+                
+                # Convert messages to serializable format
+                serializable_history = [
+                    msg.model_dump() if hasattr(msg, 'model_dump') else msg
+                    for msg in current_message_history
+                ]
+                
+                try:
+                    import json
+                    with open(session_path, "w", encoding="utf-8") as f:
+                        json.dump(serializable_history, f, indent=2)
+                    qx_console.print(f"[info]Session saved to {session_path}[/info]")
+                except Exception as e:
+                    qx_console.print(f"[error]Failed to save session: {e}[/error]")
+                continue
+
             current_message_history = await _handle_llm_interaction(
                 agent, user_input, current_message_history, code_theme_to_use
             )
