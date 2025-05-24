@@ -1,10 +1,11 @@
+import argparse
 import asyncio
 import logging
 import os
 import sys
 from typing import Any, List, Optional
 
-from openai.types.chat import ChatCompletionMessageParam # Import for message history type
+from openai.types.chat import ChatCompletionMessageParam
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.text import Text
@@ -12,18 +13,16 @@ from rich.text import Text
 from qx.cli.console import QXConsole, qx_console, show_spinner
 from qx.cli.qprompt import get_user_input
 from qx.core.config_manager import load_runtime_configurations
-from qx.core.constants import (
-    DEFAULT_MODEL,
-    DEFAULT_SYNTAX_HIGHLIGHT_THEME,
-)
-from qx.core.llm import initialize_llm_agent, query_llm, QXLLMAgent # Import QXLLMAgent
+from qx.core.constants import DEFAULT_MODEL, DEFAULT_SYNTAX_HIGHLIGHT_THEME
+from qx.core.llm import QXLLMAgent, initialize_llm_agent, query_llm
 
 # --- QX Version ---
-QX_VERSION = "0.3.3" # Updated for this refactor
+QX_VERSION = "0.3.3"
 # --- End QX Version ---
 
 # --- Configure logging for the application ---
-logger = logging.getLogger("qx") # Initialize logger globally
+logger = logging.getLogger("qx")
+
 
 def _configure_logging():
     """Configures the application's logging based on QX_LOG_LEVEL environment variable."""
@@ -44,7 +43,10 @@ def _configure_logging():
     logger.info(
         f"QX application log level set to: {logging.getLevelName(effective_log_level)} ({effective_log_level})"
     )
+
+
 # --- End logging configuration ---
+
 
 def _initialize_agent() -> QXLLMAgent:
     """
@@ -52,9 +54,11 @@ def _initialize_agent() -> QXLLMAgent:
     Exits if QX_MODEL_NAME is not set or agent initialization fails.
     """
     model_name_from_env = os.environ.get("QX_MODEL_NAME", DEFAULT_MODEL)
-    
+
     if not model_name_from_env:
-        qx_console.print("[error]Critical Error:[/] QX_MODEL_NAME environment variable not set. Please set it to an OpenRouter model string (e.g., 'google/gemini-2.5-flash-preview-05-20:thinking').")
+        qx_console.print(
+            "[error]Critical Error:[/] QX_MODEL_NAME environment variable not set. Please set it to an OpenRouter model string (e.g., 'google/gemini-2.5-flash-preview-05-20:thinking')."
+        )
         sys.exit(1)
 
     logger.debug(f"Initializing LLM agent with parameters:")
@@ -72,6 +76,7 @@ def _initialize_agent() -> QXLLMAgent:
         sys.exit(1)
     return agent
 
+
 def _handle_model_command(agent: QXLLMAgent):
     """Displays information about the current LLM model configuration."""
     model_info_content = f"[bold]Current LLM Model Configuration:[/bold]\n"
@@ -79,18 +84,40 @@ def _handle_model_command(agent: QXLLMAgent):
     # OpenRouter models don't have a direct "provider.base_url" attribute on the agent itself
     # The base_url is part of the internal client configuration.
     # For simplicity, we can just state it's OpenRouter.
-    model_info_content += f"  Provider: [green]OpenRouter (https://openrouter.ai/api/v1)[/green]\n"
-    
+    model_info_content += (
+        f"  Provider: [green]OpenRouter (https://openrouter.ai/api/v1)[/green]\n"
+    )
+
     # Access model settings directly from agent attributes
     temperature_val = agent.temperature
     max_tokens_val = agent.max_output_tokens
-    reasoning_effort_val = agent.reasoning_effort # Changed from thinking_budget
+    reasoning_effort_val = agent.reasoning_effort
 
     model_info_content += f"  Temperature: [green]{temperature_val}[/green]\n"
     model_info_content += f"  Max Output Tokens: [green]{max_tokens_val}[/green]\n"
-    model_info_content += f"  Reasoning Effort: [green]{reasoning_effort_val if reasoning_effort_val else 'None'}[/green]\n" # Changed from Thinking Budget
+    model_info_content += f"  Reasoning Effort: [green]{reasoning_effort_val if reasoning_effort_val else 'None'}[/green]\n"
 
-    qx_console.print(Panel(model_info_content, title="LLM Model Info", border_style="blue"))
+    qx_console.print(
+        Panel(model_info_content, title="LLM Model Info", border_style="blue")
+    )
+
+
+def _display_version_info():
+    """Displays QX version, LLM model, and its parameters, then exits."""
+    _configure_logging()
+    load_runtime_configurations()
+
+    qx_console.print(f"[bold]QX Version:[/bold] [green]{QX_VERSION}[/green]")
+
+    try:
+        agent = _initialize_agent()
+        _handle_model_command(agent)
+    except SystemExit:
+        qx_console.print(
+            "[yellow]Note:[/yellow] Could not display LLM model information as QX_MODEL_NAME is not configured."
+        )
+    sys.exit(0)
+
 
 async def _handle_llm_interaction(
     agent: QXLLMAgent,
@@ -118,26 +145,22 @@ async def _handle_llm_interaction(
 
     if run_result:
         if hasattr(run_result, "output"):
-            output_content = str(run_result.output) if run_result.output is not None else ""
-            markdown_output = Markdown(
-                output_content, code_theme=code_theme_to_use
+            output_content = (
+                str(run_result.output) if run_result.output is not None else ""
             )
+            markdown_output = Markdown(output_content, code_theme=code_theme_to_use)
             qx_console.print(markdown_output)
             qx_console.print("\n")
             if hasattr(run_result, "all_messages"):
                 return run_result.all_messages()
             else:
-                logger.warning(
-                    "run_result is missing 'all_messages' attribute."
-                )
-                return current_message_history # Return original if no new messages
+                logger.warning("run_result is missing 'all_messages' attribute.")
+                return current_message_history
         else:
             logger.error(
                 f"run_result is missing 'output' attribute. run_result type: {type(run_result)}, value: {run_result}"
             )
-            qx_console.print(
-                "[error]Error:[/] Unexpected response structure from LLM."
-            )
+            qx_console.print("[error]Error:[/] Unexpected response structure from LLM.")
             return current_message_history
     else:
         qx_console.print(
@@ -146,12 +169,16 @@ async def _handle_llm_interaction(
         return current_message_history
 
 
-async def _async_main():
+async def _async_main(
+    initial_prompt: Optional[str] = None, exit_after_response: bool = False
+):
     """Asynchronous main function to handle the QX agent logic."""
     _configure_logging()
     load_runtime_configurations()
 
-    logger.info("CLI theming system has been removed. Using default Rich console styling.")
+    logger.info(
+        "CLI theming system has been removed. Using default Rich console styling."
+    )
 
     syntax_theme_from_env = os.getenv("QX_SYNTAX_HIGHLIGHT_THEME")
     code_theme_to_use = (
@@ -170,11 +197,18 @@ async def _async_main():
 
     current_message_history: Optional[List[ChatCompletionMessageParam]] = None
 
+    if initial_prompt:
+        current_message_history = await _handle_llm_interaction(
+            agent, initial_prompt, current_message_history, code_theme_to_use
+        )
+        if exit_after_response:
+            sys.exit(0)
+
     while True:
         try:
-            user_input = await get_user_input(qx_console) 
+            user_input = await get_user_input(qx_console)
 
-            if user_input == "": 
+            if user_input == "":
                 continue
 
             if user_input.lower() in ["exit", "quit"]:
@@ -212,9 +246,44 @@ async def _async_main():
             qx_console.print("Exiting QX due to critical error.", style="bold red")
             break
 
+
 def main():
+    _configure_logging()
+
+    parser = argparse.ArgumentParser(
+        description="QX - A terminal-based agentic coding assistant."
+    )
+    parser.add_argument(
+        "-v",
+        "--version",
+        action="store_true",
+        help="Show QX version, LLM model, and parameters, then exit.",
+    )
+    parser.add_argument(
+        "-x",
+        "--exit-after-response",
+        action="store_true",
+        help="Exit immediately after responding to an initial prompt.",
+    )
+    parser.add_argument(
+        "initial_prompt",
+        nargs=argparse.REMAINDER,
+        help="Initial prompt for QX. If provided, QX will process this once and then either exit (with -x) or enter interactive mode.",
+    )
+    args = parser.parse_args()
+
+    if args.version:
+        _display_version_info()
+
+    initial_prompt_str = " ".join(args.initial_prompt).strip()
+
     try:
-        asyncio.run(_async_main())
+        asyncio.run(
+            _async_main(
+                initial_prompt=initial_prompt_str if initial_prompt_str else None,
+                exit_after_response=args.exit_after_response,
+            )
+        )
     except KeyboardInterrupt:
         qx_console.print("\nQX terminated by user.", style="info")
         sys.exit(0)
@@ -224,5 +293,7 @@ def main():
         qx_console.print(f"[bold red]Critical error running QX:[/bold red] {e}")
         sys.exit(1)
 
+
 if __name__ == "__main__":
     main()
+

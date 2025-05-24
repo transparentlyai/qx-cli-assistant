@@ -6,10 +6,10 @@ from pathlib import Path
 USER_HOME_DIR = Path.home().resolve()
 
 # QX Configuration and Data Directory
-Q_CONFIG_DIR = USER_HOME_DIR / ".config" / "q"
+QX_CONFIG_DIR = USER_HOME_DIR / ".config" / "q"
 
 # History file path
-Q_HISTORY_FILE = Q_CONFIG_DIR / "history"
+QX_HISTORY_FILE = QX_CONFIG_DIR / "history"
 
 
 def _find_project_root(cwd_str: str) -> Path | None:
@@ -53,12 +53,12 @@ def _find_project_root(cwd_str: str) -> Path | None:
 if __name__ == "__main__":
     # Test _find_project_root
     print(f"User home directory: {USER_HOME_DIR}")
-    print(f"QX Config directory: {Q_CONFIG_DIR}")
-    print(f"QX History file: {Q_HISTORY_FILE}")
+    print(f"QX Config directory: {QX_CONFIG_DIR}")
+    print(f"QX History file: {QX_HISTORY_FILE}")
 
     # Ensure config dir exists for testing other modules that might import this
-    os.makedirs(Q_CONFIG_DIR, exist_ok=True)
-    print(f"Ensured QX Config directory exists for testing: {Q_CONFIG_DIR.exists()}")
+    os.makedirs(QX_CONFIG_DIR, exist_ok=True)
+    print(f"Ensured QX Config directory exists for testing: {QX_CONFIG_DIR.exists()}")
 
     print(
         f"Project root from CWD ({Path.cwd()}): {_find_project_root(str(Path.cwd()))}"

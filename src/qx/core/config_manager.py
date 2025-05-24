@@ -5,7 +5,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from qx.core.constants import DEFAULT_TREE_IGNORE_PATTERNS
-from qx.core.paths import USER_HOME_DIR, _find_project_root, Q_CONFIG_DIR # Import Q_CONFIG_DIR
+from qx.core.paths import USER_HOME_DIR, _find_project_root, QX_CONFIG_DIR # Import QX_CONFIG_DIR
 
 
 def load_runtime_configurations():
@@ -20,22 +20,22 @@ def load_runtime_configurations():
     """
     # 0. Ensure QX config directory exists
     try:
-        os.makedirs(Q_CONFIG_DIR, exist_ok=True)
+        os.makedirs(QX_CONFIG_DIR, exist_ok=True)
     except OSError as e:
         # This might happen if ~/.config is a file, or due to permissions.
         # It's a critical setup step, so print a warning.
-        print(f"Warning: Could not create QX config directory {Q_CONFIG_DIR}: {e}")
+        print(f"Warning: Could not create QX config directory {QX_CONFIG_DIR}: {e}")
         # Proceeding, but history and user.md might fail.
 
     # 1. Load User-Specific Dotenv Configuration
-    # user_conf_path = USER_HOME_DIR / ".config" / "q" / "q.conf" # Replaced by Q_CONFIG_DIR
-    user_conf_path = Q_CONFIG_DIR / "q.conf"
+    # user_conf_path = USER_HOME_DIR / ".config" / "q" / "q.conf" # Replaced by QX_CONFIG_DIR
+    user_conf_path = QX_CONFIG_DIR / "q.conf"
     if user_conf_path.is_file():
         load_dotenv(dotenv_path=user_conf_path, override=True)
 
     # 2. Load User Context
-    # user_context_path = USER_HOME_DIR / ".config" / "q" / "user.md" # Replaced by Q_CONFIG_DIR
-    user_context_path = Q_CONFIG_DIR / "user.md"
+    # user_context_path = USER_HOME_DIR / ".config" / "q" / "user.md" # Replaced by QX_CONFIG_DIR
+    user_context_path = QX_CONFIG_DIR / "user.md"
     qx_user_context = ""
     if user_context_path.is_file():
         try:
@@ -145,29 +145,29 @@ if __name__ == "__main__":
     # Example usage for testing
     print(f"Current PWD: {Path.cwd()}")
     print(f"User Home: {USER_HOME_DIR}")
-    print(f"QX Config Dir (from paths.py): {Q_CONFIG_DIR}")
+    print(f"QX Config Dir (from paths.py): {QX_CONFIG_DIR}")
 
 
     # Create dummy files for testing if they don't exist
-    # dummy_q_conf = USER_HOME_DIR / ".config" / "q" / "q.conf" # Replaced by Q_CONFIG_DIR
-    # dummy_user_md = USER_HOME_DIR / ".config" / "q" / "user.md" # Replaced by Q_CONFIG_DIR
-    dummy_q_conf = Q_CONFIG_DIR / "q.conf"
-    dummy_user_md = Q_CONFIG_DIR / "user.md"
+    # dummy_q_conf = USER_HOME_DIR / ".config" / "q" / "q.conf" # Replaced by QX_CONFIG_DIR
+    # dummy_user_md = USER_HOME_DIR / ".config" / "q" / "user.md" # Replaced by QX_CONFIG_DIR
+    dummy_q_conf = QX_CONFIG_DIR / "q.conf"
+    dummy_user_md = QX_CONFIG_DIR / "user.md"
 
 
-    # Q_CONFIG_DIR is now created by load_runtime_configurations if it doesn't exist
+    # QX_CONFIG_DIR is now created by load_runtime_configurations if it doesn't exist
     # but for the test setup, we might want to ensure it before calling load_runtime_configurations
     # if we are writing files to it.
     # However, load_runtime_configurations itself handles its creation.
     # For this test, let's call it first, then check.
     
-    print(f"Attempting to load runtime configurations (will create {Q_CONFIG_DIR} if needed)...")
-    load_runtime_configurations() # This will create Q_CONFIG_DIR
-    print(f"Ensured QX Config directory exists: {Q_CONFIG_DIR.exists()}")
+    print(f"Attempting to load runtime configurations (will create {QX_CONFIG_DIR} if needed)...")
+    load_runtime_configurations() # This will create QX_CONFIG_DIR
+    print(f"Ensured QX Config directory exists: {QX_CONFIG_DIR.exists()}")
 
 
     if not dummy_q_conf.exists():
-        dummy_q_conf.write_text("TEST_Q_CONF_VAR=hello_from_q_conf\n")
+        dummy_q_conf.write_text("TEST_QX_CONF_VAR=hello_from_q_conf\n")
         print(f"Created dummy {dummy_q_conf}")
 
     if not dummy_user_md.exists():
@@ -189,11 +189,11 @@ if __name__ == "__main__":
     # if they were created for the test.
     # In normal operation, load_runtime_configurations is called once.
     # For this test script, if we create files after the first load, we might want to see their effect.
-    # However, the primary purpose here is to test that Q_CONFIG_DIR is created.
+    # However, the primary purpose here is to test that QX_CONFIG_DIR is created.
     # The subsequent os.getenv calls will reflect what was loaded by the *first* call to
     # load_runtime_configurations in this test script.
 
-    print(f"TEST_Q_CONF_VAR: {os.getenv('TEST_Q_CONF_VAR')}")
+    print(f"TEST_QX_CONF_VAR: {os.getenv('TEST_QX_CONF_VAR')}")
     print(f"TEST_PROJECT_ENV_VAR: {os.getenv('TEST_PROJECT_ENV_VAR')}")
     print(f"QX_MODEL_NAME (after all loads): {os.getenv('QX_MODEL_NAME')}")
     print(f"QX_USER_CONTEXT: '{os.getenv('QX_USER_CONTEXT')}'")
