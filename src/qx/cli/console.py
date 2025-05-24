@@ -88,6 +88,12 @@ class QXConsole:
 
         return user_response
 
+    def clear(self):
+        """
+        Clears the terminal screen.
+        """
+        self._console.clear()
+
     def print_syntax(
         self,
         code: str,
