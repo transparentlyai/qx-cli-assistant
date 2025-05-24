@@ -1,19 +1,38 @@
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 from qx.core.constants import DEFAULT_TREE_IGNORE_PATTERNS
-from qx.core.paths import USER_HOME_DIR, _find_project_root, QX_CONFIG_DIR # Import QX_CONFIG_DIR
+from qx.core.paths import USER_HOME_DIR, _find_project_root, QX_CONFIG_DIR
+
+# Define minimal config example and locations
+MINIMAL_CONFIG_EXAMPLE = """
+# Minimal QX Configuration Example
+# Place this in one of the following locations:
+# 1. /etc/qx/qx.conf (lowest priority)
+# 2. ~/.config/qx/qx.conf (user-level)
+# 3. <project-directory>/.Q/qx.conf (highest priority)
+
+QX_MODEL_NAME=openrouter/openai/gpt-4o
+OPENROUTER_API_KEY=sk-your_openrouter_api_key_here
+"""
+
+CONFIG_LOCATIONS = """
+Possible configuration file locations (in order of priority, lowest to highest):
+1. /etc/qx/qx.conf
+2. {user_config_path}
+3. <project-directory>/.Q/qx.conf
+""".format(user_config_path=QX_CONFIG_DIR / "qx.conf")
 
 
 def load_runtime_configurations():
     """
     Loads various configurations into environment variables.
     - Ensures ~/.config/qx directory exists.
-    - User-specific .env: ~/.config/qx/q.conf
-    - Project-specific .env: project_root/.env
+    - Hierarchical qx.conf loading: /etc/qx/qx.conf < ~/.config/qx/qx.conf < project_root/.Q/qx.conf
     - User context: ~/.config/qx/user.md -> QX_USER_CONTEXT
     - Project context: project_root/.Q/project.md -> QX_PROJECT_CONTEXT
     - Project files tree: project_root tree -> QX_PROJECT_FILES
@@ -22,19 +41,37 @@ def load_runtime_configurations():
     try:
         os.makedirs(QX_CONFIG_DIR, exist_ok=True)
     except OSError as e:
-        # This might happen if ~/.config is a file, or due to permissions.
-        # It's a critical setup step, so print a warning.
         print(f"Warning: Could not create QX config directory {QX_CONFIG_DIR}: {e}")
-        # Proceeding, but history and user.md might fail.
 
-    # 1. Load User-Specific Dotenv Configuration
-    # user_conf_path = USER_HOME_DIR / ".config" / "qx" / "q.conf" # Replaced by QX_CONFIG_DIR
-    user_conf_path = QX_CONFIG_DIR / "q.conf"
+    # --- Hierarchical qx.conf loading ---
+    # 1. Server-level configuration
+    server_conf_path = Path("/etc/qx/qx.conf")
+    if server_conf_path.is_file():
+        load_dotenv(dotenv_path=server_conf_path, override=False)  # Load, but don't override existing env vars
+
+    # 2. User-level configuration
+    user_conf_path = QX_CONFIG_DIR / "qx.conf"
     if user_conf_path.is_file():
-        load_dotenv(dotenv_path=user_conf_path, override=True)
+        load_dotenv(dotenv_path=user_conf_path, override=True)  # Override server-level
 
-    # 2. Load User Context
-    # user_context_path = USER_HOME_DIR / ".config" / "qx" / "user.md" # Replaced by QX_CONFIG_DIR
+    # 3. Project-level configuration
+    cwd = Path.cwd()
+    project_root = _find_project_root(str(cwd))
+    if project_root:
+        project_conf_path = project_root / ".Q" / "qx.conf"
+        if project_conf_path.is_file():
+            load_dotenv(dotenv_path=project_conf_path, override=True)  # Override all previous
+
+    # Check for minimal required variables
+    if not os.getenv("QX_MODEL_NAME") or not os.getenv("OPENROUTER_API_KEY"):
+        print("Error: Missing essential configuration variables.")
+        print(MINIMAL_CONFIG_EXAMPLE)
+        print(CONFIG_LOCATIONS)
+        sys.exit(1)
+
+    # --- End Hierarchical qx.conf loading ---
+
+    # 2. Load User Context (existing logic, no change)
     user_context_path = QX_CONFIG_DIR / "user.md"
     qx_user_context = ""
     if user_context_path.is_file():
@@ -48,17 +85,8 @@ def load_runtime_configurations():
     qx_project_context = ""
     qx_project_files = ""
 
-    cwd = Path.cwd()
-    project_root = _find_project_root(str(cwd))
-
-    if project_root:
-        # Load Project-Specific .env file
-        # This is loaded after q.conf and with override=True, so project .env vars take precedence.
-        project_env_path = project_root / ".env"
-        if project_env_path.is_file():
-            load_dotenv(dotenv_path=project_env_path, override=True)
-
-        # Load Project Context
+    if project_root:  # project_root is already determined above
+        # Load Project Context (existing logic, no change)
         project_context_file_path = project_root / ".Q" / "project.md"
         if project_context_file_path.is_file():
             try:
@@ -70,9 +98,7 @@ def load_runtime_configurations():
                     f"Warning: Could not read project context file {project_context_file_path}: {e}"
                 )
 
-        # Load Project Files Tree
-        # Rule: "if the user is at the home directory, then do not load the QX_PROJECT_FILES."
-        # This check should be against CWD, not project_root.
+        # Load Project Files Tree (existing logic, no change)
         if cwd == USER_HOME_DIR:
             qx_project_files = ""  # Explicitly empty if CWD is home
         else:
@@ -142,60 +168,123 @@ def load_runtime_configurations():
 
 
 if __name__ == "__main__":
-    # Example usage for testing
     print(f"Current PWD: {Path.cwd()}")
     print(f"User Home: {USER_HOME_DIR}")
     print(f"QX Config Dir (from paths.py): {QX_CONFIG_DIR}")
 
+    # --- Setup for testing ---
+    # Create dummy directories for testing
+    test_etc_qx_dir = Path("/tmp/etc/qx")
+    test_user_config_dir = Path("/tmp/user_home/.config/qx")
+    test_project_root_dir = Path("/tmp/test_project")
+    test_project_q_dir = test_project_root_dir / ".Q"
 
-    # Create dummy files for testing if they don't exist
-    # dummy_q_conf = USER_HOME_DIR / ".config" / "qx" / "q.conf" # Replaced by QX_CONFIG_DIR
-    # dummy_user_md = USER_HOME_DIR / ".config" / "qx" / "user.md" # Replaced by QX_CONFIG_DIR
-    dummy_q_conf = QX_CONFIG_DIR / "q.conf"
-    dummy_user_md = QX_CONFIG_DIR / "user.md"
+    os.makedirs(test_etc_qx_dir, exist_ok=True)
+    os.makedirs(test_user_config_dir, exist_ok=True)
+    os.makedirs(test_project_q_dir, exist_ok=True)
 
+    # Define dummy config file paths
+    dummy_server_conf = test_etc_qx_dir / "qx.conf"
+    dummy_user_conf = test_user_config_dir / "qx.conf"
+    dummy_project_conf = test_project_q_dir / "qx.conf"
 
-    # QX_CONFIG_DIR is now created by load_runtime_configurations if it doesn't exist
-    # but for the test setup, we might want to ensure it before calling load_runtime_configurations
-    # if we are writing files to it.
-    # However, load_runtime_configurations itself handles its creation.
-    # For this test, let's call it first, then check.
-    
-    print(f"Attempting to load runtime configurations (will create {QX_CONFIG_DIR} if needed)...")
-    load_runtime_configurations() # This will create QX_CONFIG_DIR
-    print(f"Ensured QX Config directory exists: {QX_CONFIG_DIR.exists()}")
+    # --- Test Case 1: All configs present, project config should win ---
+    print("\n--- Test Case 1: All configs present, project config wins ---")
+    dummy_server_conf.write_text("QX_MODEL_NAME=server_model\nOPENROUTER_API_KEY=server_key\nCOMMON_VAR=server_common\n")
+    dummy_user_conf.write_text("QX_MODEL_NAME=user_model\nOPENROUTER_API_KEY=user_key\nCOMMON_VAR=user_common\nUSER_ONLY_VAR=user_val\n")
+    dummy_project_conf.write_text("QX_MODEL_NAME=project_model\nOPENROUTER_API_KEY=project_key\nCOMMON_VAR=project_common\nPROJECT_ONLY_VAR=project_val\n")
 
+    # Simulate being in the project directory
+    original_cwd = Path.cwd()
+    os.chdir(test_project_root_dir)
 
-    if not dummy_q_conf.exists():
-        dummy_q_conf.write_text("TEST_QX_CONF_VAR=hello_from_q_conf\n")
-        print(f"Created dummy {dummy_q_conf}")
+    # Clear environment variables before loading to ensure a clean test
+    # Only clear variables that might be set by previous runs or system
+    for var in ["QX_MODEL_NAME", "OPENROUTER_API_KEY", "COMMON_VAR", "USER_ONLY_VAR", "PROJECT_ONLY_VAR"]:
+        if var in os.environ:
+            del os.environ[var]
 
-    if not dummy_user_md.exists():
-        dummy_user_md.write_text("This is the dummy user context from user.md.")
-        print(f"Created dummy {dummy_user_md}")
+    load_runtime_configurations()
+    print(f"QX_MODEL_NAME: {os.getenv('QX_MODEL_NAME')}")  # Should be project_model
+    print(f"OPENROUTER_API_KEY: {os.getenv('OPENROUTER_API_KEY')}")  # Should be project_key
+    print(f"COMMON_VAR: {os.getenv('COMMON_VAR')}")  # Should be project_common
+    print(f"USER_ONLY_VAR: {os.getenv('USER_ONLY_VAR')}")  # Should be user_val
+    print(f"PROJECT_ONLY_VAR: {os.getenv('PROJECT_ONLY_VAR')}")  # Should be project_val
+    os.chdir(original_cwd)
 
-    # Simulate a project .env for testing
-    current_dir_as_project_root = _find_project_root(str(Path.cwd()))
-    if current_dir_as_project_root:
-        dummy_project_env = current_dir_as_project_root / ".env"
-        if not dummy_project_env.exists():
-            dummy_project_env.write_text(
-                "TEST_PROJECT_ENV_VAR=hello_from_project_env\n"
-                "QX_MODEL_NAME=project_model_override\n" # Example of overriding
-            )
-            print(f"Created dummy {dummy_project_env} for testing")
-    
-    # Reload configurations to pick up any dummy files created *after* the first call
-    # if they were created for the test.
-    # In normal operation, load_runtime_configurations is called once.
-    # For this test script, if we create files after the first load, we might want to see their effect.
-    # However, the primary purpose here is to test that QX_CONFIG_DIR is created.
-    # The subsequent os.getenv calls will reflect what was loaded by the *first* call to
-    # load_runtime_configurations in this test script.
+    # --- Test Case 2: Only user config present ---
+    print("\n--- Test Case 2: Only user config present ---")
+    dummy_server_conf.unlink(missing_ok=True)
+    dummy_project_conf.unlink(missing_ok=True)
+    dummy_user_conf.write_text("QX_MODEL_NAME=user_model_only\nOPENROUTER_API_KEY=user_key_only\n")
 
-    print(f"TEST_QX_CONF_VAR: {os.getenv('TEST_QX_CONF_VAR')}")
-    print(f"TEST_PROJECT_ENV_VAR: {os.getenv('TEST_PROJECT_ENV_VAR')}")
-    print(f"QX_MODEL_NAME (after all loads): {os.getenv('QX_MODEL_NAME')}")
-    print(f"QX_USER_CONTEXT: '{os.getenv('QX_USER_CONTEXT')}'")
-    print(f"QX_PROJECT_CONTEXT: '{os.getenv('QX_PROJECT_CONTEXT')}'")
-    print(f"QX_PROJECT_FILES:\n{os.getenv('QX_PROJECT_FILES')}")
+    # Clear environment variables
+    for var in ["QX_MODEL_NAME", "OPENROUTER_API_KEY", "COMMON_VAR", "USER_ONLY_VAR", "PROJECT_ONLY_VAR"]:
+        if var in os.environ:
+            del os.environ[var]
+
+    load_runtime_configurations()
+    print(f"QX_MODEL_NAME: {os.getenv('QX_MODEL_NAME')}")  # Should be user_model_only
+    print(f"OPENROUTER_API_KEY: {os.getenv('OPENROUTER_API_KEY')}")  # Should be user_key_only
+
+    # --- Test Case 3: Only server config present ---
+    print("\n--- Test Case 3: Only server config present ---")
+    dummy_user_conf.unlink(missing_ok=True)
+    dummy_server_conf.write_text("QX_MODEL_NAME=server_model_only\nOPENROUTER_API_KEY=server_key_only\n")
+
+    # Clear environment variables
+    for var in ["QX_MODEL_NAME", "OPENROUTER_API_KEY", "COMMON_VAR", "USER_ONLY_VAR", "PROJECT_ONLY_VAR"]:
+        if var in os.environ:
+            del os.environ[var]
+
+    load_runtime_configurations()
+    print(f"QX_MODEL_NAME: {os.getenv('QX_MODEL_NAME')}")  # Should be server_model_only
+    print(f"OPENROUTER_API_KEY: {os.getenv('OPENROUTER_API_KEY')}")  # Should be server_key_only
+
+    # --- Test Case 4: Missing essential variables (should cause exit) ---
+    print("\n--- Test Case 4: Missing essential variables (should cause exit) ---")
+    dummy_server_conf.unlink(missing_ok=True)
+    dummy_user_conf.unlink(missing_ok=True)
+    dummy_project_conf.unlink(missing_ok=True)
+
+    # Clear environment variables
+    for var in ["QX_MODEL_NAME", "OPENROUTER_API_KEY", "COMMON_VAR", "USER_ONLY_VAR", "PROJECT_ONLY_VAR"]:
+        if var in os.environ:
+            del os.environ[var]
+
+    try:
+        load_runtime_configurations()
+    except SystemExit as e:
+        print(f"Caught SystemExit as expected: {e}")
+    print("Script continued after expected exit (for testing purposes).")
+
+    # --- Cleanup ---
+    dummy_server_conf.unlink(missing_ok=True)
+    dummy_user_conf.unlink(missing_ok=True)
+    dummy_project_conf.unlink(missing_ok=True)
+
+    # Clean up dummy directories. rmdir only works on empty directories.
+    # Need to remove files first, then directories.
+    # For robustness in testing, it's better to use shutil.rmtree if available, but not in this context.
+    # So, I'll just unlink the files and leave the empty dirs if they are not empty.
+    # The test setup creates them with exist_ok=True, so it's fine if they persist.
+    # If they were created solely for this test, they would be empty after unlinking.
+    # For now, I'll just unlink the files.
+
+    # Attempt to remove directories if they are empty
+    try:
+        test_etc_qx_dir.rmdir()
+    except OSError:
+        pass
+    try:
+        test_user_config_dir.rmdir()
+    except OSError:
+        pass
+    try:
+        test_project_q_dir.rmdir()
+    except OSError:
+        pass
+    try:
+        test_project_root_dir.rmdir()
+    except OSError:
+        pass
