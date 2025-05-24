@@ -283,6 +283,13 @@ async def _async_main(
                 _handle_model_command(agent)
                 continue
 
+            if user_input.strip().lower() == "/reset":
+                qx_console.clear()
+                current_message_history = None
+                agent = _initialize_agent() # Reload system prompt and agent
+                qx_console.print("[info]Session reset, system prompt reloaded, and terminal cleared.[/info]")
+                continue
+
             current_message_history = await _handle_llm_interaction(
                 agent, user_input, current_message_history, code_theme_to_use
             )

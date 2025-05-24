@@ -7,7 +7,8 @@ from prompt_toolkit.document import Document
 # In a real application, this list would be more dynamic or comprehensive
 DEFAULT_COMMANDS = [
     "/save-last-response",
-    "/model", # Added new /model command
+    "/model",
+    "/reset", # Added new /reset command
 ]
 
 
