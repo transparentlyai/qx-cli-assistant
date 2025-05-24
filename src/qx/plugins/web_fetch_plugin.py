@@ -18,9 +18,13 @@ REQUEST_TIMEOUT = 10  # seconds
 class WebFetchPluginInput(BaseModel):
     """Input model for the WebFetchTool."""
 
-    url: str = Field(..., description="The URL of the web page to fetch content from. Must be a valid and accessible URL.")
+    url: str = Field(
+        ...,
+        description="The URL of the web page to fetch content from. Must be a valid and accessible URL.",
+    )
     format: str = Field(
-        "markdown", description="The desired output format for the fetched content. Can be 'markdown' (default) to convert HTML to Markdown, or 'raw' to return the content as-is."
+        "markdown",
+        description="The desired output format for the fetched content. Can be 'markdown' (default) to convert HTML to Markdown, or 'raw' to return the content as-is.",
     )
 
 
@@ -38,7 +42,8 @@ class WebFetchPluginOutput(BaseModel):
         None, description="HTTP status code of the response, if available."
     )
     truncated: bool = Field(
-        False, description="True if the fetched content was truncated to MAX_CONTENT_LENGTH due to its original size exceeding the limit."
+        False,
+        description="True if the fetched content was truncated to MAX_CONTENT_LENGTH due to its original size exceeding the limit.",
     )
 
 
@@ -46,8 +51,11 @@ async def web_fetch_tool(
     console: RichConsole, args: WebFetchPluginInput
 ) -> WebFetchPluginOutput:
     """
-    Tool to fetch content from a specified URL on the internet.
-    Requires user confirmation for security reasons.
+    Fetches content from a specified URL on the internet. 
+    
+    This tool requires explicit user confirmation for security reasons before accessing any external URL. 
+    The fetched content can be returned in either 'markdown' format (default, where HTML is converted to Markdown) 
+    or 'raw' format (the original content as received).
     """
     url_to_fetch = args.url.strip()
     output_format = args.format.lower()
