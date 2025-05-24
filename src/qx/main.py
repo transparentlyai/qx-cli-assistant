@@ -3,6 +3,7 @@ import asyncio
 import logging
 import os
 import sys
+from pathlib import Path
 from typing import Any, List, Optional
 
 from openai.types.chat import ChatCompletionMessageParam
@@ -16,6 +17,7 @@ from qx.cli.qprompt import get_user_input
 from qx.core.config_manager import load_runtime_configurations
 from qx.core.constants import DEFAULT_MODEL, DEFAULT_SYNTAX_HIGHLIGHT_THEME
 from qx.core.llm import QXLLMAgent, initialize_llm_agent, query_llm
+from qx.core.session_manager import save_session, clean_old_sessions, load_session_from_path # Import session management functions
 
 # --- QX Version ---
 QX_VERSION = "0.3.3"
@@ -79,7 +81,9 @@ def _initialize_agent() -> QXLLMAgent:
 
 
 def _handle_model_command(agent: QXLLMAgent):
-    """Displays information about the current LLM model configuration."""
+    """
+    Displays information about the current LLM model configuration.
+    """
     model_info_content = f"[bold]Current LLM Model Configuration:[/bold]\n"
     model_info_content += f"  Model Name: [green]{agent.model_name}[/green]\n"
     # OpenRouter models don't have a direct "provider.base_url" attribute on the agent itself
@@ -104,7 +108,9 @@ def _handle_model_command(agent: QXLLMAgent):
 
 
 def _display_version_info():
-    """Displays QX version, LLM model, and its parameters, then exits."""
+    """
+    Displays QX version, LLM model, and its parameters, then exits.
+    """
     _configure_logging()
     load_runtime_configurations()
 
@@ -197,7 +203,7 @@ async def _handle_llm_interaction(
 
 
 async def _async_main(
-    initial_prompt: Optional[str] = None, exit_after_response: bool = False
+    initial_prompt: Optional[str] = None, exit_after_response: bool = False, recover_session_path: Optional[Path] = None
 ):
     """
     Asynchronous main function to handle the QX agent logic.
@@ -227,6 +233,25 @@ async def _async_main(
 
     current_message_history: Optional[List[ChatCompletionMessageParam]] = None
 
+    # Get QX_KEEP_SESSIONS from environment, default to 5 if not set or invalid
+    try:
+        keep_sessions = int(os.getenv("QX_KEEP_SESSIONS", "5"))
+        if keep_sessions < 0:
+            logger.warning(f"QX_KEEP_SESSIONS must be non-negative. Using default of 5 instead of {keep_sessions}.")
+            keep_sessions = 5
+    except ValueError:
+        logger.warning("Invalid value for QX_KEEP_SESSIONS. Using default of 5.")
+        keep_sessions = 5
+
+    if recover_session_path:
+        qx_console.print(f"[info]Attempting to recover session from: {recover_session_path}[/info]")
+        loaded_history = load_session_from_path(recover_session_path)
+        if loaded_history:
+            current_message_history = loaded_history
+            qx_console.print("[info]Session recovered successfully![/info]")
+        else:
+            qx_console.print("[error]Failed to recover session. Starting new session.[/error]")
+
     if initial_prompt:
         if not exit_after_response:
             qx_console.print(f"[bold]Initial Prompt:[/bold] {initial_prompt}")
@@ -234,6 +259,9 @@ async def _async_main(
             agent, initial_prompt, current_message_history, code_theme_to_use, plain_text_output=exit_after_response
         )
         if exit_after_response:
+            if current_message_history:
+                save_session(current_message_history)
+                clean_old_sessions(keep_sessions)
             sys.exit(0)
 
     while True:
@@ -244,6 +272,9 @@ async def _async_main(
                 continue
 
             if user_input.lower() in ["exit", "quit"]:
+                if current_message_history:
+                    save_session(current_message_history)
+                    clean_old_sessions(keep_sessions)
                 break
             if not user_input.strip():
                 continue
@@ -260,12 +291,20 @@ async def _async_main(
             qx_console.print(
                 "\nOperation cancelled by Ctrl+C. Returning to prompt.", style="yellow"
             )
+            # Save session on Ctrl+C as well
+            if current_message_history:
+                save_session(current_message_history)
+                clean_old_sessions(keep_sessions)
             current_message_history = None
             continue
         except asyncio.CancelledError:
             qx_console.print(
                 "\nOperation cancelled (async). Returning to prompt.", style="yellow"
             )
+            # Save session on async cancellation as well
+            if current_message_history:
+                save_session(current_message_history)
+                clean_old_sessions(keep_sessions)
             current_message_history = None
             continue
         except Exception as e:
@@ -276,6 +315,10 @@ async def _async_main(
                 f"[error]Critical Error:[/] An unexpected error occurred: {e}"
             )
             qx_console.print("Exiting QX due to critical error.", style="bold red")
+            # Save session on unexpected error as well
+            if current_message_history:
+                save_session(current_message_history)
+                clean_old_sessions(keep_sessions)
             break
 
 
@@ -298,6 +341,12 @@ def main():
         help="Exit immediately after responding to an initial prompt.",
     )
     parser.add_argument(
+        "-r",
+        "--recover-session",
+        type=str,
+        help="Path to a JSON session file to recover and continue the conversation.",
+    )
+    parser.add_argument(
         "initial_prompt",
         nargs=argparse.REMAINDER,
         help="Initial prompt for QX. If provided, QX will process this once and then either exit (with -x) or enter interactive mode.",
@@ -309,11 +358,23 @@ def main():
 
     initial_prompt_str = " ".join(args.initial_prompt).strip()
 
+    # Handle mutually exclusive arguments
+    if args.recover_session and initial_prompt_str:
+        qx_console.print("[error]Error:[/] Cannot use --recover-session with an initial prompt. Please choose one.")
+        sys.exit(1)
+
+    if args.recover_session and args.exit_after_response:
+        qx_console.print("[error]Error:[/] Cannot use --recover-session with --exit-after-response. Recovery implies interactive mode.")
+        sys.exit(1)
+
+    recover_path = Path(args.recover_session) if args.recover_session else None
+
     try:
         asyncio.run(
             _async_main(
                 initial_prompt=initial_prompt_str if initial_prompt_str else None,
                 exit_after_response=args.exit_after_response,
+                recover_session_path=recover_path,
             )
         )
     except KeyboardInterrupt:
