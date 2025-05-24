@@ -1,17 +1,17 @@
 import logging
-import httpx
 from typing import Optional
 
+import httpx
+from markitdown import MarkItDown
 from pydantic import BaseModel, Field
 from rich.console import Console as RichConsole
-from markitdown import MarkItDown
 
 from qx.core.user_prompts import request_confirmation
 
 logger = logging.getLogger(__name__)
 
 # Constants
-MAX_CONTENT_LENGTH = 50000  # Max characters to return from a fetched page
+MAX_CONTENT_LENGTH = 150000  # Max characters to return from a fetched page
 REQUEST_TIMEOUT = 10  # seconds
 
 
@@ -19,7 +19,9 @@ class WebFetchPluginInput(BaseModel):
     """Input model for the WebFetchTool."""
 
     url: str = Field(..., description="The URL to fetch content from.")
-    format: str = Field("markdown", description="The desired output format: 'markdown' or 'raw'.")
+    format: str = Field(
+        "markdown", description="The desired output format: 'markdown' or 'raw'."
+    )
 
 
 class WebFetchPluginOutput(BaseModel):
@@ -36,7 +38,7 @@ class WebFetchPluginOutput(BaseModel):
         None, description="HTTP status code of the response, if available."
     )
     truncated: bool = Field(
-        False, description="True if the content was truncated due to size limits."
+        False, description="True if the fetched content was truncated to MAX_CONTENT_LENGTH due to its original size exceeding the limit."
     )
 
 
@@ -63,7 +65,11 @@ async def web_fetch_tool(
         logger.error(err_msg)
         console.print(f"[error]{err_msg}[/error]")
         return WebFetchPluginOutput(
-            url=url_to_fetch, content=None, error=err_msg, status_code=None, truncated=False
+            url=url_to_fetch,
+            content=None,
+            error=err_msg,
+            status_code=None,
+            truncated=False,
         )
 
     prompt_msg = f"Allow QX to fetch content from URL: '{url_to_fetch}'?"
@@ -87,7 +93,11 @@ async def web_fetch_tool(
                 f"[warning]Web fetch cancelled by user for:[/warning] {url_to_fetch}"
             )
         return WebFetchPluginOutput(
-            url=url_to_fetch, content=None, error=error_message, status_code=None, truncated=False
+            url=url_to_fetch,
+            content=None,
+            error=error_message,
+            status_code=None,
+            truncated=False,
         )
 
     console.print(f"[info]Fetching content from:[/info] {url_to_fetch}")
@@ -105,21 +115,24 @@ async def web_fetch_tool(
                 console.print(
                     f"[warning]Content truncated to {MAX_CONTENT_LENGTH} characters.[/warning]"
                 )
-            
+
             final_content = content
             if output_format == "markdown":
                 md = MarkItDown()
-                # MarkItDown expects a file-like object or a path. 
+                # MarkItDown expects a file-like object or a path.
                 # For string content, we can use io.StringIO or a temporary file.
                 # For simplicity, let's assume the fetched content is HTML and convert it.
                 # A more robust solution might involve detecting content type.
                 try:
                     # Attempt to convert HTML to Markdown
                     from markdownify import markdownify as md_converter
+
                     final_content = md_converter(content)
                 except Exception as e:
-                    logger.warning(f"Could not convert content to markdown: {e}. Returning raw content.")
-                    final_content = content # Fallback to raw if conversion fails
+                    logger.warning(
+                        f"Could not convert content to markdown: {e}. Returning raw content."
+                    )
+                    final_content = content  # Fallback to raw if conversion fails
 
             logger.info(
                 f"Successfully fetched URL: {url_to_fetch} (Status: {response.status_code}, Truncated: {truncated})"
@@ -140,14 +153,24 @@ async def web_fetch_tool(
         logger.error(err_msg)
         console.print(f"[error]{err_msg}[/error]")
         return WebFetchPluginOutput(
-            url=url_to_fetch, content=None, error=err_msg, status_code=None, truncated=False
+            url=url_to_fetch,
+            content=None,
+            error=err_msg,
+            status_code=None,
+            truncated=False,
         )
     except httpx.RequestError as e:
-        err_msg = f"Error: An HTTP request error occurred while fetching {url_to_fetch}: {e}"
+        err_msg = (
+            f"Error: An HTTP request error occurred while fetching {url_to_fetch}: {e}"
+        )
         logger.error(err_msg, exc_info=True)
         console.print(f"[error]{err_msg}[/error]")
         return WebFetchPluginOutput(
-            url=url_to_fetch, content=None, error=err_msg, status_code=None, truncated=False
+            url=url_to_fetch,
+            content=None,
+            error=err_msg,
+            status_code=None,
+            truncated=False,
         )
     except httpx.HTTPStatusError as e:
         err_msg = f"Error: HTTP status error for {url_to_fetch}: {e.response.status_code} - {e.response.text[:200]}..."
@@ -161,11 +184,17 @@ async def web_fetch_tool(
             truncated=False,
         )
     except Exception as e:
-        err_msg = f"Error: An unexpected error occurred while fetching {url_to_fetch}: {e}"
+        err_msg = (
+            f"Error: An unexpected error occurred while fetching {url_to_fetch}: {e}"
+        )
         logger.error(err_msg, exc_info=True)
         console.print(f"[error]{err_msg}[/error]")
         return WebFetchPluginOutput(
-            url=url_to_fetch, content=None, error=err_msg, status_code=None, truncated=False
+            url=url_to_fetch,
+            content=None,
+            error=err_msg,
+            status_code=None,
+            truncated=False,
         )
 
 
@@ -235,14 +264,16 @@ if __name__ == "__main__":
         )
         # Note: This URL might not always timeout, depending on network conditions.
         # A better test would involve a local mock server that introduces delay.
-        input6 = WebFetchPluginInput(url="http://httpbin.org/delay/5") # Delays for 5 seconds
+        input6 = WebFetchPluginInput(
+            url="http://httpbin.org/delay/5"
+        )  # Delays for 5 seconds
         # Temporarily override REQUEST_TIMEOUT for this test to be shorter than 5s
         global REQUEST_TIMEOUT
         original_timeout = REQUEST_TIMEOUT
-        REQUEST_TIMEOUT = 1 # Set to 1 second for this test
+        REQUEST_TIMEOUT = 1  # Set to 1 second for this test
         test_console.print("Please respond 'y' to the prompt.")
         output6 = await web_fetch_tool(test_console, input6)
-        REQUEST_TIMEOUT = original_timeout # Restore original timeout
+        REQUEST_TIMEOUT = original_timeout  # Restore original timeout
         test_console.print(f"Output 6: {output6}")
         assert output6.content is None and "timed out" in output6.error
 
@@ -250,7 +281,9 @@ if __name__ == "__main__":
         test_console.print(
             "\n[bold cyan]Test 7: Content truncation (wikipedia.org) - requires approval[/bold cyan]"
         )
-        input7 = WebFetchPluginInput(url="https://en.wikipedia.org/wiki/Large_Hadron_Collider")
+        input7 = WebFetchPluginInput(
+            url="https://en.wikipedia.org/wiki/Large_Hadron_Collider"
+        )
         test_console.print("Please respond 'y' to the prompt.")
         output7 = await web_fetch_tool(test_console, input7)
         test_console.print(f"Output 7: {output7}")
