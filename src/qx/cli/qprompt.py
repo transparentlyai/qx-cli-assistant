@@ -331,7 +331,7 @@ async def get_user_input(
         history=q_history, 
         style=prompt_style,
         completer=merged_completer, 
-        complete_while_typing=True,
+        complete_while_typing=False, # Changed to False
         key_bindings=kb
     )
 
