@@ -6,7 +6,7 @@ from pathlib import Path
 USER_HOME_DIR = Path.home().resolve()
 
 # QX Configuration and Data Directory
-QX_CONFIG_DIR = USER_HOME_DIR / ".config" / "q"
+QX_CONFIG_DIR = USER_HOME_DIR / ".config" / "qx"
 
 # History file path
 QX_HISTORY_FILE = QX_CONFIG_DIR / "history"
