@@ -11,7 +11,7 @@ from qx.core.user_prompts import request_confirmation
 logger = logging.getLogger(__name__)
 
 # Constants
-MAX_CONTENT_LENGTH = 150000  # Max characters to return from a fetched page
+MAX_CONTENT_LENGTH = 250000  # Max characters to return from a fetched page
 REQUEST_TIMEOUT = 10  # seconds
 
 
@@ -121,12 +121,16 @@ async def web_fetch_tool(
         async with httpx.AsyncClient() as client:
             response = await client.get(url_to_fetch, timeout=REQUEST_TIMEOUT)
             response.raise_for_status()  # Raise an exception for 4xx/5xx responses
-            logger.debug(f"Successfully fetched URL. Status code: {response.status_code}")
+            logger.debug(
+                f"Successfully fetched URL. Status code: {response.status_code}"
+            )
 
             content = response.text
             truncated = False
             if len(content) > MAX_CONTENT_LENGTH:
-                logger.debug(f"Content length ({len(content)}) exceeds MAX_CONTENT_LENGTH ({MAX_CONTENT_LENGTH}). Truncating.")
+                logger.debug(
+                    f"Content length ({len(content)}) exceeds MAX_CONTENT_LENGTH ({MAX_CONTENT_LENGTH}). Truncating."
+                )
                 content = content[:MAX_CONTENT_LENGTH]
                 truncated = True
                 console.print(
@@ -147,7 +151,9 @@ async def web_fetch_tool(
                         f"Could not convert content to markdown: {e}. Returning raw content."
                     )
                     final_content = content  # Fallback to raw if conversion fails
-                    logger.debug("Markdown conversion failed. Falling back to raw content.")
+                    logger.debug(
+                        "Markdown conversion failed. Falling back to raw content."
+                    )
 
             logger.info(
                 f"Successfully fetched URL: {url_to_fetch} (Status: {response.status_code}, Truncated: {truncated})"
