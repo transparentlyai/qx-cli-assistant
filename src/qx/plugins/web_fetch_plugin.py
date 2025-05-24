@@ -4,6 +4,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 from rich.console import Console as RichConsole
+from markitdown import MarkItDown
 
 from qx.core.user_prompts import request_confirmation
 
@@ -18,6 +19,7 @@ class WebFetchPluginInput(BaseModel):
     """Input model for the WebFetchTool."""
 
     url: str = Field(..., description="The URL to fetch content from.")
+    format: str = Field("markdown", description="The desired output format: 'markdown' or 'raw'.")
 
 
 class WebFetchPluginOutput(BaseModel):
@@ -46,6 +48,7 @@ async def web_fetch_tool(
     Requires user confirmation for security reasons.
     """
     url_to_fetch = args.url.strip()
+    output_format = args.format.lower()
 
     if not url_to_fetch:
         err_msg = "Error: Empty URL provided."
@@ -53,6 +56,14 @@ async def web_fetch_tool(
         console.print(f"[error]{err_msg}[/error]")
         return WebFetchPluginOutput(
             url="", content=None, error=err_msg, status_code=None, truncated=False
+        )
+
+    if output_format not in ["markdown", "raw"]:
+        err_msg = f"Error: Invalid format '{output_format}'. Supported formats are 'markdown' and 'raw'."
+        logger.error(err_msg)
+        console.print(f"[error]{err_msg}[/error]")
+        return WebFetchPluginOutput(
+            url=url_to_fetch, content=None, error=err_msg, status_code=None, truncated=False
         )
 
     prompt_msg = f"Allow QX to fetch content from URL: '{url_to_fetch}'?"
@@ -94,6 +105,21 @@ async def web_fetch_tool(
                 console.print(
                     f"[warning]Content truncated to {MAX_CONTENT_LENGTH} characters.[/warning]"
                 )
+            
+            final_content = content
+            if output_format == "markdown":
+                md = MarkItDown()
+                # MarkItDown expects a file-like object or a path. 
+                # For string content, we can use io.StringIO or a temporary file.
+                # For simplicity, let's assume the fetched content is HTML and convert it.
+                # A more robust solution might involve detecting content type.
+                try:
+                    # Attempt to convert HTML to Markdown
+                    from markdownify import markdownify as md_converter
+                    final_content = md_converter(content)
+                except Exception as e:
+                    logger.warning(f"Could not convert content to markdown: {e}. Returning raw content.")
+                    final_content = content # Fallback to raw if conversion fails
 
             logger.info(
                 f"Successfully fetched URL: {url_to_fetch} (Status: {response.status_code}, Truncated: {truncated})"
@@ -103,7 +129,7 @@ async def web_fetch_tool(
             )
             return WebFetchPluginOutput(
                 url=url_to_fetch,
-                content=content,
+                content=final_content,
                 error=None,
                 status_code=response.status_code,
                 truncated=truncated,
@@ -232,7 +258,35 @@ if __name__ == "__main__":
         assert len(output7.content) == MAX_CONTENT_LENGTH
         assert output7.status_code == 200 and output7.error is None
 
+        # Test 8: Fetch and return raw format
+        test_console.print(
+            "\n[bold cyan]Test 8: Fetch and return raw format (example.com) - requires approval[/bold cyan]"
+        )
+        input8 = WebFetchPluginInput(url="https://example.com", format="raw")
+        test_console.print("Please respond 'y' to the prompt.")
+        output8 = await web_fetch_tool(test_console, input8)
+        test_console.print(f"Output 8: {output8}")
+        assert output8.content is not None and "<!doctype html>" in output8.content
+        assert output8.status_code == 200 and output8.error is None
+
+        # Test 9: Fetch and return markdown format (default)
+        test_console.print(
+            "\n[bold cyan]Test 9: Fetch and return markdown format (example.com) - requires approval[/bold cyan]"
+        )
+        input9 = WebFetchPluginInput(url="https://example.com", format="markdown")
+        test_console.print("Please respond 'y' to the prompt.")
+        output9 = await web_fetch_tool(test_console, input9)
+        test_console.print(f"Output 9: {output9}")
+        assert output9.content is not None and "# Example Domain" in output9.content
+        assert output9.status_code == 200 and output9.error is None
+
+        # Test 10: Invalid format
+        test_console.print("\n[bold cyan]Test 10: Invalid format[/bold cyan]")
+        input10 = WebFetchPluginInput(url="https://example.com", format="invalid")
+        output10 = await web_fetch_tool(test_console, input10)
+        test_console.print(f"Output 10: {output10}")
+        assert output10.content is None and "Invalid format" in output10.error
+
         test_console.rule("Web_fetch_tool tests finished.")
 
     asyncio.run(run_tests())
-
