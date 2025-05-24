@@ -20,7 +20,7 @@ from prompt_toolkit.styles import Style
 from pyfzf.pyfzf import FzfPrompt
 from rich.console import Console as RichConsole
 
-from qx.core.paths import Q_HISTORY_FILE
+from qx.core.paths import QX_HISTORY_FILE
 from qx.cli.commands import CommandCompleter
 from qx.core.user_prompts import is_approve_all_active 
 
@@ -159,13 +159,13 @@ async def get_user_input(
     console: RichConsole,
 ) -> str:
     try:
-        Q_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        QX_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
     except OSError as e:
         console.print(
-            f"[warning]Warning: Could not create history directory {Q_HISTORY_FILE.parent}: {e}[/warning]"
+            f"[warning]Warning: Could not create history directory {QX_HISTORY_FILE.parent}: {e}[/warning]"
         )
 
-    q_history = FileHistory(str(Q_HISTORY_FILE))
+    q_history = FileHistory(str(QX_HISTORY_FILE))
     kb = KeyBindings()
     is_multiline = [False]
     
@@ -180,10 +180,10 @@ async def get_user_input(
         if not shutil.which("fzf"):
             console.print("[warning]fzf not found. Ctrl-R history search disabled.[/warning]")
             return
-        if not Q_HISTORY_FILE.exists() or Q_HISTORY_FILE.stat().st_size == 0:
+        if not QX_HISTORY_FILE.exists() or QX_HISTORY_FILE.stat().st_size == 0:
             return
         try:
-            with open(Q_HISTORY_FILE, "r", encoding="utf-8") as f:
+            with open(QX_HISTORY_FILE, "r", encoding="utf-8") as f:
                 lines = f.readlines()
         except IOError as e:
             console.print(f"[error]Error reading history file: {e}[/error]")
@@ -374,11 +374,11 @@ if __name__ == "__main__":
         print(
             "Type 'activate approve all' to test QA⏵ prompt, then 'deactivate approve all'."
         )
-        print(f"History file will be: {Q_HISTORY_FILE}")
-        Q_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        print(f"History file will be: {QX_HISTORY_FILE}")
+        QX_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-        if not Q_HISTORY_FILE.exists() or Q_HISTORY_FILE.stat().st_size == 0:
-            with open(Q_HISTORY_FILE, "w", encoding="utf-8") as f:
+        if not QX_HISTORY_FILE.exists() or QX_HISTORY_FILE.stat().st_size == 0:
+            with open(QX_HISTORY_FILE, "w", encoding="utf-8") as f:
                 ts_now = datetime.now()
                 f.write(f"# {(ts_now - timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S.%f')}\n+ls -la src/\n\n")
                 f.write(f"# {(ts_now - timedelta(minutes=30)).strftime('%Y-%m-%d %H:%M:%S.%f')}\n+/help\n\n")
