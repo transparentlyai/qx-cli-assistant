@@ -186,7 +186,7 @@ async def get_user_input(
             with open(QX_HISTORY_FILE, "r", encoding="utf-8") as f:
                 lines = f.readlines()
         except IOError as e:
-            console.print(f"[error]Error reading history file: {e}[/error]")
+            console.print(f"[red]Error reading history file: {e}[/red]")
             return
         if not lines: return
         processed_history_entries: List[Tuple[str, str]] = []
@@ -287,7 +287,7 @@ async def get_user_input(
                         cursor_position=len(original_command_to_insert),
                     )
         except Exception as e:
-            console.print(f"[error]Error running fzf: {e}[/error]")
+            console.print(f"[red]Error running fzf: {e}[/red]")
             console.print("[info]Ensure 'fzf' executable is installed and in your PATH.[/info]")
 
     @kb.add("c-m")

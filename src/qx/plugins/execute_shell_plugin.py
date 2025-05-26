@@ -248,7 +248,7 @@ async def execute_shell_tool(  # Made async
     if not command_to_consider:
         err_msg = "Error: Empty command provided."
         logger.error(err_msg)
-        console.print(f"[error]{err_msg}[/error]")
+        console.print(f"[red]{err_msg}[/red]")
         return ExecuteShellPluginOutput(
             command="", stdout=None, stderr=None, return_code=None, error=err_msg
         )
@@ -257,7 +257,7 @@ async def execute_shell_tool(  # Made async
         err_msg = f"Error: Command '{command_to_consider}' is prohibited by policy."
         logger.error(err_msg)
         console.print(
-            f"[error]Command prohibited by policy:[/error] '{command_to_consider}'"
+            f"[red]Command prohibited by policy:[/red] '{command_to_consider}'"
         )
         return ExecuteShellPluginOutput(
             command=command_to_consider,
@@ -293,7 +293,7 @@ async def execute_shell_tool(  # Made async
                     f"Original command '{command_to_consider}' modified to empty."
                 )
                 console.print(
-                    f"[error]{err_msg}[/error] Original: '{command_to_consider}'"
+                    f"[red]{err_msg}[/red] Original: '{command_to_consider}'"
                 )
                 return ExecuteShellPluginOutput(
                     command=command_to_consider,
@@ -312,7 +312,7 @@ async def execute_shell_tool(  # Made async
                 err_msg = f"Error: Modified command '{command_to_execute}' is prohibited by policy."
                 logger.error(err_msg)
                 console.print(
-                    f"[error]Modified command prohibited by policy:[/error] '{command_to_execute}'"
+                    f"[red]Modified command prohibited by policy:[/red] '{command_to_execute}'"
                 )
                 return ExecuteShellPluginOutput(
                     command=command_to_execute,
@@ -338,7 +338,7 @@ async def execute_shell_tool(  # Made async
     else:  # Auto-approved
         logger.info(f"Command '{command_to_execute}' is auto-approved. Executing.")
         console.print(
-            f"[success]AUTO-APPROVED (PATTERN):[/] Executing: [info]'{command_to_execute}'[/]"
+            f"[green]AUTO-APPROVED (PATTERN):[/green] Executing: [blue]'{command_to_execute}'[/blue]"
         )
 
     # If we reach here, command is approved (or auto-approved or session_approved) and not prohibited
@@ -398,7 +398,7 @@ async def execute_shell_tool(  # Made async
         )
         err_msg = f"Error: Failed to execute command '{command_to_execute}': {e}"
         console.print(
-            f"[error]Failed to execute command '{command_to_execute}':[/error] {e}"
+            f"[red]Failed to execute command '{command_to_execute}':[/red] {e}"
         )
         return ExecuteShellPluginOutput(
             command=command_to_execute,

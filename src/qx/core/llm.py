@@ -115,7 +115,7 @@ class QXLLMAgent:
         openrouter_api_key = os.environ.get("OPENROUTER_API_KEY")
         if not openrouter_api_key:
             self.console.print(
-                "[error]Error:[/] OPENROUTER_API_KEY environment variable not set."
+                "[red]Error:[/red] OPENROUTER_API_KEY environment variable not set."
             )
             raise ValueError("OPENROUTER_API_KEY not set.")
 
@@ -184,6 +184,7 @@ class QXLLMAgent:
             messages.append(response_message)
 
             if response_message.tool_calls:
+                # Process all tool calls before making the next LLM request
                 for tool_call in response_message.tool_calls:
                     function_name = tool_call.function.name
                     function_args = tool_call.function.arguments
@@ -193,7 +194,7 @@ class QXLLMAgent:
                             f"LLM attempted to call unknown tool: {function_name}"
                         )
                         logger.error(error_msg)
-                        self.console.print(f"[error]{error_msg}[/error]")
+                        self.console.print(f"[red]{error_msg}[/red]")
                         messages.append(
                             cast(
                                 ChatCompletionToolMessageParam,
@@ -204,7 +205,7 @@ class QXLLMAgent:
                                 },
                             )
                         )
-                        return await self.run(user_input, messages)
+                        continue
 
                     tool_func = self._tool_functions[function_name]
                     tool_input_model = self._tool_input_models[function_name]
@@ -217,7 +218,7 @@ class QXLLMAgent:
                             except json.JSONDecodeError:
                                 error_msg = f"LLM provided invalid JSON arguments for tool '{function_name}': {function_args}"
                                 logger.error(error_msg)
-                                self.console.print(f"[error]{error_msg}[/error]")
+                                self.console.print(f"[red]{error_msg}[/red]")
                                 messages.append(
                                     cast(
                                         ChatCompletionToolMessageParam,
@@ -228,25 +229,25 @@ class QXLLMAgent:
                                         },
                                     )
                                 )
-                                return await self.run(user_input, messages)
+                                continue
 
                         try:
                             tool_args_instance = tool_input_model(**parsed_args)
                         except ValidationError as ve:
                             error_msg = f"LLM provided invalid parameters for tool '{function_name}'. Validation errors: {ve}"
                             logger.error(error_msg, exc_info=True)
-                            self.console.print(f"[error]{error_msg}[/error]")
+                            self.console.print(f"[red]{error_msg}[/red]")
                             messages.append(
                                 cast(
                                     ChatCompletionToolMessageParam,
                                     {
                                         "role": "tool",
-                                    "tool_call_id": tool_call.id,
+                                        "tool_call_id": tool_call.id,
                                         "content": f"Error: Invalid parameters for tool '{function_name}'. Details: {ve}",
                                     },
                                 )
                             )
-                            return await self.run(user_input, messages)
+                            continue
 
                         tool_output = await tool_func(
                             console=self.console, args=tool_args_instance
@@ -268,12 +269,10 @@ class QXLLMAgent:
                             )
                         )
 
-                        return await self.run(user_input, messages)
-
                     except Exception as e:
                         error_msg = f"Error executing tool '{function_name}': {e}"
                         logger.error(error_msg, exc_info=True)
-                        self.console.print(f"[error]{error_msg}[/error]")
+                        self.console.print(f"[red]{error_msg}[/red]")
                         messages.append(
                             cast(
                                 ChatCompletionToolMessageParam,
@@ -284,7 +283,9 @@ class QXLLMAgent:
                                 },
                             )
                         )
-                        return await self.run(user_input, messages)
+
+                # After processing all tool calls, make one recursive call
+                return await self.run(user_input, messages)
             else:
 
                 class QXRunResult:
@@ -303,7 +304,7 @@ class QXLLMAgent:
 
         except Exception as e:
             logger.error(f"Error during LLM chat completion: {e}", exc_info=True)
-            self.console.print(f"[error]Error:[/] LLM chat completion: {e}[/error]")
+            self.console.print(f"[red]Error:[/red] LLM chat completion: {e}")
             return None
 
 
@@ -335,7 +336,7 @@ def initialize_llm_agent(
 
     except Exception as e:
         logger.error(f"Failed to load plugins: {e}", exc_info=True)
-        console.print(f"[error]Error:[/] Failed to load tools: {e}")
+        console.print(f"[red]Error:[/red] Failed to load tools: {e}")
         registered_tools = []
 
     # Add MCP tools to the list of registered tools
@@ -373,7 +374,7 @@ def initialize_llm_agent(
 
     except Exception as e:
         logger.error(f"Failed to initialize QXLLMAgent: {e}", exc_info=True)
-        console.print(f"[error]Error:[/] Init LLM Agent: {e}")
+        console.print(f"[red]Error:[/red] Init LLM Agent: {e}")
         return None
 
 
@@ -394,5 +395,5 @@ async def query_llm(
         return result
     except Exception as e:
         logger.error(f"Error during LLM query: {e}", exc_info=True)
-        console.print(f"[error]Error:[/] LLM query: {e}")
+        console.print(f"[red]Error:[/red] LLM query: {e}")
         return None

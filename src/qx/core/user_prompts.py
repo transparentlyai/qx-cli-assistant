@@ -69,7 +69,7 @@ def is_approve_all_active(console: RichConsole) -> bool:
                 if hasattr(console, "clear_live"): console.clear_live()
 
             console.print(
-                Text.from_markup("[warning]INFO:[/] 'Approve All' session has expired."),
+                Text.from_markup("[yellow]INFO:[/yellow] 'Approve All' session has expired."),
             )
             logger.info("'Approve All' session has expired.")
             _approve_all_until = None
@@ -93,13 +93,13 @@ async def _ask_duration(console: RichConsole, prompt_message_text: str, default:
             duration = int(duration_str)
             if duration < 0:
                 console.print(
-                    Text.from_markup("[error]Please enter a non-negative number of minutes.[/]"),
+                    Text.from_markup("[red]Please enter a non-negative number of minutes.[/red]"),
                 )
                 continue
             return duration
         except ValueError:
             console.print(
-                Text.from_markup("[error]Please enter a valid number of minutes.[/]")
+                Text.from_markup("[red]Please enter a valid number of minutes.[/red]")
             )
         except EOFError:
             logger.warning(f"EOFError (Ctrl+D) received for duration. Using default ({default} minutes).")
@@ -112,7 +112,7 @@ async def _ask_duration(console: RichConsole, prompt_message_text: str, default:
         except Exception as e:
             logger.error(f"Failed to get duration input: {e}", exc_info=True)
             console.print(
-                Text.from_markup(f"[error]An error occurred. Using default value ({default} minutes).[/]"),
+                Text.from_markup(f"[red]An error occurred. Using default value ({default} minutes).[/red]"),
             )
             return default
 
@@ -150,7 +150,7 @@ async def _ask_basic_confirmation( # Made async
                 example_guidance = f" (e.g., '{first_choice_key}' for {first_choice_display}, or '{first_choice_full}')"
             
             console.print(
-                Text.from_markup(f"[error]Invalid input.[/] Please enter one of {simple_choices_str}{example_guidance}"),
+                Text.from_markup(f"[red]Invalid input.[/red] Please enter one of {simple_choices_str}{example_guidance}"),
             )
         except EOFError:
             logger.warning("EOFError (Ctrl+D) received during confirmation. Defaulting to Cancel.")
@@ -162,7 +162,7 @@ async def _ask_basic_confirmation( # Made async
             return CHOICE_CANCEL[0]
         except Exception as e:
             logger.error(f"Failed to get user confirmation choice: {e}", exc_info=True)
-            console.print(Text.from_markup("[error]An error occurred during input. Defaulting to Cancel.[/]"),)
+            console.print(Text.from_markup("[red]An error occurred during input. Defaulting to Cancel.[/red]"),)
             return CHOICE_CANCEL[0]
 
 async def request_confirmation( # Made async
@@ -181,10 +181,10 @@ async def request_confirmation( # Made async
     # Only auto-approve if can_approve_all is True AND approve_all is active
     if can_approve_all and is_approve_all_active(console):
         logger.info(f"SESSION_APPROVED (via 'Approve All'): {prompt_message}")
-        console.print(Text.from_markup(f"[success]SESSION APPROVED:[/] {prompt_message.split('?')[0]} [dim](Approve All active)[/dim]"))
+        console.print(Text.from_markup(f"[green]SESSION APPROVED:[/green] {prompt_message.split('?')[0]} [dim](Approve All active)[/dim]"))
         return "session_approved", current_value_for_modification if allow_modify else ""
 
-    console.print(Text.from_markup(f"[info]ACTION REQUIRED:[/] {prompt_message}"))
+    console.print(Text.from_markup(f"[blue]ACTION REQUIRED:[/blue] {prompt_message}"))
 
     if content_to_display:
         if isinstance(content_to_display, str):
@@ -206,7 +206,7 @@ async def request_confirmation( # Made async
     
     elif user_choice_key == CHOICE_NO[0]:
         logger.warning(f"User denied action: {prompt_message}")
-        console.print(Text.from_markup(f"[warning]Denied by user:[/] {prompt_message.split('?')[0]}"))
+        console.print(Text.from_markup(f"[yellow]Denied by user:[/yellow] {prompt_message.split('?')[0]}"))
         return "denied", None
         
     elif user_choice_key == CHOICE_MODIFY[0] and allow_modify:
@@ -230,7 +230,7 @@ async def request_confirmation( # Made async
                 return "approved", current_value_for_modification
 
             logger.info(f"User modified item for action '{prompt_message}'. New value: '{modified_value}'")
-            console.print(Text.from_markup(f"[success]Value modified. Proceeding with:[/] [info]{modified_value}[/]"))
+            console.print(Text.from_markup(f"[green]Value modified. Proceeding with:[/green] [blue]{modified_value}[/blue]"))
             return "modified", modified_value
             
         except EOFError:
@@ -243,7 +243,7 @@ async def request_confirmation( # Made async
             return "cancelled", None
         except Exception as e:
             logger.error(f"Error during modification input for '{prompt_message}': {e}", exc_info=True)
-            console.print(Text.from_markup("[error]An error occurred during modification. Action cancelled.[/]"))
+            console.print(Text.from_markup("[red]An error occurred during modification. Action cancelled.[/red]"))
             return "cancelled", None
 
     elif user_choice_key == CHOICE_APPROVE_ALL[0] and can_approve_all:
@@ -256,7 +256,7 @@ async def request_confirmation( # Made async
         if duration_minutes > 0:
             _approve_all_until = datetime.datetime.now() + datetime.timedelta(minutes=duration_minutes)
             logger.info(f"'Approve All' activated until {_approve_all_until}")
-            console.print(Text.from_markup(f"\n[success]▶▶▶ Auto-approval enabled for {duration_minutes} minutes.[/]\n"))
+            console.print(Text.from_markup(f"\n[green]▶▶▶ Auto-approval enabled for {duration_minutes} minutes.[/green]\n"))
             return "approved", current_value_for_modification if allow_modify else ""
         else:
             logger.info("User entered 0 or negative duration for 'Approve All'. Not activating. Current operation denied.")
@@ -268,26 +268,26 @@ async def request_confirmation( # Made async
         return "cancelled", None
 
     logger.error(f"Unexpected choice key '{user_choice_key}' in request_confirmation for '{prompt_message}'.")
-    console.print(Text.from_markup("[error]An unexpected error occurred in confirmation. Action cancelled.[/]"))
+    console.print(Text.from_markup("[red]An unexpected error occurred in confirmation. Action cancelled.[/red]"))
     return "cancelled", None
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     test_console = RichConsole()
-    test_console.rule("[bold green]Testing request_confirmation with Approve All[/]")
+    test_console.rule("[bold green]Testing request_confirmation with Approve All[/bold green]")
 
     async def run_tests():
         global _approve_all_until # Moved to top of function
         # Test 1: Approve All
-        test_console.print("\n[bold]Test 1: Choose 'Approve All'[/]")
+        test_console.print("\n[bold]Test 1: Choose 'Approve All'[/bold]")
         status, val = await request_confirmation("Allow critical action (Test 1)?", test_console, can_approve_all=True)
         test_console.print(f"Test 1 Result: Status='{status}', Value='{val}'")
         if status == "approved" and _approve_all_until:
             test_console.print(f"Approve All is active until: {_approve_all_until}")
 
         # Test 2: Check if Approve All is active
-        test_console.print("\n[bold]Test 2: Action during 'Approve All'[/]")
+        test_console.print("\n[bold]Test 2: Action during 'Approve All'[/bold]")
         if _approve_all_until:
             status, val = await request_confirmation("Allow another action (Test 2)?", test_console, can_approve_all=True)
             test_console.print(f"Test 2 Result: Status='{status}', Value='{val}'")
@@ -296,7 +296,7 @@ if __name__ == "__main__":
             test_console.print("Skipping Test 2 as 'Approve All' was not activated in Test 1.")
 
         # Test 3: Test expiry (manual simulation)
-        test_console.print("\n[bold]Test 3: Simulate 'Approve All' expiry[/]")
+        test_console.print("\n[bold]Test 3: Simulate 'Approve All' expiry[/bold]")
         if _approve_all_until:
             _approve_all_until = datetime.datetime.now() - datetime.timedelta(seconds=1)
             is_active_after_expiry = is_approve_all_active(test_console)
@@ -307,10 +307,10 @@ if __name__ == "__main__":
             test_console.print("Skipping Test 3 as 'Approve All' was not active.")
 
         # Test 4: Simple Yes/No after expiry
-        test_console.print("\n[bold]Test 4: Simple Yes/No after expiry[/]")
+        test_console.print("\n[bold]Test 4: Simple Yes/No after expiry[/bold]")
         status, val = await request_confirmation("Allow simple action post-expiry (Test 4)?", test_console, can_approve_all=True)
         test_console.print(f"Test 4 Result: Status='{status}', Value='{val}'")
 
-        test_console.print("\n[bold green]Finished testing request_confirmation with Approve All.[/]")
+        test_console.print("\n[bold green]Finished testing request_confirmation with Approve All.[/bold green]")
 
     asyncio.run(run_tests())
