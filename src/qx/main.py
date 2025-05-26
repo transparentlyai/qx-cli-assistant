@@ -64,7 +64,7 @@ async def _initialize_agent_with_mcp(mcp_manager: MCPManager) -> QXLLMAgent:
 
     if not model_name_from_env:
         qx_console.print(
-            "[error]Critical Error:[/] QX_MODEL_NAME environment variable not set. Please set it to an OpenRouter model string (e.g., 'google/gemini-2.5-flash-preview-05-20:thinking')."
+            "[red]Critical Error:[/red] QX_MODEL_NAME environment variable not set. Please set it to an OpenRouter model string (e.g., 'google/gemini-2.5-flash-preview-05-20:thinking')."
         )
         sys.exit(1)
 
@@ -79,7 +79,7 @@ async def _initialize_agent_with_mcp(mcp_manager: MCPManager) -> QXLLMAgent:
 
     if agent is None:
         qx_console.print(
-            "[error]Critical Error:[/] Failed to initialize LLM agent. Exiting."
+            "[red]Critical Error:[/red] Failed to initialize LLM agent. Exiting."
         )
         sys.exit(1)
     return agent
@@ -202,14 +202,14 @@ async def _handle_llm_interaction(
             if plain_text_output:
                 sys.stderr.write("Error: Unexpected response structure from LLM.\n")
             else:
-                qx_console.print("[error]Error:[/] Unexpected response structure from LLM.")
+                qx_console.print("[red]Error:[/red] Unexpected response structure from LLM.")
             return current_message_history
     else:
         if plain_text_output:
             sys.stdout.write("Info: No response generated or an error occurred.\n")
         else:
             qx_console.print(
-                "[warning]Info:[/] No response generated or an error occurred."
+                "[yellow]Info:[/yellow] No response generated or an error occurred."
             )
         return current_message_history
 
@@ -268,7 +268,7 @@ async def _async_main(
                 current_message_history = loaded_history
                 qx_console.print("[info]Session recovered successfully![/info]")
             else:
-                qx_console.print("[error]Failed to recover session. Starting new session.[/error]")
+                qx_console.print("[red]Failed to recover session. Starting new session.[/red]")
 
         if initial_prompt:
             if not exit_after_response:
@@ -329,7 +329,7 @@ async def _async_main(
                             with open(prompt_path, 'r', encoding='utf-8') as f:
                                 compression_prompt = f.read().strip()
                         except Exception as e:
-                            qx_console.print(f"[error]Error reading compression prompt: {e}[/error]")
+                            qx_console.print(f"[red]Error reading compression prompt: {e}[/red]")
                             continue
                         
                         qx_console.print("[info]Compressing conversation context...[/info]")
@@ -359,9 +359,9 @@ async def _async_main(
                                 
                                 qx_console.print("[info]Context compressed and session reset with compressed history.[/info]")
                             else:
-                                qx_console.print("[error]Failed to extract compressed context from LLM response.[/error]")
+                                qx_console.print("[red]Failed to extract compressed context from LLM response.[/red]")
                         else:
-                            qx_console.print("[error]Failed to compress context.[/error]")
+                            qx_console.print("[red]Failed to compress context.[/red]")
                     elif command_name.startswith("/save-session"):
                         if not current_message_history:
                             qx_console.print("[warning]No conversation history to save.[/warning]")
@@ -369,12 +369,12 @@ async def _async_main(
                         
                         # Parse the filename argument
                         if not command_args:
-                            qx_console.print("[error]Usage: /save-session <filename>[/error]")
+                            qx_console.print("[red]Usage: /save-session <filename>[/red]")
                             continue
                         
                         filename = command_args.strip()
                         if not filename:
-                            qx_console.print("[error]Filename cannot be empty.[/error]")
+                            qx_console.print("[red]Filename cannot be empty.[/red]")
                             continue
                         
                         # Ensure .json extension
@@ -398,10 +398,10 @@ async def _async_main(
                                 json.dump(serializable_history, f, indent=2)
                             qx_console.print(f"[info]Session saved to {session_path}[/info]")
                         except Exception as e:
-                            qx_console.print(f"[error]Failed to save session: {e}[/error]")
+                            qx_console.print(f"[red]Failed to save session: {e}[/red]")
                     elif command_name == "/mcp-connect": # New MCP Connect Command
                         if not command_args:
-                            qx_console.print("[error]Usage: /mcp-connect <server_name>[/error]")
+                            qx_console.print("[red]Usage: /mcp-connect <server_name>[/red]")
                             continue
                         success = await config_manager.mcp_manager.connect_server(command_args)
                         if success:
@@ -409,10 +409,10 @@ async def _async_main(
                             llm_agent = await _initialize_agent_with_mcp(config_manager.mcp_manager)
                             qx_console.print(f"[success]Successfully connected to MCP server '{command_args}' and reloaded LLM agent tools.[/success]")
                         else:
-                            qx_console.print(f"[error]Failed to connect to MCP server '{command_args}'. Check logs for details.[/error]")
+                            qx_console.print(f"[red]Failed to connect to MCP server '{command_args}'. Check logs for details.[/red]")
                     elif command_name == "/mcp-disconnect": # New MCP Disconnect Command
                         if not command_args:
-                            qx_console.print("[error]Usage: /mcp-disconnect <server_name>[/error]")
+                            qx_console.print("[red]Usage: /mcp-disconnect <server_name>[/red]")
                             continue
                         success = await config_manager.mcp_manager.disconnect_server(command_args)
                         if success:
@@ -420,7 +420,7 @@ async def _async_main(
                             llm_agent = await _initialize_agent_with_mcp(config_manager.mcp_manager)
                             qx_console.print(f"[success]Successfully disconnected from MCP server '{command_args}' and reloaded LLM agent tools.[/success]")
                         else:
-                            qx_console.print(f"[error]Failed to disconnect from MCP server '{command_args}'. Check logs for details.[/error]")
+                            qx_console.print(f"[red]Failed to disconnect from MCP server '{command_args}'. Check logs for details.[/red]")
                     elif command_name == "/mcp-tools": # New MCP Tools List Command
                         mcp_tools = config_manager.mcp_manager.get_active_tools()
                         
@@ -445,7 +445,7 @@ async def _async_main(
                         from rich.panel import Panel
                         qx_console.print(Panel(tools_info.strip(), title="MCP Tools", border_style="blue"))
                     else:
-                        qx_console.print(f"[error]Unknown command: {command_name}[/error]")
+                        qx_console.print(f"[red]Unknown command: {command_name}[/red]")
                     continue
 
                 current_message_history = await _handle_llm_interaction(
@@ -484,7 +484,7 @@ async def _async_main(
                     f"An unexpected error occurred in the main loop: {e}", exc_info=True
                 )
                 qx_console.print(
-                    f"[error]Critical Error:[/] An unexpected error occurred: {e}"
+                    f"[red]Critical Error:[/red] An unexpected error occurred: {e}"
                 )
                 qx_console.print("Exiting QX due to critical error.", style="bold red")
                 # Save session on unexpected error as well
@@ -539,11 +539,11 @@ def main():
 
     # Handle mutually exclusive arguments
     if args.recover_session and initial_prompt_str:
-        qx_console.print("[error]Error:[/] Cannot use --recover-session with an initial prompt. Please choose one.")
+        qx_console.print("[red]Error:[/red] Cannot use --recover-session with an initial prompt. Please choose one.")
         sys.exit(1)
 
     if args.recover_session and args.exit_after_response:
-        qx_console.print("[error]Error:[/] Cannot use --recover-session with --exit-after-response. Recovery implies interactive mode.")
+        qx_console.print("[red]Error:[/red] Cannot use --recover-session with --exit-after-response. Recovery implies interactive mode.")
         sys.exit(1)
 
     recover_path = Path(args.recover_session) if args.recover_session else None

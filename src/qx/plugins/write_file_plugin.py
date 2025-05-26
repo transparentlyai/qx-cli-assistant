@@ -324,7 +324,7 @@ if __name__ == "__main__":
 
     async def run_tests():  # Wrapped tests in an async function
         # Test 1: Write new file in project (user approves)
-        test_console.print("\n[bold]Test 1: Write new project file (approve path)[/]")
+        test_console.print("\n[bold]Test 1: Write new project file (approve path)[/bold]")
         input1 = WriteFilePluginInput(
             path="new_project_file.txt", content="Hello from write plugin!"
         )
@@ -340,7 +340,7 @@ if __name__ == "__main__":
         existing_file = test_project / "existing_project_file.txt"
         existing_file.write_text("Old line 1\nOld line 2")
         test_console.print(
-            "\n[bold]Test 2: Modify existing project file (approve diff)[/]"
+            "\n[bold]Test 2: Modify existing project file (approve diff)[/bold]"
         )
         input2 = WriteFilePluginInput(
             path="existing_project_file.txt",
@@ -362,7 +362,7 @@ if __name__ == "__main__":
             original_cwd
         )  # Change CWD to ensure tilde path is outside project for confirmation
         test_console.print(
-            f"\n[bold]Test 3: Write to home, user modifies path from ~/{home_test_file_original_name} to ~/{home_test_file_modified_name}[/]"
+            f"\n[bold]Test 3: Write to home, user modifies path from ~/{home_test_file_original_name} to ~/{home_test_file_modified_name}[/bold]"
         )
         input3 = WriteFilePluginInput(
             path=f"~/{home_test_file_original_name}",
@@ -384,7 +384,7 @@ if __name__ == "__main__":
         )  # cleanup original if created by mistake
 
         # Test 4: Denied by policy
-        test_console.print("\n[bold]Test 4: Write to /etc/somefile (policy denial)[/]")
+        test_console.print("\n[bold]Test 4: Write to /etc/somefile (policy denial)[/bold]")
         input4 = WriteFilePluginInput(
             path="/etc/this_should_fail.txt", content="Forbidden content"
         )
@@ -396,7 +396,7 @@ if __name__ == "__main__":
 
         # Test 5: User denies
         os.chdir(test_project)  # Back to project dir
-        test_console.print("\n[bold]Test 5: User denies write to project file[/]")
+        test_console.print("\n[bold]Test 5: User denies write to project file[/bold]")
         input5 = WriteFilePluginInput(
             path="user_denies_this.txt", content="This won't be written."
         )

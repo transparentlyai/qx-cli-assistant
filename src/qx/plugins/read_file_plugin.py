@@ -146,7 +146,7 @@ async def read_file_tool(  # Made async
             f"Read access denied by policy (plugin pre-check) for path: {absolute_path_to_evaluate}"
         )
         console.print(
-            f"[error]Read denied by policy:[/error] {absolute_path_to_evaluate}"
+            f"[red]Read denied by policy:[/red] {absolute_path_to_evaluate}"
         )
         return ReadFilePluginOutput(path=expanded_path_arg, content=None, error=err_msg)
 
@@ -217,7 +217,7 @@ async def read_file_tool(  # Made async
         )
         logger.error(err_msg)
         console.print(
-            f"[error]Failed to read \'{expanded_path_arg}\':[/error] Path is not a file or does not exist."
+            f"[red]Failed to read \'{expanded_path_arg}\':[/red] Path is not a file or does not exist."
         )
         return ReadFilePluginOutput(path=expanded_path_arg, content=None, error=err_msg)
 
@@ -226,7 +226,7 @@ async def read_file_tool(  # Made async
     if error_from_core:
         # _read_file_core_logic already logs its specific errors.
         console.print(
-            f"[error]Failed to read \'{expanded_path_arg}\':[/error] {error_from_core}"
+            f"[red]Failed to read \'{expanded_path_arg}\':[/red] {error_from_core}"
         )
         return ReadFilePluginOutput(
             path=expanded_path_arg, content=content, error=error_from_core
@@ -327,19 +327,19 @@ if __name__ == "__main__":
     test_console.print(f"Simulated .Q file: {dot_q_file_path}")
 
     async def run_tests():  # Wrapped tests in an async function
-        test_console.print("\n[bold cyan]Test 1: Read project file (relative path)[/]")
+        test_console.print("\n[bold cyan]Test 1: Read project file (relative path)[/bold cyan]")
         input1 = ReadFilePluginInput(path="project_file.txt")
         output1 = await read_file_tool(test_console, input1)  # Updated call
         test_console.print(f"Output 1: {output1}")
         assert output1.content == "This is a project file." and output1.error is None
 
-        test_console.print("\n[bold cyan]Test 2: Read .Q file (relative path)[/]")
+        test_console.print("\n[bold cyan]Test 2: Read .Q file (relative path)[/bold cyan]")
         input2 = ReadFilePluginInput(path=".Q/q_file.txt")
         output2 = await read_file_tool(test_console, input2)  # Updated call
         test_console.print(f"Output 2: {output2}")
         assert output2.content == "This is a .Q file." and output2.error is None
 
-        test_console.print("\n[bold cyan]Test 3: Read non-existent file[/]")
+        test_console.print("\n[bold cyan]Test 3: Read non-existent file[/bold cyan]")
         input3 = ReadFilePluginInput(path="non_existent_file.txt")
         output3 = await read_file_tool(test_console, input3)  # Updated call
         test_console.print(f"Output 3: {output3}")
@@ -355,7 +355,7 @@ if __name__ == "__main__":
         test_console.print(f"Changed CWD to: {Path.cwd()} for home directory test")
 
         test_console.print(
-            f"\n[bold cyan]Test 4: Read file in user home (\'{real_home_test_file_path}\') - requires confirmation[/]"
+            f"\n[bold cyan]Test 4: Read file in user home (\'{real_home_test_file_path}\') - requires confirmation[/bold cyan]"
         )
         input4 = ReadFilePluginInput(
             path=str(real_home_test_file_path)
@@ -379,7 +379,7 @@ if __name__ == "__main__":
         # This test might fail on systems where /etc/hosts is not readable by the user,
         # but the policy denial should be caught first.
         test_console.print(
-            "\n[bold cyan]Test 5: Read /etc/hosts (expect policy denial)[/]"
+            "\n[bold cyan]Test 5: Read /etc/hosts (expect policy denial)[/bold cyan]"
         )
         # Note: _find_project_root from original_cwd might still find the main QX project.
         # The policy check is absolute, so this should be fine.
@@ -390,7 +390,7 @@ if __name__ == "__main__":
         assert "Access denied by policy" in output5.error
 
         # Test reading a directory
-        test_console.print("\n[bold cyan]Test 6: Attempt to read a directory[/]")
+        test_console.print("\n[bold cyan]Test 6: Attempt to read a directory[/bold cyan]")
         input6 = ReadFilePluginInput(path=str(test_project))  # Path to the directory
         output6 = await read_file_tool(test_console, input6)  # Updated call
         test_console.print(f"Output 6: {output6}")

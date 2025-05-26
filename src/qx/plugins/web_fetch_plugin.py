@@ -64,7 +64,7 @@ async def web_fetch_tool(
     if not url_to_fetch:
         err_msg = "Error: Empty URL provided."
         logger.error(err_msg)
-        console.print(f"[error]{err_msg}[/error]")
+        console.print(f"[red]{err_msg}[/red]")
         logger.debug("Returning due to empty URL.")
         return WebFetchPluginOutput(
             url="", content=None, error=err_msg, status_code=None, truncated=False
@@ -73,7 +73,7 @@ async def web_fetch_tool(
     if output_format not in ["markdown", "raw"]:
         err_msg = f"Error: Invalid format '{output_format}'. Supported formats are 'markdown' and 'raw'."
         logger.error(err_msg)
-        console.print(f"[error]{err_msg}[/error]")
+        console.print(f"[red]{err_msg}[/red]")
         logger.debug(f"Returning due to invalid format: {output_format}.")
         return WebFetchPluginOutput(
             url=url_to_fetch,
@@ -173,7 +173,7 @@ async def web_fetch_tool(
     except httpx.TimeoutException:
         err_msg = f"Error: Request to {url_to_fetch} timed out after {REQUEST_TIMEOUT} seconds."
         logger.error(err_msg)
-        console.print(f"[error]{err_msg}[/error]")
+        console.print(f"[red]{err_msg}[/red]")
         logger.debug("Returning due to TimeoutException.")
         return WebFetchPluginOutput(
             url=url_to_fetch,
@@ -187,7 +187,7 @@ async def web_fetch_tool(
             f"Error: An HTTP request error occurred while fetching {url_to_fetch}: {e}"
         )
         logger.error(err_msg, exc_info=True)
-        console.print(f"[error]{err_msg}[/error]")
+        console.print(f"[red]{err_msg}[/red]")
         logger.debug("Returning due to RequestError.")
         return WebFetchPluginOutput(
             url=url_to_fetch,
@@ -199,7 +199,7 @@ async def web_fetch_tool(
     except httpx.HTTPStatusError as e:
         err_msg = f"Error: HTTP status error for {url_to_fetch}: {e.response.status_code} - {e.response.text[:200]}..."
         logger.error(err_msg, exc_info=True)
-        console.print(f"[error]{err_msg}[/error]")
+        console.print(f"[red]{err_msg}[/red]")
         logger.debug("Returning due to HTTPStatusError.")
         return WebFetchPluginOutput(
             url=url_to_fetch,
@@ -213,7 +213,7 @@ async def web_fetch_tool(
             f"Error: An unexpected error occurred while fetching {url_to_fetch}: {e}"
         )
         logger.error(err_msg, exc_info=True)
-        console.print(f"[error]{err_msg}[/error]")
+        console.print(f"[red]{err_msg}[/red]")
         logger.debug("Returning due to unexpected Exception.")
         return WebFetchPluginOutput(
             url=url_to_fetch,
