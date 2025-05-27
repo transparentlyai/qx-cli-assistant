@@ -8,8 +8,8 @@ user inital instructions:
 project initial instructions: 
 {project_context}
 
-initial Files:  
-{files_context}
+Project Files:  
+{project_files}
 
 **Core Capabilities & Tasks:**
 
