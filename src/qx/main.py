@@ -348,6 +348,10 @@ async def _async_main(
                                     break
                             
                             if compressed_context:
+                                # Prepend the specified text to the compressed_context
+                                prefix = "This session is being continued from a previous conversation that ran out of context. The conversation is summarized below:\n\n"
+                                compressed_context = prefix + compressed_context
+
                                 # Reset the session (like /reset command)
                                 qx_console.clear()
                                 llm_agent = await _initialize_agent_with_mcp(config_manager.mcp_manager)

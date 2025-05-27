@@ -1,122 +1,63 @@
-# AI Coding Assistant – Concise Session-Handover Prompt
+Task: Output a Markdown document that summarizes the **entire interactive coding session that occurred *before* this current summarization request**. This summary is for hand-over to another AI that already possesses full project and environment context.
 
-**Task:** Output **one** JSON object summarising this session for hand-over to another AI that already has full project and environment context.
-Focus on objectives, key actions/decisions, code- and file-changes. Skip full file contents, detailed environment data, and most timestamps.
-Embed a `handover_instructions` object (see § IX).
+**Important Scope Note:** Focus *exclusively* on the conversation, actions, and developments from the session *prior to receiving this summarization instruction*. Do **not** include any information about the task of creating this summary itself.
 
----
+The output document must include the following sections, detailing the historical conversation and actions:
 
-## I  Core Session Objective & User Intent
+**1. Core Session Objective & User Intent:**
+    * Primary goal statement for the overall session.
+    * Original user requests that initiated or guided the work.
+    * Key clarifications and scope definitions (including agreed scope changes/constraints throughout the session).
+    * Desired end-state description for the tasks and actions performed so far (what success looked like for those prior activities).
 
-1. `Primary_Goal_Statement` – main goal.
-2. `Original_User_Requests` – array of initial prompts.
-3. `Key_Clarifications_Scope_Definitions` – agreed scope changes/constraints.
-4. `Desired_End_State_Description` – what success looks like.
+**2. Session Status, Action Log, and Resumption Plan:**
+    * **A. Action Log:** For each significant action or task undertaken during the prior session:
+        * Action description (e.g., "Implemented user authentication module," "Attempted to debug X issue").
+        * Status (e.g., Completed, Partially Completed, Pending User Feedback, In-Progress, Failed, Aborted).
+        * Key outcomes or partial results summary (even if incomplete, note what was achieved or learned).
+        * Specific next steps for *this individual action* if it's not fully complete (e.g., "Requires refactoring of function Y," "Awaiting API key from user").
+    * **B. Consolidated Resumption Plan & Next Steps:** This section outlines how to pick up the work.
+        * **Overall Session Status:** Briefly state the overall status of the session's objectives (e.g., "Main objective X is 70% complete," "Blocked on Y," "Ready for next phase").
+        * **Immediate Next Action(s) Recommended:** Clearly list the 1-3 highest priority actions the next AI should take to resume progress effectively. Be specific.
+        * **Pending Actions/Open Loops:** List any other tasks that were started but not completed, or user requests that are still pending.
+        * **Information Needed for Resumption:** Specify if any critical information, decisions, or resources are immediately required to unblock or continue the work (e.g., "User decision on option A vs. B," "Access to database Z").
+        * **Suggested Starting Point:** If applicable, suggest a specific file, function, or point in the workflow for the next AI to begin its work.
 
----
+**3. File-System & Workspace Snapshot (Reflecting state *before* this summary request):**
+    * **File Operations Log:** A chronological or grouped list of file modifications.
+        * Operation type (e.g., created, modified, deleted, renamed).
+        * Full file path.
+        * Brief summary of changes made to the file (e.g., "added function X," "fixed typo," "refactored Y section").
+    * **Temporary Files or State Summary:**
+        * List of any temporary files created (paths and purpose).
+        * Summary of any significant in-memory state that isn't captured in files but would be needed to resume (e.g., "active database connection configured for X").
+        * Indicate if temporary files/state are essential for resumption or if they can/should be cleaned up.
 
-## II  Interaction & Action Log
+**4. Code, Execution & Error Summaries (From the prior session):**
+    * **Significant Code Snippets References:**
+        * Reference key code snippets that are crucial for understanding the work done or for resuming (e.g., provide file path and line numbers, function names, or a unique identifier if used). Do not include full code snippets unless extremely short and critical.
+    * **Command Execution Summaries:**
+        * Log of important commands executed (e.g., compilation steps, script executions, tool commands).
+        * Indicate success/failure.
+        * Include very brief, key output if it directly influenced subsequent actions or understanding (e.g., a specific error message that was then addressed).
 
-### 1 `Summarized_Dialogue` (array, per turn)
+**5. Environment (As relevant to the prior session):**
+    * Summary of environment aspects that were relevant or problematic during the session (e.g., "Python version conflict resolved," "Specific API endpoint X was unavailable," "Used Docker container Y"). Avoid generic environment listings; focus on what impacted the session.
 
-* `turn_type`: `"user_input"` | `"ai_response"`
-* `core_intent_summary`
-* `extracted_data_parameters` (obj, opt)
-* `decision_commitment_flags` (array, opt)
+**6. Session Reasoning & Strategy (Reflecting the thinking *during* the prior session):**
+    * **Problem Solving:** Summary of key problems encountered.
+    * **Solutions & Approaches:** Summary of solutions implemented or attempted, and the overall strategy taken.
+    * **Alternatives Considered:** Brief mention of alternative approaches that were discussed or considered but not pursued.
+    * **Key Design Decisions Log:** Important design choices made and their rationale.
+    * **Open Questions & Ambiguities:** Any unresolved questions or ambiguities that arose during the session and might need future attention.
+    * **Known Limitations & Tradeoffs Accepted:** Any limitations identified or tradeoffs made.
 
-### 2 `Detailed_Action_Record` (array)
+**7. User Context & Preferences (Observed *during* the prior session, excluding initial system instructions to *this* AI):**
+    * **Tracked User Variables Data Summary:** If any specific user data points were explicitly tracked or utilized.
+    * **User-Stated Preferences/Constraints:** Explicit preferences or constraints voiced by the user during the interaction.
+    * **Implicit User Patterns Observed:** Any recurring patterns in user requests, feedback, or coding style if clearly discernible and relevant.
 
-* `action_id`, `action_type`, `description`
-* `inputs_parameters` (obj, opt)
-* `outcome`: `{status, details}`
-* `generated_artifacts_references` (array, opt)
-* `rationale_dialogue_link` (str, opt)
-
-### 3 `Pending_In_Progress_Actions` (array)
-
-* `action_description`, `next_steps` (array), `partial_results_summary_or_ref` (str)
-
----
-
-## III  File-System & Workspace Snapshot
-
-1. `File_Operations_Log` (array) – `{operation_type, file_path, destination_path(opt), change_summary}`
-2. `Current_Codebase_Snapshot_Summary` (map) –
-   `file_path` ➜ `{status, brief_description_of_last_change_or_purpose}`
-3. `Workspace_Context_Summary` – `{current_working_directory, key_session_variables_or_state(opt)}`
-4. `Temporary_Files_Or_State_Summary` (array, opt) – `{type, identifier_name, location_or_reference, purpose}`
-
----
-
-## IV  Code, Execution & Error Summaries
-
-1. `Significant_Code_Snippets_References` (array, opt) – `{snippet_id, language, purpose_description, code_excerpt_or_reference, context_reference_id(opt)}`
-2. `Command_Execution_Summaries` (array, opt) – `{command_string_summary, working_directory, output_summary, exit_code(opt)}`
-3. `Error_Log_Summaries` (array, opt) – `{error_id, source_of_error_summary, error_message_summary, stack_trace_summary(opt), current_status}`
-
----
-
-## V  Environment & Dependencies
-
-*(Omitted – receiving agent already has this context.)*
-
----
-
-## VI  AI Internal Reasoning & Strategy
-
-* `Problem_Decomposition` (array) – `{sub_task_id, description, status}`
-* `Current_Solution_Approach_And_Strategy` – `{overall_strategy_description, next_strategic_steps}`
-* `Alternative_Approaches_Considered` (array, opt)
-* `Key_Design_Decisions_Log` (array)
-* `Open_Questions_And_Ambiguities` (array, opt)
-* `Known_Limitations_And_Tradeoffs_Accepted` (array, opt)
-* `Agent_Confidence_Assessment` (obj, opt)
-
----
-
-## VII  User Context & Preferences
-
-* `Tracked_User_Variables_Data_Summary` (obj, opt)
-* `User_Stated_Preferences_Constraints` (array, opt)
-* `Implicit_User_Patterns_Observed` (array, opt)
-
----
-
-## VIII  Session Metadata
-
-* `AI_Assistant_Model_And_Version`
-* `Originating_Session_Identifier` (opt)
-* `Generating_Agent_Instance_ID` (opt)
-* `Archive_Creation_Timestamp` (ISO 8601)
-
----
-
-## IX  `handover_instructions` (embedded JSON object)
-
-```json
-{
-  "purpose": "Concise session summary for AI hand-over.",
-  "format_overview": "Single JSON object with clearly named section keys.",
-  "recommended_resumption_strategy": [
-    "1. Review I & VI for goals and current plan.",
-    "2. Check III and II.Pending_In_Progress_Actions; re-read modified files.",
-    "3. Inspect IV for recent code, commands, and errors.",
-    "4. Use VI for previous reasoning and open issues.",
-    "5. Consider VII for user preferences.",
-    "6. Clarify ambiguities before major changes."
-  ],
-  "interpreting_data_notes": {
-    "dialogue_summaries": "See II.Summarized_Dialogue for intents/decisions.",
-    "action_logs": "Correlate II.Detailed_Action_Record with III snapshots.",
-    "error_handling": "Resolve items in IV.Error_Log_Summaries.",
-    "file_content_omitted": "Re-read actual workspace files as needed."
-  },
-  "safety_guidelines_for_resumption": [
-    "Verify workspace state before acting.",
-    "Ask for clarification on unclear points.",
-    "Validate critical info against workspace."
-  ],
-  "contact_for_issues_with_context_format": "N/A"
-}
-```
-
+**Output Format Guidance:**
+* Use Markdown for structuring the document.
+* Be concise: focus on information essential for context and resumption. Avoid verbose descriptions or full file dumps.
+* Ensure all information pertains *only* to the conversation and actions *before* this summarization task was initiated.
