@@ -71,10 +71,14 @@ async def _initialize_agent_with_mcp(mcp_manager: MCPManager) -> QXLLMAgent:
     logger.debug(f"Initializing LLM agent with parameters:")
     logger.debug(f"  Model Name: {model_name_from_env}")
 
+    # Check if streaming is enabled via environment variable
+    enable_streaming = os.environ.get("QX_ENABLE_STREAMING", "true").lower() == "true"
+    
     agent: Optional[QXLLMAgent] = initialize_llm_agent(
         model_name_str=model_name_from_env,
         console=qx_console,
         mcp_manager=mcp_manager, # Pass MCPManager
+        enable_streaming=enable_streaming,
     )
 
     if agent is None:
@@ -146,13 +150,15 @@ async def _handle_llm_interaction(
     plain_text_output: bool = False,
 ) -> Optional[List[ChatCompletionMessageParam]]:
     """
-    Handles the interaction with the LLM, including spinner display and response processing.
+    Handles the interaction with the LLM, including streaming display and response processing.
     Returns the updated message history.
     """
     run_result: Optional[Any] = None
     spinner_status = None
 
-    if not plain_text_output:
+    # For streaming, we don't show spinner as content streams in real-time
+    # For non-streaming or plain text output, use spinner
+    if not plain_text_output and not agent.enable_streaming:
         spinner_status = show_spinner("QX is thinking...")
         QXConsole.set_active_status(spinner_status)
 
@@ -173,7 +179,7 @@ async def _handle_llm_interaction(
                 console=qx_console,
             )
     finally:
-        if not plain_text_output:
+        if not plain_text_output and not agent.enable_streaming:
             QXConsole.set_active_status(None)
 
     if run_result:
@@ -187,9 +193,12 @@ async def _handle_llm_interaction(
                 plain_console.print(output_content)
                 # Do NOT print the extra newline from qx_console here, as it would add Rich formatting.
             else:
-                markdown_output = Markdown(output_content, code_theme=code_theme_to_use)
-                qx_console.print(markdown_output)
-                qx_console.print("\n")
+                # For streaming, content is already displayed during the stream
+                # Only display if not streaming or if there's content that wasn't streamed
+                if not agent.enable_streaming and output_content.strip():
+                    markdown_output = Markdown(output_content, code_theme=code_theme_to_use)
+                    qx_console.print(markdown_output)
+                    qx_console.print("\n")
             if hasattr(run_result, "all_messages"):
                 return run_result.all_messages()
             else:
