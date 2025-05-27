@@ -67,6 +67,7 @@ class QXLLMAgent:
         temperature: float = 0.7,
         max_output_tokens: Optional[int] = None,
         reasoning_effort: Optional[str] = None,
+        enable_streaming: bool = True,
     ):
         self.model_name = model_name
         self.system_prompt = system_prompt
@@ -74,6 +75,7 @@ class QXLLMAgent:
         self.temperature = temperature
         self.max_output_tokens = max_output_tokens
         self.reasoning_effort = reasoning_effort
+        self.enable_streaming = enable_streaming
 
         self._tool_functions: Dict[str, Callable] = {}
         self._openai_tools_schema: List[ChatCompletionToolParam] = []
@@ -177,22 +179,209 @@ class QXLLMAgent:
 
         try:
             logger.debug(f"LLM Request Parameters: {json.dumps(chat_params, indent=2)}")
-            response = await self.client.chat.completions.create(**chat_params)
-            logger.debug(f"LLM Raw Response: {response.model_dump_json(indent=2)}")
+            
+            if self.enable_streaming:
+                # Add streaming parameter
+                chat_params["stream"] = True
+                return await self._handle_streaming_response(chat_params, messages, user_input)
+            else:
+                response = await self.client.chat.completions.create(**chat_params)
+                logger.debug(f"LLM Raw Response: {response.model_dump_json(indent=2)}")
 
-            response_message = response.choices[0].message
-            messages.append(response_message)
+                response_message = response.choices[0].message
+                messages.append(response_message)
 
-            if response_message.tool_calls:
-                # Process all tool calls before making the next LLM request
-                for tool_call in response_message.tool_calls:
-                    function_name = tool_call.function.name
-                    function_args = tool_call.function.arguments
+                if response_message.tool_calls:
+                    return await self._process_tool_calls_and_continue(response_message, messages, user_input)
+                else:
+                    return QXRunResult(response_message.content, messages)
 
-                    if function_name not in self._tool_functions:
-                        error_msg = (
-                            f"LLM attempted to call unknown tool: {function_name}"
-                        )
+        except Exception as e:
+            logger.error(f"Error during LLM chat completion: {e}", exc_info=True)
+            self.console.print(f"[red]Error:[/red] LLM chat completion: {e}")
+            return None
+
+
+    async def _handle_streaming_response(
+        self, 
+        chat_params: Dict[str, Any], 
+        messages: List[ChatCompletionMessageParam], 
+        user_input: str
+    ) -> Any:
+        """Handle streaming response from OpenRouter API."""
+        from rich.live import Live
+        from rich.markdown import Markdown
+        import asyncio
+        import time
+        
+        accumulated_content = ""
+        accumulated_tool_calls = []
+        current_tool_call = None
+        
+        # Create a Live display for real-time updates
+        # Use the underlying Rich console if QXConsole wrapper
+        rich_console = getattr(self.console, '_console', self.console)
+        with Live(console=rich_console, auto_refresh=True, refresh_per_second=8) as live:
+            # Show initial blinking cursor to indicate thinking
+            initial_cursor = "█" if int(time.time() * 4) % 2 == 0 else " "
+            live.update(f"[dim]{initial_cursor}[/dim]")
+            
+            try:
+                stream = await self.client.chat.completions.create(**chat_params)
+                
+                async for chunk in stream:
+                    if not chunk.choices:
+                        continue
+                    
+                    choice = chunk.choices[0]
+                    delta = choice.delta
+                    
+                    # Handle content streaming
+                    content_updated = False
+                    if delta.content:
+                        accumulated_content += delta.content
+                        content_updated = True
+                    
+                    # Always update with blinking cursor (even if no new content)
+                    # Add blinking cursor effect - alternate between block and space
+                    cursor = "█" if int(time.time() * 4) % 2 == 0 else " "
+                    if accumulated_content:
+                        content_with_cursor = accumulated_content + "\n" + cursor
+                        markdown = Markdown(content_with_cursor)
+                        live.update(markdown)
+                    elif not content_updated:
+                        # Show just blinking cursor when waiting for first content
+                        live.update(f"[dim]{cursor}[/dim]")
+                    
+                    # Handle tool call streaming
+                    if delta.tool_calls:
+                        for tool_call_delta in delta.tool_calls:
+                            # Start new tool call
+                            if tool_call_delta.index is not None:
+                                # Ensure we have enough space in the list
+                                while len(accumulated_tool_calls) <= tool_call_delta.index:
+                                    accumulated_tool_calls.append({
+                                        "id": None,
+                                        "type": "function",
+                                        "function": {"name": "", "arguments": ""}
+                                    })
+                                
+                                current_tool_call = accumulated_tool_calls[tool_call_delta.index]
+                                
+                                if tool_call_delta.id:
+                                    current_tool_call["id"] = tool_call_delta.id
+                                
+                                if tool_call_delta.function:
+                                    if tool_call_delta.function.name:
+                                        current_tool_call["function"]["name"] = tool_call_delta.function.name
+                                    if tool_call_delta.function.arguments:
+                                        current_tool_call["function"]["arguments"] += tool_call_delta.function.arguments
+                    
+                    # Check if stream is finished
+                    if choice.finish_reason:
+                        # Show final content without cursor
+                        if accumulated_content:
+                            final_markdown = Markdown(accumulated_content)
+                            live.update(final_markdown)
+                        break
+                
+                # Clear the live display
+                live.update("")
+                
+            except Exception as e:
+                logger.error(f"Error during streaming: {e}", exc_info=True)
+                # Fall back to non-streaming
+                chat_params["stream"] = False
+                response = await self.client.chat.completions.create(**chat_params)
+                response_message = response.choices[0].message
+                messages.append(response_message)
+                
+                if response_message.tool_calls:
+                    return await self._process_tool_calls_and_continue(response_message, messages, user_input)
+                else:
+                    return QXRunResult(response_message.content, messages)
+        
+        # Create response message from accumulated data
+        response_message_dict = {
+            "role": "assistant",
+            "content": accumulated_content if accumulated_content else None
+        }
+        
+        if accumulated_tool_calls:
+            # Convert accumulated tool calls to proper format
+            tool_calls = []
+            for tc in accumulated_tool_calls:
+                if tc["id"] and tc["function"]["name"]:
+                    tool_calls.append({
+                        "id": tc["id"],
+                        "type": "function",
+                        "function": {
+                            "name": tc["function"]["name"],
+                            "arguments": tc["function"]["arguments"]
+                        }
+                    })
+            response_message_dict["tool_calls"] = tool_calls
+        
+        # Convert to proper message format
+        from openai.types.chat.chat_completion_message import ChatCompletionMessage
+        response_message = ChatCompletionMessage(**response_message_dict)
+        messages.append(response_message)
+        
+        # Display final content if any
+        if accumulated_content and accumulated_content.strip():
+            markdown = Markdown(accumulated_content)
+            self.console.print(markdown)
+            self.console.print("\n")
+        
+        # Process tool calls if any
+        if accumulated_tool_calls:
+            return await self._process_tool_calls_and_continue(response_message, messages, user_input)
+        else:
+            return QXRunResult(accumulated_content, messages)
+    
+    async def _process_tool_calls_and_continue(
+        self, 
+        response_message, 
+        messages: List[ChatCompletionMessageParam], 
+        user_input: str
+    ) -> Any:
+        """Process tool calls and continue the conversation."""
+        if not response_message.tool_calls:
+            return QXRunResult(response_message.content, messages)
+        
+        # Process all tool calls before making the next LLM request
+        for tool_call in response_message.tool_calls:
+            function_name = tool_call.function.name
+            function_args = tool_call.function.arguments
+
+            if function_name not in self._tool_functions:
+                error_msg = (
+                    f"LLM attempted to call unknown tool: {function_name}"
+                )
+                logger.error(error_msg)
+                self.console.print(f"[red]{error_msg}[/red]")
+                messages.append(
+                    cast(
+                        ChatCompletionToolMessageParam,
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": f"Error: Unknown tool '{function_name}'",
+                        },
+                    )
+                )
+                continue
+
+            tool_func = self._tool_functions[function_name]
+            tool_input_model = self._tool_input_models[function_name]
+
+            try:
+                parsed_args = {}
+                if function_args:
+                    try:
+                        parsed_args = json.loads(function_args)
+                    except json.JSONDecodeError:
+                        error_msg = f"LLM provided invalid JSON arguments for tool '{function_name}': {function_args}"
                         logger.error(error_msg)
                         self.console.print(f"[red]{error_msg}[/red]")
                         messages.append(
@@ -201,117 +390,87 @@ class QXLLMAgent:
                                 {
                                     "role": "tool",
                                     "tool_call_id": tool_call.id,
-                                    "content": f"Error: Unknown tool '{function_name}'",
+                                    "content": f"Error: Invalid JSON arguments for tool '{function_name}'. Please ensure arguments are valid JSON.",
                                 },
                             )
                         )
                         continue
 
-                    tool_func = self._tool_functions[function_name]
-                    tool_input_model = self._tool_input_models[function_name]
-
-                    try:
-                        parsed_args = {}
-                        if function_args:
-                            try:
-                                parsed_args = json.loads(function_args)
-                            except json.JSONDecodeError:
-                                error_msg = f"LLM provided invalid JSON arguments for tool '{function_name}': {function_args}"
-                                logger.error(error_msg)
-                                self.console.print(f"[red]{error_msg}[/red]")
-                                messages.append(
-                                    cast(
-                                        ChatCompletionToolMessageParam,
-                                        {
-                                            "role": "tool",
-                                            "tool_call_id": tool_call.id,
-                                            "content": f"Error: Invalid JSON arguments for tool '{function_name}'. Please ensure arguments are valid JSON.",
-                                        },
-                                    )
-                                )
-                                continue
-
-                        try:
-                            tool_args_instance = tool_input_model(**parsed_args)
-                        except ValidationError as ve:
-                            error_msg = f"LLM provided invalid parameters for tool '{function_name}'. Validation errors: {ve}"
-                            logger.error(error_msg, exc_info=True)
-                            self.console.print(f"[red]{error_msg}[/red]")
-                            messages.append(
-                                cast(
-                                    ChatCompletionToolMessageParam,
-                                    {
-                                        "role": "tool",
-                                        "tool_call_id": tool_call.id,
-                                        "content": f"Error: Invalid parameters for tool '{function_name}'. Details: {ve}",
-                                    },
-                                )
-                            )
-                            continue
-
-                        tool_output = await tool_func(
-                            console=self.console, args=tool_args_instance
+                try:
+                    tool_args_instance = tool_input_model(**parsed_args)
+                except ValidationError as ve:
+                    error_msg = f"LLM provided invalid parameters for tool '{function_name}'. Validation errors: {ve}"
+                    logger.error(error_msg, exc_info=True)
+                    self.console.print(f"[red]{error_msg}[/red]")
+                    messages.append(
+                        cast(
+                            ChatCompletionToolMessageParam,
+                            {
+                                "role": "tool",
+                                "tool_call_id": tool_call.id,
+                                "content": f"Error: Invalid parameters for tool '{function_name}'. Details: {ve}",
+                            },
                         )
+                    )
+                    continue
 
-                        if hasattr(tool_output, "model_dump_json"):
-                            tool_output_content = tool_output.model_dump_json()
-                        else:
-                            tool_output_content = str(tool_output)
+                tool_output = await tool_func(
+                    console=self.console, args=tool_args_instance
+                )
 
-                        messages.append(
-                            cast(
-                                ChatCompletionToolMessageParam,
-                                {
-                                    "role": "tool",
-                                    "tool_call_id": tool_call.id,
-                                    "content": tool_output_content,
-                                },
-                            )
-                        )
+                if hasattr(tool_output, "model_dump_json"):
+                    tool_output_content = tool_output.model_dump_json()
+                else:
+                    tool_output_content = str(tool_output)
 
-                    except Exception as e:
-                        error_msg = f"Error executing tool '{function_name}': {e}"
-                        logger.error(error_msg, exc_info=True)
-                        self.console.print(f"[red]{error_msg}[/red]")
-                        messages.append(
-                            cast(
-                                ChatCompletionToolMessageParam,
-                                {
-                                    "role": "tool",
-                                    "tool_call_id": tool_call.id,
-                                    "content": f"Error: Tool execution failed: {e}. This might be due to an internal tool error or an unexpected argument type.",
-                                },
-                            )
-                        )
+                messages.append(
+                    cast(
+                        ChatCompletionToolMessageParam,
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": tool_output_content,
+                        },
+                    )
+                )
 
-                # After processing all tool calls, make one recursive call
-                return await self.run(user_input, messages)
-            else:
+            except Exception as e:
+                error_msg = f"Error executing tool '{function_name}': {e}"
+                logger.error(error_msg, exc_info=True)
+                self.console.print(f"[red]{error_msg}[/red]")
+                messages.append(
+                    cast(
+                        ChatCompletionToolMessageParam,
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": f"Error: Tool execution failed: {e}. This might be due to an internal tool error or an unexpected argument type.",
+                        },
+                    )
+                )
 
-                class QXRunResult:
-                    def __init__(
-                        self,
-                        output_content: str,
-                        all_msgs: List[ChatCompletionMessageParam],
-                    ):
-                        self.output = output_content
-                        self._all_messages = all_msgs
+        # After processing all tool calls, make one recursive call
+        return await self.run(user_input, messages)
 
-                    def all_messages(self) -> List[ChatCompletionMessageParam]:
-                        return self._all_messages
 
-                return QXRunResult(response_message.content, messages)
+class QXRunResult:
+    def __init__(
+        self,
+        output_content: str,
+        all_msgs: List[ChatCompletionMessageParam],
+    ):
+        self.output = output_content
+        self._all_messages = all_msgs
 
-        except Exception as e:
-            logger.error(f"Error during LLM chat completion: {e}", exc_info=True)
-            self.console.print(f"[red]Error:[/red] LLM chat completion: {e}")
-            return None
+    def all_messages(self) -> List[ChatCompletionMessageParam]:
+        return self._all_messages
 
 
 def initialize_llm_agent(
     model_name_str: str,
     console: RichConsole,
     mcp_manager: MCPManager, # New parameter
+    enable_streaming: bool = True,
 ) -> Optional[QXLLMAgent]:
     """
     Initializes the QXLLMAgent with system prompt and discovered tools.
@@ -369,6 +528,7 @@ def initialize_llm_agent(
             temperature=temperature,
             max_output_tokens=max_output_tokens,
             reasoning_effort=reasoning_effort,
+            enable_streaming=enable_streaming,
         )
         return agent
 
