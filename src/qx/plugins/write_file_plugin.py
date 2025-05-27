@@ -324,7 +324,9 @@ if __name__ == "__main__":
 
     async def run_tests():  # Wrapped tests in an async function
         # Test 1: Write new file in project (user approves)
-        test_console.print("\n[bold]Test 1: Write new project file (approve path)[/bold]")
+        test_console.print(
+            "\n[bold]Test 1: Write new project file (approve path)[/bold]"
+        )
         input1 = WriteFilePluginInput(
             path="new_project_file.txt", content="Hello from write plugin!"
         )
@@ -384,7 +386,9 @@ if __name__ == "__main__":
         )  # cleanup original if created by mistake
 
         # Test 4: Denied by policy
-        test_console.print("\n[bold]Test 4: Write to /etc/somefile (policy denial)[/bold]")
+        test_console.print(
+            "\n[bold]Test 4: Write to /etc/somefile (policy denial)[/bold]"
+        )
         input4 = WriteFilePluginInput(
             path="/etc/this_should_fail.txt", content="Forbidden content"
         )
@@ -411,4 +415,3 @@ if __name__ == "__main__":
         test_console.print("\nWrite_file_plugin (with context) tests finished.")
 
     asyncio.run(run_tests())
-
