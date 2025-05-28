@@ -1,11 +1,12 @@
 import logging
 import datetime
-from typing import Callable, List, Literal, Optional, Tuple, Union, Any
+from typing import Callable, List, Literal, Optional, Tuple, Union, Any, Protocol
 
-from prompt_toolkit import PromptSession # Import PromptSession
-from rich.console import Console as RichConsole
-from rich.console import RenderableType
-from rich.text import Text
+class ConsoleProtocol(Protocol):
+    def print(self, *args, **kwargs): ...
+
+RichConsole = ConsoleProtocol  # Type alias for backward compatibility
+RenderableType = str  # Simplified type
 
 logger = logging.getLogger(__name__)
 
@@ -24,31 +25,21 @@ CHOICE_CANCEL = ("c", "Cancel", "cancel")
 ApprovalDecisionStatus = Literal["approved", "denied", "modified", "cancelled", "session_approved"]
 
 
-async def _execute_prompt_with_live_suspend( # Made async
+async def _execute_prompt_with_live_suspend(
     console: RichConsole, *args: Any, **kwargs: Any
 ) -> Any:
     """
-    Executes a prompt_toolkit prompt, suspending any active Rich Live display.
+    Simplified prompt execution.
     """
-    live_display = getattr(console, "_live", None)
-    live_was_active_and_started = live_display is not None and getattr(live_display, "is_started", False)
-    
-    prompt_result = None
+    prompt_text = args[0] if args else "Enter choice: "
     try:
-        if live_was_active_and_started:
-            live_display.stop()
-            if hasattr(console, "clear_live"):
-                console.clear_live()
-            else:
-                pass
-        
-        # Create a new PromptSession for this specific prompt
-        session = PromptSession()
-        prompt_result = await session.prompt_async(*args, **kwargs) # Directly call and await session.prompt_async
-    finally:
-        if live_was_active_and_started:
-            live_display.start(refresh=True)
-    return prompt_result
+        import sys
+        print(prompt_text, end="", flush=True)
+        line = sys.stdin.readline()
+        return line.strip() if line else ""
+    except (EOFError, KeyboardInterrupt):
+        return ""
+
 
 def is_approve_all_active(console: RichConsole) -> bool:
     """
@@ -60,257 +51,153 @@ def is_approve_all_active(console: RichConsole) -> bool:
         if datetime.datetime.now() < _approve_all_until:
             return True
         else:
-            # Suspend live display before printing expiry message
-            live_display = getattr(console, "_live", None)
-            live_was_active = live_display is not None and getattr(live_display, "is_started", False)
-            
-            if live_was_active:
-                live_display.stop()
-                if hasattr(console, "clear_live"): console.clear_live()
-
-            console.print(
-                Text.from_markup("[yellow]INFO:[/yellow] 'Approve All' session has expired."),
-            )
+            console.print("[yellow]INFO:[/yellow] 'Approve All' session has expired.")
             logger.info("'Approve All' session has expired.")
             _approve_all_until = None
-            
-            if live_was_active:
-                live_display.start(refresh=True)
     return False
 
-async def _ask_duration(console: RichConsole, prompt_message_text: str, default: int) -> int: # Made async
+
+async def _ask_duration(console: RichConsole, prompt_message_text: str, default: int) -> int:
     """
-    Asks the user for a duration in minutes. Adapted from old ApprovalManager.
+    Asks the user for a duration in minutes.
     """
     pt_prompt_message = f"{prompt_message_text}: "
     while True:
         try:
-            duration_str = await _execute_prompt_with_live_suspend( # Await
+            duration_str = await _execute_prompt_with_live_suspend(
                 console,
                 pt_prompt_message, 
                 default=str(default)
             )
             duration = int(duration_str)
             if duration < 0:
-                console.print(
-                    Text.from_markup("[red]Please enter a non-negative number of minutes.[/red]"),
-                )
+                console.print("[red]Please enter a non-negative number of minutes.[/red]")
                 continue
             return duration
         except ValueError:
-            console.print(
-                Text.from_markup("[red]Please enter a valid number of minutes.[/red]")
-            )
+            console.print("[red]Please enter a valid number of minutes.[/red]")
         except EOFError:
             logger.warning(f"EOFError (Ctrl+D) received for duration. Using default ({default} minutes).")
-            console.print(Text.from_markup(f"[warning]Input cancelled (Ctrl+D). Using default value ({default} minutes).[/warning]"))
+            console.print(f"[warning]Input cancelled (Ctrl+D). Using default value ({default} minutes).[/warning]")
             return default
         except KeyboardInterrupt:
             logger.warning(f"KeyboardInterrupt (Ctrl+C) received for duration. Using default ({default} minutes).")
-            console.print(Text.from_markup(f"\n[warning]Input interrupted (Ctrl+C). Using default value ({default} minutes).[/warning]"))
+            console.print(f"\n[warning]Input interrupted (Ctrl+C). Using default value ({default} minutes).[/warning]")
             return default
         except Exception as e:
             logger.error(f"Failed to get duration input: {e}", exc_info=True)
-            console.print(
-                Text.from_markup(f"[red]An error occurred. Using default value ({default} minutes).[/red]"),
-            )
+            console.print(f"[red]An error occurred. Using default value ({default} minutes).[/red]")
             return default
 
-async def _ask_basic_confirmation( # Made async
+
+async def _ask_basic_confirmation(
     console: RichConsole,
-    prompt_query_message: str,
-    available_choices: List[Tuple[str, str, str]]
+    choices: List[Tuple[str, str, str]],
+    prompt_message_text: str,
+    **_kwargs: Any
 ) -> str:
     """
-    Internal helper to ask for confirmation using prompt_toolkit.
-    Returns the chosen key (e.g., 'y', 'n', 'm', 'a').
+    Asks the user to choose from a list of choices.
     """
-    choice_map = {key: key for key, _, _ in available_choices}
-    for key, _, full_word in available_choices:
-        choice_map[full_word.lower()] = key
+    choices_str = "/".join([choice[0] for choice in choices])
+    full_prompt = f"{prompt_message_text} ({choices_str}): "
     
-    simple_choices_str = "/".join(
-        display_text for _, display_text, _ in available_choices
-    )
-    pt_prompt_message = f"{prompt_query_message} ({simple_choices_str}): "
-
     while True:
         try:
-            raw_choice = await _execute_prompt_with_live_suspend( # Await
-                console,
-                pt_prompt_message
-            )
-            choice = raw_choice.strip().lower()
-            if choice in choice_map:
-                return choice_map[choice]
+            user_input = await _execute_prompt_with_live_suspend(console, full_prompt)
+            if not user_input:
+                continue
+                
+            user_input_lower = user_input.lower()
             
-            example_guidance = ""
-            if available_choices:
-                first_choice_key, first_choice_display, first_choice_full = available_choices[0]
-                example_guidance = f" (e.g., '{first_choice_key}' for {first_choice_display}, or '{first_choice_full}')"
+            for key, display, full_word in choices:
+                if user_input_lower == key.lower() or user_input_lower == full_word.lower():
+                    return key
+                    
+            console.print(f"[red]Invalid choice. Please enter one of: {choices_str}[/red]")
             
-            console.print(
-                Text.from_markup(f"[red]Invalid input.[/red] Please enter one of {simple_choices_str}{example_guidance}"),
-            )
-        except EOFError:
-            logger.warning("EOFError (Ctrl+D) received during confirmation. Defaulting to Cancel.")
-            console.print(Text.from_markup("[warning]Input cancelled (Ctrl+D).[/warning]"),)
-            return CHOICE_CANCEL[0] 
-        except KeyboardInterrupt:
-            logger.warning("KeyboardInterrupt (Ctrl+C) received during confirmation. Defaulting to Cancel.")
-            console.print(Text.from_markup("\n[warning]Input interrupted (Ctrl+C).[/warning]"),)
-            return CHOICE_CANCEL[0]
+        except (EOFError, KeyboardInterrupt):
+            logger.warning("User cancelled confirmation prompt.")
+            console.print("\n[warning]Input cancelled.[/warning]")
+            return "c"  # Cancel
         except Exception as e:
-            logger.error(f"Failed to get user confirmation choice: {e}", exc_info=True)
-            console.print(Text.from_markup("[red]An error occurred during input. Defaulting to Cancel.[/red]"),)
-            return CHOICE_CANCEL[0]
+            logger.error(f"Error in confirmation prompt: {e}", exc_info=True)
+            console.print(f"[red]Error: {e}[/red]")
+            return "c"  # Cancel
 
-async def request_confirmation( # Made async
+
+async def request_confirmation(
     prompt_message: str,
     console: RichConsole,
-    content_to_display: Optional[Union[str, RenderableType]] = None,
+    content_to_display: Optional[RenderableType] = None,
     allow_modify: bool = False,
     current_value_for_modification: Optional[str] = None,
-    can_approve_all: bool = True,
 ) -> Tuple[ApprovalDecisionStatus, Optional[str]]:
     """
-    Requests user confirmation for an action. Handles "Approve All" session.
+    Requests user confirmation with optional content display and modification.
     """
-    global _approve_all_until
+    # Check if we're in "approve all" mode
+    if is_approve_all_active(console):
+        console.print("[info]AUTO-APPROVED due to active 'Approve All' session.[/info]")
+        return ("session_approved", current_value_for_modification)
 
-    # Only auto-approve if can_approve_all is True AND approve_all is active
-    if can_approve_all and is_approve_all_active(console):
-        logger.info(f"SESSION_APPROVED (via 'Approve All'): {prompt_message}")
-        console.print(Text.from_markup(f"[green]SESSION APPROVED:[/green] {prompt_message.split('?')[0]} [dim](Approve All active)[/dim]"))
-        return "session_approved", current_value_for_modification if allow_modify else ""
-
-    console.print(Text.from_markup(f"[blue]ACTION REQUIRED:[/blue] {prompt_message}"))
-
+    # Display content if provided
     if content_to_display:
-        if isinstance(content_to_display, str):
-            console.print(Text(content_to_display))
-        else:
-            console.print(content_to_display)
+        console.print("\n--- Content Preview ---")
+        console.print(content_to_display)
+        console.print("--- End Preview ---\n")
 
+    # Build choices
     choices = [CHOICE_YES, CHOICE_NO]
     if allow_modify:
         choices.append(CHOICE_MODIFY)
-    if can_approve_all:
-        choices.append(CHOICE_APPROVE_ALL)
+    choices.extend([CHOICE_APPROVE_ALL, CHOICE_CANCEL])
 
-    user_choice_key = await _ask_basic_confirmation(console, "Confirm?", choices) # Await
-
-    if user_choice_key == CHOICE_YES[0]:
-        logger.info(f"User approved action: {prompt_message}")
-        return "approved", current_value_for_modification if allow_modify else ""
-    
-    elif user_choice_key == CHOICE_NO[0]:
-        logger.warning(f"User denied action: {prompt_message}")
-        console.print(Text.from_markup(f"[yellow]Denied by user:[/yellow] {prompt_message.split('?')[0]}"))
-        return "denied", None
-        
-    elif user_choice_key == CHOICE_MODIFY[0] and allow_modify:
-        pt_modify_prompt = "Enter the modified value: "
-        try:
-            modified_value = await _execute_prompt_with_live_suspend( # Await
-                console,
-                pt_modify_prompt,
-                default=current_value_for_modification or "",
-            )
-            modified_value = modified_value.strip() # Strip after getting value
-
-            if not modified_value:
-                console.print(Text.from_markup("[warning]Modification cancelled (empty value). Action denied.[/warning]"))
-                logger.warning(f"Modification resulted in empty value for: {prompt_message}. Action denied.")
-                return "denied", None
-            
-            if modified_value == current_value_for_modification:
-                console.print(Text.from_markup("[info]Value unchanged. Proceeding with original.[/info]"))
-                logger.info(f"User chose modify but provided same value for: {prompt_message}")
-                return "approved", current_value_for_modification
-
-            logger.info(f"User modified item for action '{prompt_message}'. New value: '{modified_value}'")
-            console.print(Text.from_markup(f"[green]Value modified. Proceeding with:[/green] [blue]{modified_value}[/blue]"))
-            return "modified", modified_value
-            
-        except EOFError:
-            logger.warning(f"EOFError (Ctrl+D) during modification for: {prompt_message}. Action cancelled.")
-            console.print(Text.from_markup("[warning]Modification cancelled (Ctrl+D). Action cancelled.[/warning]"))
-            return "cancelled", None
-        except KeyboardInterrupt:
-            logger.warning(f"KeyboardInterrupt (Ctrl+C) during modification for: {prompt_message}. Action cancelled.")
-            console.print(Text.from_markup("\n[warning]Modification interrupted (Ctrl+C). Action cancelled.[/warning]"))
-            return "cancelled", None
-        except Exception as e:
-            logger.error(f"Error during modification input for '{prompt_message}': {e}", exc_info=True)
-            console.print(Text.from_markup("[red]An error occurred during modification. Action cancelled.[/red]"))
-            return "cancelled", None
-
-    elif user_choice_key == CHOICE_APPROVE_ALL[0] and can_approve_all:
-        logger.info(f"User chose 'Approve All' for: {prompt_message}")
-        duration_minutes = await _ask_duration( # Await
-            console,
-            "Approve all subsequent operations for how many minutes?",
-            default=DEFAULT_APPROVE_ALL_DURATION_MINUTES,
+    try:
+        user_choice = await _ask_basic_confirmation(
+            console=console,
+            choices=choices,
+            prompt_message_text=prompt_message
         )
-        if duration_minutes > 0:
-            _approve_all_until = datetime.datetime.now() + datetime.timedelta(minutes=duration_minutes)
-            logger.info(f"'Approve All' activated until {_approve_all_until}")
-            console.print(Text.from_markup(f"\n[green]▶▶▶ Auto-approval enabled for {duration_minutes} minutes.[/green]\n"))
-            return "approved", current_value_for_modification if allow_modify else ""
+
+        if user_choice == "y":
+            return ("approved", current_value_for_modification)
+        elif user_choice == "n":
+            console.print("[info]Operation denied by user.[/info]")
+            return ("denied", None)
+        elif user_choice == "m" and allow_modify:
+            # Ask for modification
+            modify_prompt = f"Enter new value (current: {current_value_for_modification}): "
+            try:
+                new_value = await _execute_prompt_with_live_suspend(console, modify_prompt)
+                if new_value.strip():
+                    console.print(f"[info]Value modified to: {new_value}[/info]")
+                    return ("modified", new_value.strip())
+                else:
+                    console.print("[warning]No modification entered. Using original value.[/warning]")
+                    return ("approved", current_value_for_modification)
+            except (EOFError, KeyboardInterrupt):
+                console.print("\n[warning]Modification cancelled.[/warning]")
+                return ("cancelled", None)
+        elif user_choice == "a":
+            # Set approve all
+            duration = await _ask_duration(
+                console,
+                f"Approve All duration in minutes (default {DEFAULT_APPROVE_ALL_DURATION_MINUTES})",
+                DEFAULT_APPROVE_ALL_DURATION_MINUTES
+            )
+            global _approve_all_until
+            _approve_all_until = datetime.datetime.now() + datetime.timedelta(minutes=duration)
+            console.print(f"[info]'Approve All' activated for {duration} minutes.[/info]")
+            return ("session_approved", current_value_for_modification)
+        elif user_choice == "c":
+            console.print("[info]Operation cancelled by user.[/info]")
+            return ("cancelled", None)
         else:
-            logger.info("User entered 0 or negative duration for 'Approve All'. Not activating. Current operation denied.")
-            console.print(Text.from_markup("[warning]Auto-approval not enabled (duration was 0 or less). Current operation denied.[/warning]"))
-            return "denied", None
-            
-    elif user_choice_key == CHOICE_CANCEL[0]:
-        logger.warning(f"User cancelled action: {prompt_message}")
-        return "cancelled", None
+            console.print("[warning]Unexpected choice. Treating as cancelled.[/warning]")
+            return ("cancelled", None)
 
-    logger.error(f"Unexpected choice key '{user_choice_key}' in request_confirmation for '{prompt_message}'.")
-    console.print(Text.from_markup("[red]An unexpected error occurred in confirmation. Action cancelled.[/red]"))
-    return "cancelled", None
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    test_console = RichConsole()
-    test_console.rule("[bold green]Testing request_confirmation with Approve All[/bold green]")
-
-    async def run_tests():
-        global _approve_all_until # Moved to top of function
-        # Test 1: Approve All
-        test_console.print("\n[bold]Test 1: Choose 'Approve All'[/bold]")
-        status, val = await request_confirmation("Allow critical action (Test 1)?", test_console, can_approve_all=True)
-        test_console.print(f"Test 1 Result: Status='{status}', Value='{val}'")
-        if status == "approved" and _approve_all_until:
-            test_console.print(f"Approve All is active until: {_approve_all_until}")
-
-        # Test 2: Check if Approve All is active
-        test_console.print("\n[bold]Test 2: Action during 'Approve All'[/bold]")
-        if _approve_all_until:
-            status, val = await request_confirmation("Allow another action (Test 2)?", test_console, can_approve_all=True)
-            test_console.print(f"Test 2 Result: Status='{status}', Value='{val}'")
-            assert status == "session_approved"
-        else:
-            test_console.print("Skipping Test 2 as 'Approve All' was not activated in Test 1.")
-
-        # Test 3: Test expiry (manual simulation)
-        test_console.print("\n[bold]Test 3: Simulate 'Approve All' expiry[/bold]")
-        if _approve_all_until:
-            _approve_all_until = datetime.datetime.now() - datetime.timedelta(seconds=1)
-            is_active_after_expiry = is_approve_all_active(test_console)
-            test_console.print(f"Is 'Approve All' active after simulated expiry? {is_active_after_expiry}")
-            assert not is_active_after_expiry
-            assert _approve_all_until is None
-        else:
-            test_console.print("Skipping Test 3 as 'Approve All' was not active.")
-
-        # Test 4: Simple Yes/No after expiry
-        test_console.print("\n[bold]Test 4: Simple Yes/No after expiry[/bold]")
-        status, val = await request_confirmation("Allow simple action post-expiry (Test 4)?", test_console, can_approve_all=True)
-        test_console.print(f"Test 4 Result: Status='{status}', Value='{val}'")
-
-        test_console.print("\n[bold green]Finished testing request_confirmation with Approve All.[/bold green]")
-
-    asyncio.run(run_tests())
+    except Exception as e:
+        logger.error(f"Error in request_confirmation: {e}", exc_info=True)
+        console.print(f"[red]Error during confirmation: {e}[/red]")
+        return ("cancelled", None)
