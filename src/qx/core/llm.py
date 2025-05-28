@@ -349,15 +349,14 @@ class QXLLMAgent:
         if not response_message.tool_calls:
             return QXRunResult(response_message.content, messages)
         
-        # Process all tool calls before making the next LLM request
+        tool_tasks = []
         for tool_call in response_message.tool_calls:
             function_name = tool_call.function.name
             function_args = tool_call.function.arguments
+            tool_call_id = tool_call.id
 
             if function_name not in self._tool_functions:
-                error_msg = (
-                    f"LLM attempted to call unknown tool: {function_name}"
-                )
+                error_msg = f"LLM attempted to call unknown tool: {function_name}"
                 logger.error(error_msg)
                 self.console.print(f"[red]{error_msg}[/red]")
                 messages.append(
@@ -365,7 +364,7 @@ class QXLLMAgent:
                         ChatCompletionToolMessageParam,
                         {
                             "role": "tool",
-                            "tool_call_id": tool_call.id,
+                            "tool_call_id": tool_call_id,
                             "content": f"Error: Unknown tool '{function_name}'",
                         },
                     )
@@ -389,7 +388,7 @@ class QXLLMAgent:
                                 ChatCompletionToolMessageParam,
                                 {
                                     "role": "tool",
-                                    "tool_call_id": tool_call.id,
+                                    "tool_call_id": tool_call_id,
                                     "content": f"Error: Invalid JSON arguments for tool '{function_name}'. Please ensure arguments are valid JSON.",
                                 },
                             )
@@ -407,35 +406,25 @@ class QXLLMAgent:
                             ChatCompletionToolMessageParam,
                             {
                                 "role": "tool",
-                                "tool_call_id": tool_call.id,
+                                "tool_call_id": tool_call_id,
                                 "content": f"Error: Invalid parameters for tool '{function_name}'. Details: {ve}",
                             },
                         )
                     )
                     continue
-
-                tool_output = await tool_func(
-                    console=self.console, args=tool_args_instance
-                )
-
-                if hasattr(tool_output, "model_dump_json"):
-                    tool_output_content = tool_output.model_dump_json()
-                else:
-                    tool_output_content = str(tool_output)
-
-                messages.append(
-                    cast(
-                        ChatCompletionToolMessageParam,
-                        {
-                            "role": "tool",
-                            "tool_call_id": tool_call.id,
-                            "content": tool_output_content,
-                        },
-                    )
+                
+                # If validation passes, add the task to the list
+                tool_tasks.append(
+                    {
+                        "tool_call_id": tool_call_id,
+                        "function_name": function_name,
+                        "coroutine": tool_func(console=self.console, args=tool_args_instance),
+                    }
                 )
 
             except Exception as e:
-                error_msg = f"Error executing tool '{function_name}': {e}"
+                # This catch is for errors during parsing/validation, not tool execution
+                error_msg = f"Error preparing tool call '{function_name}': {e}"
                 logger.error(error_msg, exc_info=True)
                 self.console.print(f"[red]{error_msg}[/red]")
                 messages.append(
@@ -443,13 +432,44 @@ class QXLLMAgent:
                         ChatCompletionToolMessageParam,
                         {
                             "role": "tool",
-                            "tool_call_id": tool_call.id,
-                            "content": f"Error: Tool execution failed: {e}. This might be due to an internal tool error or an unexpected argument type.",
+                            "tool_call_id": tool_call_id,
+                            "content": f"Error: Failed to prepare tool call: {e}",
+                        },
+                    )
+                )
+        
+        # Execute all collected tool tasks in parallel
+        if tool_tasks:
+            results = await asyncio.gather(*[task["coroutine"] for task in tool_tasks], return_exceptions=True)
+            
+            for i, result in enumerate(results):
+                tool_call_info = tool_tasks[i]
+                tool_call_id = tool_call_info["tool_call_id"]
+                function_name = tool_call_info["function_name"]
+                
+                if isinstance(result, Exception):
+                    error_msg = f"Error executing tool '{function_name}': {result}"
+                    logger.error(error_msg, exc_info=True)
+                    self.console.print(f"[red]{error_msg}[/red]")
+                    tool_output_content = f"Error: Tool execution failed: {result}. This might be due to an internal tool error or an unexpected argument type."
+                else:
+                    if hasattr(result, "model_dump_json"):
+                        tool_output_content = result.model_dump_json()
+                    else:
+                        tool_output_content = str(result)
+                
+                messages.append(
+                    cast(
+                        ChatCompletionToolMessageParam,
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call_id,
+                            "content": tool_output_content,
                         },
                     )
                 )
 
-        # After processing all tool calls, make one recursive call
+        # After processing all tool calls (or attempting to), make one recursive call
         return await self.run(user_input, messages)
 
 
