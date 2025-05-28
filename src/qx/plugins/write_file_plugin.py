@@ -7,9 +7,12 @@ from typing import Optional, Union
 from pydantic import BaseModel, Field
 from pygments.lexers import get_lexer_by_name
 from pygments.util import ClassNotFound
-from rich.console import Console as RichConsole  # For type hint and direct use
-from rich.syntax import Syntax
-from rich.text import Text
+from typing import Protocol
+
+class ConsoleProtocol(Protocol):
+    def print(self, *args, **kwargs): ...
+
+RichConsole = ConsoleProtocol  # Type alias for backward compatibility
 
 from qx.core.paths import USER_HOME_DIR, _find_project_root
 from qx.core.user_prompts import request_confirmation
@@ -91,23 +94,15 @@ def _generate_write_preview(
     file_path_str: str,
     new_content: str,
     syntax_theme: str = "vim",  # Default theme
-) -> Union[Text, Syntax, None]:
-    """Generates a Rich renderable for file write preview (diff or new content)."""
+) -> str:
+    """Generates a text preview for file write (diff or new content)."""
     file_path = Path(os.path.expanduser(file_path_str))
-    file_ext = file_path.suffix.lstrip(".").lower()
-    lexer_name = file_ext or "text"
-    try:
-        get_lexer_by_name(lexer_name)
-    except ClassNotFound:
-        lexer_name = "text"
-
+    
     if file_path.exists() and file_path.is_file():
         try:
             old_content = file_path.read_text(encoding="utf-8")
             if old_content == new_content:
-                return Text(
-                    "[bold yellow]No changes detected - file content is identical.[/bold yellow]"
-                )
+                return "[bold yellow]No changes detected - file content is identical.[/bold yellow]"
 
             old_lines = old_content.splitlines(keepends=True)
             new_lines = new_content.splitlines(keepends=True)
@@ -122,16 +117,8 @@ def _generate_write_preview(
                 )
             )
             if diff_lines:
-                return Syntax(
-                    "".join(diff_lines),
-                    "diff",
-                    theme="vim",
-                    line_numbers=False,
-                    word_wrap=True,
-                )
-            return Text(
-                "[bold yellow]No textual changes detected in diff (content might be identical after normalization).[/bold yellow]"
-            )
+                return "".join(diff_lines)
+            return "[bold yellow]No textual changes detected in diff.[/bold yellow]"
         except Exception as e:
             logger.error(
                 f"Error generating diff for {file_path_str}: {e}", exc_info=True
@@ -141,37 +128,18 @@ def _generate_write_preview(
     # Show new content if file doesn't exist or diff failed
     all_lines = new_content.splitlines()
     line_count = len(all_lines)
-    bg_color = "default" if syntax_theme not in ["rrt", "dimmed_monokai"] else None
 
     if line_count > MAX_PREVIEW_LINES:
         head_str = "\n".join(all_lines[:HEAD_LINES])
         tail_str = "\n".join(all_lines[-TAIL_LINES:])
         display_content_str = (
             f"{head_str}\n\n"
-            f"[dim i]... {line_count - HEAD_LINES - TAIL_LINES} more lines ...[/dim i]\n\n"
+            f"... {line_count - HEAD_LINES - TAIL_LINES} more lines ...\n\n"
             f"{tail_str}"
         )
-        # For truncated content, Syntax might not be ideal if it adds its own chrome.
-        # A simple Text object might be better, or a custom renderable.
-        # For now, let's use Syntax but be mindful of its rendering of partial content.
-        # The original ApprovalManager used Syntax for this.
-        return Syntax(
-            display_content_str,
-            lexer_name,
-            theme=syntax_theme,
-            line_numbers=True,
-            word_wrap=True,
-            background_color=bg_color,
-        )
+        return display_content_str
     else:
-        return Syntax(
-            new_content,
-            lexer_name,
-            theme=syntax_theme,
-            line_numbers=True,
-            word_wrap=True,
-            background_color=bg_color,
-        )
+        return new_content
 
 
 # --- End of _generate_write_preview ---

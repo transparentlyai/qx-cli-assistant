@@ -16,7 +16,12 @@ from openai.types.chat import (
 )
 from openai.types.shared_params.function_definition import FunctionDefinition
 from pydantic import BaseModel, ValidationError
-from rich.console import Console as RichConsole
+from typing import Protocol
+
+class ConsoleProtocol(Protocol):
+    def print(self, *args, **kwargs): ...
+
+RichConsole = ConsoleProtocol  # Type alias for backward compatibility
 
 from qx.core.plugin_manager import PluginManager
 from qx.core.mcp_manager import MCPManager # New import
@@ -209,8 +214,6 @@ class QXLLMAgent:
         user_input: str
     ) -> Any:
         """Handle streaming response from OpenRouter API."""
-        from rich.live import Live
-        from rich.markdown import Markdown
         import asyncio
         import time
         
@@ -218,88 +221,96 @@ class QXLLMAgent:
         accumulated_tool_calls = []
         current_tool_call = None
         
-        # Create a Live display for real-time updates
-        # Use the underlying Rich console if QXConsole wrapper
-        rich_console = getattr(self.console, '_console', self.console)
-        with Live(console=rich_console, auto_refresh=True, refresh_per_second=8) as live:
-            # Show initial blinking cursor to indicate thinking
-            initial_cursor = "█" if int(time.time() * 4) % 2 == 0 else " "
-            live.update(f"[dim]{initial_cursor}[/dim]")
+        # Use markdown-aware buffer for streaming
+        from qx.core.markdown_buffer import create_markdown_buffer
+        markdown_buffer = create_markdown_buffer()
+        
+        # Stream content directly to console
+        try:
+            stream = await self.client.chat.completions.create(**chat_params)
             
-            try:
-                stream = await self.client.chat.completions.create(**chat_params)
+            async for chunk in stream:
+                if not chunk.choices:
+                    continue
                 
-                async for chunk in stream:
-                    if not chunk.choices:
-                        continue
-                    
-                    choice = chunk.choices[0]
-                    delta = choice.delta
-                    
-                    # Handle content streaming
-                    content_updated = False
-                    if delta.content:
-                        accumulated_content += delta.content
-                        content_updated = True
-                    
-                    # Always update with blinking cursor (even if no new content)
-                    # Add blinking cursor effect - alternate between block and space
-                    cursor = "█" if int(time.time() * 4) % 2 == 0 else " "
-                    if accumulated_content:
-                        content_with_cursor = accumulated_content + "\n" + cursor
-                        markdown = Markdown(content_with_cursor)
-                        live.update(markdown)
-                    elif not content_updated:
-                        # Show just blinking cursor when waiting for first content
-                        live.update(f"[dim]{cursor}[/dim]")
-                    
-                    # Handle tool call streaming
-                    if delta.tool_calls:
-                        for tool_call_delta in delta.tool_calls:
-                            # Start new tool call
-                            if tool_call_delta.index is not None:
-                                # Ensure we have enough space in the list
-                                while len(accumulated_tool_calls) <= tool_call_delta.index:
-                                    accumulated_tool_calls.append({
-                                        "id": None,
-                                        "type": "function",
-                                        "function": {"name": "", "arguments": ""}
-                                    })
-                                
-                                current_tool_call = accumulated_tool_calls[tool_call_delta.index]
-                                
-                                if tool_call_delta.id:
-                                    current_tool_call["id"] = tool_call_delta.id
-                                
-                                if tool_call_delta.function:
-                                    if tool_call_delta.function.name:
-                                        current_tool_call["function"]["name"] = tool_call_delta.function.name
-                                    if tool_call_delta.function.arguments:
-                                        current_tool_call["function"]["arguments"] += tool_call_delta.function.arguments
-                    
-                    # Check if stream is finished
-                    if choice.finish_reason:
-                        # Show final content without cursor
-                        if accumulated_content:
-                            final_markdown = Markdown(accumulated_content)
-                            live.update(final_markdown)
-                        break
+                choice = chunk.choices[0]
+                delta = choice.delta
                 
-                # Clear the live display
-                live.update("")
+                # Handle content streaming
+                if delta.content:
+                    accumulated_content += delta.content
+                    
+                    # Add to markdown buffer and check if ready to render
+                    content_to_render = markdown_buffer.add_content(delta.content)
+                    
+                    if content_to_render:
+                        if hasattr(self.console, '_output_widget') and self.console._output_widget:
+                            # For Textual interface, render as Markdown
+                            try:
+                                from rich.markdown import Markdown
+                                markdown = Markdown(content_to_render, code_theme="monokai")
+                                self.console._output_widget.write(markdown)
+                            except Exception as e:
+                                logger.error(f"Error writing to output widget: {e}")
+                                # Fallback to console print
+                                self.console.print(content_to_render, end="")
+                        else:
+                            # Fallback for non-Textual console
+                            self.console.print(content_to_render, end="")
                 
-            except Exception as e:
-                logger.error(f"Error during streaming: {e}", exc_info=True)
-                # Fall back to non-streaming
-                chat_params["stream"] = False
-                response = await self.client.chat.completions.create(**chat_params)
-                response_message = response.choices[0].message
-                messages.append(response_message)
+                # Handle tool call streaming
+                if delta.tool_calls:
+                    for tool_call_delta in delta.tool_calls:
+                        # Start new tool call
+                        if tool_call_delta.index is not None:
+                            # Ensure we have enough space in the list
+                            while len(accumulated_tool_calls) <= tool_call_delta.index:
+                                accumulated_tool_calls.append({
+                                    "id": None,
+                                    "type": "function",
+                                    "function": {"name": "", "arguments": ""}
+                                })
+                            
+                            current_tool_call = accumulated_tool_calls[tool_call_delta.index]
+                            
+                            if tool_call_delta.id:
+                                current_tool_call["id"] = tool_call_delta.id
+                            
+                            if tool_call_delta.function:
+                                if tool_call_delta.function.name:
+                                    current_tool_call["function"]["name"] = tool_call_delta.function.name
+                                if tool_call_delta.function.arguments:
+                                    current_tool_call["function"]["arguments"] += tool_call_delta.function.arguments
                 
-                if response_message.tool_calls:
-                    return await self._process_tool_calls_and_continue(response_message, messages, user_input)
-                else:
-                    return QXRunResult(response_message.content, messages)
+                # Check if stream is finished
+                if choice.finish_reason:
+                    # Flush any remaining buffer content
+                    remaining_content = markdown_buffer.flush()
+                    if remaining_content:
+                        if hasattr(self.console, '_output_widget') and self.console._output_widget:
+                            try:
+                                from rich.markdown import Markdown
+                                markdown = Markdown(remaining_content, code_theme="monokai")
+                                self.console._output_widget.write(markdown)
+                            except Exception as e:
+                                logger.error(f"Error writing final buffer to output widget: {e}")
+                                self.console.print(remaining_content, end="")
+                        else:
+                            self.console.print(remaining_content, end="")
+                    break
+                    
+        except Exception as e:
+            logger.error(f"Error during streaming: {e}", exc_info=True)
+            # Fall back to non-streaming
+            chat_params["stream"] = False
+            response = await self.client.chat.completions.create(**chat_params)
+            response_message = response.choices[0].message
+            messages.append(response_message)
+            
+            if response_message.tool_calls:
+                return await self._process_tool_calls_and_continue(response_message, messages, user_input)
+            else:
+                return QXRunResult(response_message.content, messages)
         
         # Create response message from accumulated data
         response_message_dict = {
@@ -327,11 +338,12 @@ class QXLLMAgent:
         response_message = ChatCompletionMessage(**response_message_dict)
         messages.append(response_message)
         
-        # Display final content if any
+        # Display final newline
         if accumulated_content and accumulated_content.strip():
-            markdown = Markdown(accumulated_content)
-            self.console.print(markdown)
-            self.console.print("\n")
+            if hasattr(self.console, '_output_widget') and self.console._output_widget:
+                self.console._output_widget.write("")  # Add empty line for spacing
+            else:
+                self.console.print("")
         
         # Process tool calls if any
         if accumulated_tool_calls:

@@ -5,14 +5,14 @@ description = "QX is a coding cli agent built by Transparently.AI"
 authors = [{ name = "Transparently.AI", email = "mauro@transparently.ai" }]
 dependencies = [
     "python-dotenv>=1.0.1",
-    "rich>=13.7.1",
     "pyfzf>=0.0.8",
     "pydantic>=2.7.1",
     "openai>=1.23.6",
-    "httpx>=0.27.0", # Added httpx for async client
-    "prompt-toolkit>=3.0.51",
+    "httpx>=0.27.0",
     "markitdown",
     "mcp>=1.9.1",
+    "textual>=3.2.0",
+    "markdown-it-py>=3.0.0",
 ]
 readme = "README.md"
 requires-python = ">= 3.11"
@@ -33,3 +33,8 @@ allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/qx"]
+
+[dependency-groups]
+dev = [
+    "textual-dev>=1.7.0",
+]
