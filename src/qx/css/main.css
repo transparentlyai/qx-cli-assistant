@@ -47,3 +47,140 @@ Footer {
     background: black;
 }
 
+/* Confirmation Modal Styles */
+#confirmation-modal {
+    width: 80%;
+    height: auto;
+    min-height: 20;
+    max-height: 80%;
+    background: #1a1a1a;
+    border: solid white;
+    padding: 1;
+    margin: 2;
+}
+
+#confirmation-message {
+    margin-bottom: 1;
+    text-align: center;
+    color: white;
+}
+
+#content-preview {
+    background: #111;
+    border: solid #444;
+    padding: 1;
+    margin: 1 0;
+    max-height: 20;
+    overflow-y: auto;
+}
+
+#preview-header, #preview-footer {
+    color: #888;
+    text-align: center;
+}
+
+#preview-content {
+    background: #111;
+    color: white;
+    padding: 1;
+}
+
+#modification-section {
+    margin: 1 0;
+}
+
+#modification-section.hidden {
+    display: none;
+}
+
+#modify-label {
+    margin-bottom: 1;
+    color: #ccc;
+}
+
+#modification-input {
+    margin-bottom: 1;
+    background: #222;
+    border: solid #666;
+}
+
+#button-container {
+    align: center middle;
+    margin-top: 1;
+    height: 3;
+}
+
+#button-container Button {
+    margin: 0 1;
+    min-width: 12;
+}
+
+/* Duration Modal Styles */
+#duration-modal {
+    width: 50%;
+    height: auto;
+    background: #1a1a1a;
+    border: solid white;
+    padding: 1;
+    margin: 2;
+}
+
+#duration-message {
+    margin-bottom: 1;
+    text-align: center;
+    color: white;
+}
+
+#duration-input {
+    margin-bottom: 1;
+    background: #222;
+    border: solid #666;
+}
+
+#duration-buttons {
+    align: center middle;
+    height: 3;
+}
+
+#duration-buttons Button {
+    margin: 0 1;
+    min-width: 8;
+}
+
+/* Hidden class for toggling visibility */
+.hidden {
+    display: none;
+}
+
+/* Confirmation container styles */
+#confirmation-container {
+    margin-bottom: 1;
+    background: black;
+    height: 1;
+    width: 100%;
+}
+
+#confirmation-message {
+    width: auto;
+    padding: 0;
+    margin: 0;
+    color: yellow;
+    background: black;
+    text-align: left;
+}
+
+.confirmation-choice {
+    width: auto;
+    padding: 0;
+    margin: 0 0 0 1;
+    color: white;
+    background: black;
+}
+
+#confirm-yes {
+    color: green;
+}
+
+#confirm-no {
+    color: red;
+}
