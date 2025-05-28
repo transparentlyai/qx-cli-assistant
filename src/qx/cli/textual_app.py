@@ -144,7 +144,11 @@ class QXApp(App):
         self.llm_agent = llm_agent
 
     async def request_confirmation(
-        self, message: str, choices: str = "ynmac", default: str = "n", allow_modify: bool = False
+        self,
+        message: str,
+        choices: str = "ynmac",
+        default: str = "n",
+        allow_modify: bool = False,
     ) -> str:
         """Request confirmation from user using Textual widgets."""
         # Create a future for the result
@@ -230,14 +234,28 @@ class QXApp(App):
             # Add a hidden confirmation container
             with Horizontal(id="confirmation-container", classes="hidden"):
                 yield Static("", id="confirmation-message")
-                yield Static("Yes (y)", id="confirm-yes", classes="confirmation-choice")
-                yield Static("No (n)", id="confirm-no", classes="confirmation-choice")
-                yield Static("Modify (m)", id="confirm-modify", classes="confirmation-choice hidden")
-                yield Static("Approve All (a)", id="confirm-approve-all", classes="confirmation-choice")
-                yield Static("Cancel (c)", id="confirm-cancel", classes="confirmation-choice")
+                yield Static("[orange]Y[/]es", classes="confirmation-choice")
+                yield Static("[orange]N[/]o", classes="confirmation-choice")
+                yield Static(
+                    "[orange]M[/]odify",
+                    id="confirm-modify",
+                    classes="confirmation-choice hidden",
+                )
+                yield Static(
+                    "[orange]A[/]ll",
+                    id="confirm-approve-all",
+                    classes="confirmation-choice",
+                )
+                yield Static(
+                    "[orange]C[/]ancel",
+                    id="confirm-cancel",
+                    classes="confirmation-choice",
+                )
             yield StatusFooter(id="status-footer")
 
-    def _show_confirmation_widget(self, message: str, choices: str, default: str, allow_modify: bool = False):
+    def _show_confirmation_widget(
+        self, message: str, choices: str, default: str, allow_modify: bool = False
+    ):
         """Show confirmation widget."""
         # Hide input container and show confirmation container
         input_container = self.query_one("#input-container")
@@ -406,7 +424,7 @@ class QXApp(App):
             # Set approve all
             qx.core.user_prompts._approve_all_active = True
             self.output_log.write(
-                "[yellow]✓ 'Approve All' mode activated for this session.[/yellow]"
+                "[orange]✓ 'Approve All' mode activated for this session.[/orange]"
             )
             self.output_log.write(
                 "[info]All confirmations will be auto-approved during this session.[/info]"
@@ -414,9 +432,7 @@ class QXApp(App):
 
         else:
             self.output_log.write(f"[red]Unknown command: {command_name}[/red]")
-            self.output_log.write(
-                "Available commands: /model, /reset, /approve-all"
-            )
+            self.output_log.write("Available commands: /model, /reset, /approve-all")
 
     def update_prompt_label(self, new_label: str):
         """Update the prompt label."""
