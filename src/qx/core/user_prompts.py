@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import datetime
 from typing import Callable, List, Literal, Optional, Tuple, Union, Any, Protocol
@@ -11,8 +12,7 @@ RenderableType = str  # Simplified type
 logger = logging.getLogger(__name__)
 
 # --- State for "Approve All" ---
-_approve_all_until: Optional[datetime.datetime] = None
-DEFAULT_APPROVE_ALL_DURATION_MINUTES: int = 15
+_approve_all_active: bool = False
 # --- End State for "Approve All" ---
 
 # Define standard choice tuples: (key, display_text, full_word_match)
@@ -44,50 +44,11 @@ async def _execute_prompt_with_live_suspend(
 def is_approve_all_active(console: RichConsole) -> bool:
     """
     Checks if the 'Approve All' session is currently active.
-    If expired, it resets the state and informs the user.
     """
-    global _approve_all_until
-    if _approve_all_until:
-        if datetime.datetime.now() < _approve_all_until:
-            return True
-        else:
-            console.print("[yellow]INFO:[/yellow] 'Approve All' session has expired.")
-            logger.info("'Approve All' session has expired.")
-            _approve_all_until = None
-    return False
+    global _approve_all_active
+    return _approve_all_active
 
 
-async def _ask_duration(console: RichConsole, prompt_message_text: str, default: int) -> int:
-    """
-    Asks the user for a duration in minutes.
-    """
-    pt_prompt_message = f"{prompt_message_text}: "
-    while True:
-        try:
-            duration_str = await _execute_prompt_with_live_suspend(
-                console,
-                pt_prompt_message, 
-                default=str(default)
-            )
-            duration = int(duration_str)
-            if duration < 0:
-                console.print("[red]Please enter a non-negative number of minutes.[/red]")
-                continue
-            return duration
-        except ValueError:
-            console.print("[red]Please enter a valid number of minutes.[/red]")
-        except EOFError:
-            logger.warning(f"EOFError (Ctrl+D) received for duration. Using default ({default} minutes).")
-            console.print(f"[warning]Input cancelled (Ctrl+D). Using default value ({default} minutes).[/warning]")
-            return default
-        except KeyboardInterrupt:
-            logger.warning(f"KeyboardInterrupt (Ctrl+C) received for duration. Using default ({default} minutes).")
-            console.print(f"\n[warning]Input interrupted (Ctrl+C). Using default value ({default} minutes).[/warning]")
-            return default
-        except Exception as e:
-            logger.error(f"Failed to get duration input: {e}", exc_info=True)
-            console.print(f"[red]An error occurred. Using default value ({default} minutes).[/red]")
-            return default
 
 
 async def _ask_basic_confirmation(
@@ -126,20 +87,88 @@ async def _ask_basic_confirmation(
             return "c"  # Cancel
 
 
-async def request_confirmation(
+def _is_textual_environment(console: RichConsole) -> bool:
+    """Check if we're running in a Textual environment."""
+    return hasattr(console, '_app') and console._app is not None
+
+
+async def _request_confirmation_textual(
     prompt_message: str,
     console: RichConsole,
     content_to_display: Optional[RenderableType] = None,
     allow_modify: bool = False,
     current_value_for_modification: Optional[str] = None,
 ) -> Tuple[ApprovalDecisionStatus, Optional[str]]:
-    """
-    Requests user confirmation with optional content display and modification.
-    """
+    """Handle confirmation requests in Textual environment."""
+    # Check if we're in "approve all" mode first
+    if is_approve_all_active(console):
+        console.print("[info]AUTO-APPROVED due to active 'Approve All' session.[/info]")
+        return ("session_approved", current_value_for_modification)
+    
+    # Display content preview first
+    if content_to_display:
+        console.print("\n--- Content Preview ---")
+        console.print(content_to_display)
+        console.print("--- End Preview ---\n")
+    
+    # Use Textual app's confirmation method
+    app = console._app
+    if hasattr(app, 'request_confirmation'):
+        try:
+            # Request confirmation through Textual UI
+            user_choice = await app.request_confirmation(prompt_message, "ynmac", "n", allow_modify)
+            
+            if user_choice == "y":
+                return ("approved", current_value_for_modification)
+            elif user_choice == "n":
+                console.print("[info]Operation denied by user.[/info]")
+                return ("denied", None)
+            elif user_choice == "m" and allow_modify:
+                # For Textual, we'd need a separate input modal for modification
+                # For now, fallback to simple approval with current value
+                console.print("[info]Modification not yet implemented in Textual UI. Using current value.[/info]")
+                return ("approved", current_value_for_modification)
+            elif user_choice == "a":
+                global _approve_all_active
+                _approve_all_active = True
+                console.print("[info]'Approve All' activated for this session.[/info]")
+                return ("session_approved", current_value_for_modification)
+            elif user_choice == "c":
+                console.print("[info]Operation cancelled by user.[/info]")
+                return ("cancelled", None)
+            else:
+                console.print("[info]Operation denied by user.[/info]")
+                return ("denied", None)
+        except Exception as e:
+            logger.error(f"Error in Textual confirmation: {e}", exc_info=True)
+            console.print(f"[red]Error during confirmation: {e}[/red]")
+            return ("cancelled", None)
+    else:
+        # Fallback to auto-approval if app doesn't have the method
+        console.print(f"[yellow]⚠️  AUTO-APPROVED (Textual UI limitation):[/yellow] {prompt_message}")
+        console.print("[dim]Note: Update to latest version for interactive confirmations[/dim]")
+        return ("approved", current_value_for_modification)
+
+
+async def _request_confirmation_terminal(
+    prompt_message: str,
+    console: RichConsole,
+    content_to_display: Optional[RenderableType] = None,
+    allow_modify: bool = False,
+    current_value_for_modification: Optional[str] = None,
+) -> Tuple[ApprovalDecisionStatus, Optional[str]]:
+    """Handle confirmation requests in terminal environment."""
     # Check if we're in "approve all" mode
     if is_approve_all_active(console):
         console.print("[info]AUTO-APPROVED due to active 'Approve All' session.[/info]")
         return ("session_approved", current_value_for_modification)
+        
+    # Auto-approve in non-interactive environments (e.g., when stdin is not a tty)
+    import sys
+    import os
+    if not sys.stdin.isatty() or os.environ.get("QX_AUTO_APPROVE", "false").lower() == "true":
+        console.print(f"[info]AUTO-APPROVED (non-interactive environment):[/info] {prompt_message}")
+        return ("approved", current_value_for_modification)
 
     # Display content if provided
     if content_to_display:
@@ -181,14 +210,9 @@ async def request_confirmation(
                 return ("cancelled", None)
         elif user_choice == "a":
             # Set approve all
-            duration = await _ask_duration(
-                console,
-                f"Approve All duration in minutes (default {DEFAULT_APPROVE_ALL_DURATION_MINUTES})",
-                DEFAULT_APPROVE_ALL_DURATION_MINUTES
-            )
-            global _approve_all_until
-            _approve_all_until = datetime.datetime.now() + datetime.timedelta(minutes=duration)
-            console.print(f"[info]'Approve All' activated for {duration} minutes.[/info]")
+            global _approve_all_active
+            _approve_all_active = True
+            console.print("[info]'Approve All' activated for this session.[/info]")
             return ("session_approved", current_value_for_modification)
         elif user_choice == "c":
             console.print("[info]Operation cancelled by user.[/info]")
@@ -201,3 +225,24 @@ async def request_confirmation(
         logger.error(f"Error in request_confirmation: {e}", exc_info=True)
         console.print(f"[red]Error during confirmation: {e}[/red]")
         return ("cancelled", None)
+
+
+async def request_confirmation(
+    prompt_message: str,
+    console: RichConsole,
+    content_to_display: Optional[RenderableType] = None,
+    allow_modify: bool = False,
+    current_value_for_modification: Optional[str] = None,
+) -> Tuple[ApprovalDecisionStatus, Optional[str]]:
+    """
+    Requests user confirmation with optional content display and modification.
+    Automatically detects Textual environment and uses appropriate UI.
+    """
+    if _is_textual_environment(console):
+        return await _request_confirmation_textual(
+            prompt_message, console, content_to_display, allow_modify, current_value_for_modification
+        )
+    else:
+        return await _request_confirmation_terminal(
+            prompt_message, console, content_to_display, allow_modify, current_value_for_modification
+        )

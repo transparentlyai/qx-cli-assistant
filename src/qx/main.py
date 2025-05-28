@@ -330,34 +330,35 @@ async def _async_main(
                 info_text = f"QX ver:{QX_VERSION} - {llm_agent.model_name}"
                 qx_console.print(f"[dim]{info_text}[/dim]")
 
-            # Run Textual app
-            app = QXApp()
-            app.set_mcp_manager(config_manager.mcp_manager)
-            app.set_llm_agent(llm_agent)
+            # Run Textual app (only if not in exit-after-response mode)
+            if not exit_after_response:
+                app = QXApp()
+                app.set_mcp_manager(config_manager.mcp_manager)
+                app.set_llm_agent(llm_agent)
 
-            try:
-                # Enable console debugging if QX_DEBUG is set
-                debug_mode = os.environ.get("QX_DEBUG", "false").lower() == "true"
-                if debug_mode:
-                    # Run with console redirected for debugging
-                    await app.run_async(headless=False)
-                else:
-                    await app.run_async()
-            except KeyboardInterrupt:
-                logger.info("QX terminated by user (Ctrl+C)")
-                qx_console.print("\nQX terminated by user.")
-            except Exception as e:
-                logger.error(f"Error running Textual app: {e}", exc_info=True)
-                qx_console.print(f"[red]App Error:[/red] {e}")
-            finally:
-                # Cleanup: disconnect all active MCP servers
                 try:
-                    active_servers = list(config_manager.mcp_manager._active_tasks.keys())
-                    for server_name in active_servers:
-                        logger.info(f"Disconnecting MCP server '{server_name}' before exit.")
-                        await config_manager.mcp_manager.disconnect_server(server_name)
+                    # Enable console debugging if QX_DEBUG is set
+                    debug_mode = os.environ.get("QX_DEBUG", "false").lower() == "true"
+                    if debug_mode:
+                        # Run with console redirected for debugging
+                        await app.run_async(headless=False)
+                    else:
+                        await app.run_async()
+                except KeyboardInterrupt:
+                    logger.info("QX terminated by user (Ctrl+C)")
+                    qx_console.print("\nQX terminated by user.")
                 except Exception as e:
-                    logger.error(f"Error during cleanup: {e}", exc_info=True)
+                    logger.error(f"Error running Textual app: {e}", exc_info=True)
+                    qx_console.print(f"[red]App Error:[/red] {e}")
+                finally:
+                    # Cleanup: disconnect all active MCP servers
+                    try:
+                        active_servers = list(config_manager.mcp_manager._active_tasks.keys())
+                        for server_name in active_servers:
+                            logger.info(f"Disconnecting MCP server '{server_name}' before exit.")
+                            await config_manager.mcp_manager.disconnect_server(server_name)
+                    except Exception as e:
+                        logger.error(f"Error during cleanup: {e}", exc_info=True)
                     
     except Exception as e:
         logger.critical(f"Critical error in _async_main: {e}", exc_info=True)

@@ -1,6 +1,7 @@
 import asyncio
+import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 from textual import events
 from textual.app import App, ComposeResult
@@ -17,10 +18,12 @@ from qx.core.llm import query_llm
 from qx.core.paths import QX_HISTORY_FILE
 from qx.core.session_manager import clean_old_sessions, save_session
 
+logger = logging.getLogger(__name__)
+
 
 class StatusFooter(Static):
     """Custom footer widget that displays status messages."""
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__("Ready", *args, **kwargs)
         self.add_class("footer")
@@ -28,25 +31,25 @@ class StatusFooter(Static):
         self.spinner_index = 0
         self.spinner_timer = None
         self.base_message = ""
-    
+
     def update_status(self, message: str):
         """Update the status message."""
         self.base_message = message
         self.update(message)
-    
+
     def start_spinner(self, message: str = "Thinking..."):
         """Start spinner animation with message."""
         self.base_message = message
         self.spinner_index = 0
         self.update_spinner()
         self.spinner_timer = self.set_interval(0.1, self.update_spinner)
-    
+
     def stop_spinner(self):
         """Stop spinner animation."""
         if self.spinner_timer:
             self.spinner_timer.stop()
             self.spinner_timer = None
-    
+
     def update_spinner(self):
         """Update spinner character."""
         spinner_char = self.spinner_chars[self.spinner_index]
@@ -129,6 +132,8 @@ class QXApp(App):
         self.llm_agent = None
         self.current_message_history = None
         self.keep_sessions = 5
+        self.confirmation_widget = None
+        self.confirmation_callback = None
 
     def set_mcp_manager(self, mcp_manager):
         """Set the MCP manager for command completion."""
@@ -138,6 +143,83 @@ class QXApp(App):
         """Set the LLM agent for processing user input."""
         self.llm_agent = llm_agent
 
+    async def request_confirmation(
+        self, message: str, choices: str = "ynmac", default: str = "n", allow_modify: bool = False
+    ) -> str:
+        """Request confirmation from user using Textual widgets."""
+        # Create a future for the result
+        self.confirmation_callback = asyncio.Future()
+
+        # Show confirmation widget
+        self._show_confirmation_widget(message, choices, default, allow_modify)
+
+        try:
+            # Wait for user response
+            result = await self.confirmation_callback
+            return result
+        finally:
+            # Hide confirmation widget
+            self._hide_confirmation_widget()
+
+    async def _handle_llm_query(self, input_text: str) -> None:
+        """Handle LLM query in a separate task."""
+        try:
+            # Start spinner animation
+            if self.status_footer:
+                self.status_footer.start_spinner("Thinking...")
+
+            run_result = await query_llm(
+                self.llm_agent,
+                input_text,
+                message_history=self.current_message_history,
+                console=qx_console,
+            )
+
+            if run_result and hasattr(run_result, "output"):
+                output_content = (
+                    str(run_result.output) if run_result.output is not None else ""
+                )
+                # Only render final output if streaming is disabled to avoid duplication
+                if output_content.strip() and not self.llm_agent.enable_streaming:
+                    # Render as Markdown
+                    from rich.markdown import Markdown
+
+                    markdown = Markdown(output_content, code_theme="monokai")
+                    self.output_log.write(markdown)
+                    self.output_log.write("")
+                elif self.llm_agent.enable_streaming:
+                    # For streaming, just add a newline for spacing
+                    self.output_log.write("")
+
+                if hasattr(run_result, "all_messages"):
+                    self.current_message_history = run_result.all_messages()
+
+                # Save session after each turn
+                if self.current_message_history:
+                    save_session(self.current_message_history)
+                    clean_old_sessions(self.keep_sessions)
+
+            # Stop spinner and reset status to ready
+            if self.status_footer:
+                self.status_footer.stop_spinner()
+                self.status_footer.update_status("Ready")
+
+        except Exception as e:
+            # Log full traceback for debugging
+            import traceback
+
+            logger.error(f"Error in LLM interaction: {e}", exc_info=True)
+
+            # Display error with traceback in output log
+            error_details = traceback.format_exc()
+            self.output_log.write(f"[red]Error:[/red] {e}")
+            self.output_log.write(f"[dim]{error_details}[/dim]")
+
+            # Stop spinner and reset status on error too
+            if self.status_footer:
+                self.status_footer.stop_spinner()
+                self.status_footer.update_status("Ready")
+
     def compose(self) -> ComposeResult:
         """Create the UI layout."""
         with Vertical(id="main-container"):
@@ -145,7 +227,65 @@ class QXApp(App):
             with Horizontal(id="input-container"):
                 yield Static("QX⏵ ", id="prompt-label")
                 yield QXInput(placeholder="Enter your message...", id="user-input")
+            # Add a hidden confirmation container
+            with Horizontal(id="confirmation-container", classes="hidden"):
+                yield Static("", id="confirmation-message")
+                yield Static("Yes (y)", id="confirm-yes", classes="confirmation-choice")
+                yield Static("No (n)", id="confirm-no", classes="confirmation-choice")
+                yield Static("Modify (m)", id="confirm-modify", classes="confirmation-choice hidden")
+                yield Static("Approve All (a)", id="confirm-approve-all", classes="confirmation-choice")
+                yield Static("Cancel (c)", id="confirm-cancel", classes="confirmation-choice")
             yield StatusFooter(id="status-footer")
+
+    def _show_confirmation_widget(self, message: str, choices: str, default: str, allow_modify: bool = False):
+        """Show confirmation widget."""
+        # Hide input container and show confirmation container
+        input_container = self.query_one("#input-container")
+        confirmation_container = self.query_one("#confirmation-container")
+
+        input_container.add_class("hidden")
+        confirmation_container.remove_class("hidden")
+
+        # Update message
+        msg_widget = self.query_one("#confirmation-message", Static)
+        msg_widget.update(f"{message}")
+
+        # Show/hide modify option based on allow_modify
+        modify_widget = self.query_one("#confirm-modify", Static)
+        if allow_modify:
+            modify_widget.remove_class("hidden")
+        else:
+            modify_widget.add_class("hidden")
+
+    def _hide_confirmation_widget(self):
+        """Hide confirmation widget and restore input."""
+        input_container = self.query_one("#input-container")
+        confirmation_container = self.query_one("#confirmation-container")
+
+        confirmation_container.add_class("hidden")
+        input_container.remove_class("hidden")
+
+        # Refocus on input
+        self.user_input.focus()
+        self.confirmation_callback = None
+
+    # Removed on_button_pressed since we're using Static widgets now
+
+    async def on_key(self, event: events.Key) -> None:
+        """Handle key press events during confirmation."""
+        if self.confirmation_callback and not self.confirmation_callback.done():
+            if event.key == "y":
+                self.confirmation_callback.set_result("y")
+            elif event.key == "n":
+                self.confirmation_callback.set_result("n")
+            elif event.key == "m":
+                self.confirmation_callback.set_result("m")
+            elif event.key == "a":
+                self.confirmation_callback.set_result("a")
+            elif event.key == "c":
+                self.confirmation_callback.set_result("c")
+            elif event.key == "escape":
+                self.confirmation_callback.set_result("c")
 
     def on_mount(self) -> None:
         """Set up the app after mounting."""
@@ -179,6 +319,8 @@ class QXApp(App):
                 if not input_text.strip():
                     return
 
+                # Confirmation mode removed
+
                 # Clear the input
                 self.user_input.value = ""
 
@@ -200,73 +342,22 @@ class QXApp(App):
 
                 # Process LLM interaction
                 if self.llm_agent:
-                    try:
-                        # Start spinner animation
-                        if self.status_footer:
-                            self.status_footer.start_spinner("Thinking...")
-                        
-                        run_result = await query_llm(
-                            self.llm_agent,
-                            input_text,
-                            message_history=self.current_message_history,
-                            console=qx_console,
-                        )
-
-                        if run_result and hasattr(run_result, "output"):
-                            output_content = (
-                                str(run_result.output)
-                                if run_result.output is not None
-                                else ""
-                            )
-                            # Only render final output if streaming is disabled to avoid duplication
-                            if output_content.strip() and not self.llm_agent.enable_streaming:
-                                # Render as Markdown
-                                from rich.markdown import Markdown
-                                markdown = Markdown(output_content, code_theme="monokai")
-                                self.output_log.write(markdown)
-                                self.output_log.write("")
-                            elif self.llm_agent.enable_streaming:
-                                # For streaming, just add a newline for spacing
-                                self.output_log.write("")
-
-                            if hasattr(run_result, "all_messages"):
-                                self.current_message_history = run_result.all_messages()
-
-                            # Save session after each turn
-                            if self.current_message_history:
-                                save_session(self.current_message_history)
-                                clean_old_sessions(self.keep_sessions)
-                        
-                        # Stop spinner and reset status to ready
-                        if self.status_footer:
-                            self.status_footer.stop_spinner()
-                            self.status_footer.update_status("Ready")
-
-                    except Exception as e:
-                        # Log full traceback for debugging
-                        import traceback
-                        logger.error(f"Error in LLM interaction: {e}", exc_info=True)
-                        
-                        # Display error with traceback in output log
-                        error_details = traceback.format_exc()
-                        self.output_log.write(f"[red]Error:[/red] {e}")
-                        self.output_log.write(f"[dim]{error_details}[/dim]")
-                        
-                        # Stop spinner and reset status on error too
-                        if self.status_footer:
-                            self.status_footer.stop_spinner()
-                            self.status_footer.update_status("Ready")
+                    # Run LLM query in a separate task to avoid blocking UI
+                    asyncio.create_task(self._handle_llm_query(input_text))
 
                 # Send message to parent components
                 self.post_message(UserInputSubmitted(input_text))
-                
+
         except Exception as e:
             # Catch any exceptions in the input handler itself
             import traceback
+
             logger.critical(f"Critical error in input handler: {e}", exc_info=True)
             if self.output_log:
                 error_details = traceback.format_exc()
-                self.output_log.write(f"[red]Critical Error in Input Handler:[/red] {e}")
+                self.output_log.write(
+                    f"[red]Critical Error in Input Handler:[/red] {e}"
+                )
                 self.output_log.write(f"[dim]{error_details}[/dim]")
             if self.status_footer:
                 self.status_footer.stop_spinner()
@@ -308,9 +399,24 @@ class QXApp(App):
             self.output_log.write(
                 "[info]Session reset, system prompt reloaded, and output cleared.[/info]"
             )
+        elif command_name == "/approve-all":
+            # Enable approve-all mode
+            import qx.core.user_prompts
+
+            # Set approve all
+            qx.core.user_prompts._approve_all_active = True
+            self.output_log.write(
+                "[yellow]✓ 'Approve All' mode activated for this session.[/yellow]"
+            )
+            self.output_log.write(
+                "[info]All confirmations will be auto-approved during this session.[/info]"
+            )
+
         else:
             self.output_log.write(f"[red]Unknown command: {command_name}[/red]")
-            self.output_log.write("Available commands: /model, /reset")
+            self.output_log.write(
+                "Available commands: /model, /reset, /approve-all"
+            )
 
     def update_prompt_label(self, new_label: str):
         """Update the prompt label."""
