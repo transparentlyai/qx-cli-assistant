@@ -5,16 +5,10 @@ from pathlib import Path
 from typing import Optional, Protocol
 
 from pydantic import BaseModel, Field
+from rich.console import Console as RichConsole  # Import RichConsole directly
 
 from qx.core.paths import USER_HOME_DIR, _find_project_root
 from qx.core.user_prompts import request_confirmation
-
-
-class ConsoleProtocol(Protocol):
-    def print(self, *args, **kwargs): ...
-
-
-RichConsole = ConsoleProtocol  # Type alias for backward compatibility
 
 logger = logging.getLogger(__name__)
 
@@ -172,11 +166,14 @@ async def write_file_tool(  # Made async
     Tool to write content to a file. Raw content expected.
     Allows path modification by user.
     """
-    # console is now directly available, no need for ctx.deps.console
     original_path_arg = args.path
     path_to_consider = os.path.expanduser(
         original_path_arg
     )  # Start with this for checks and prompts
+
+    console.print(
+        f"[info]Preparing to write to file:[/info] [blue]'{path_to_consider}'[/blue]"
+    )
 
     # Preliminary security check
     current_working_dir = Path.cwd()
@@ -194,12 +191,14 @@ async def write_file_tool(  # Made async
         logger.error(
             f"Write access denied by policy (plugin pre-check) for path: {path_to_consider}"
         )
+        console.print(
+            f"[red]Access denied by policy for path:[/red] [yellow]'{path_to_consider}'[/yellow]"
+        )
         return WriteFilePluginOutput(
             path=path_to_consider, success=False, message=err_msg
         )
 
     # Generate preview
-    # TODO: Get syntax_theme from config or context if made configurable
     preview_renderable = _generate_write_preview(
         path_to_consider, args.content, syntax_theme="vim"
     )
@@ -219,6 +218,9 @@ async def write_file_tool(  # Made async
         logger.info(
             f"Write path modified by user from '{path_to_consider}' to '{path_to_write}'."
         )
+        console.print(
+            f"[info]Path modified by user to:[/info] [blue]'{path_to_write}'[/blue]"
+        )
         # Re-check is_path_allowed for the new path
         absolute_modified_path = Path(os.path.expanduser(path_to_write))
         if not absolute_modified_path.is_absolute():
@@ -233,11 +235,20 @@ async def write_file_tool(  # Made async
                 f"Error: Access denied by policy for modified path: {path_to_write}"
             )
             logger.error(f"Write access denied for modified path: {path_to_write}")
+            console.print(
+                f"[red]Access denied by policy for modified path:[/red] [yellow]'{path_to_write}'[/yellow]"
+            )
             return WriteFilePluginOutput(
                 path=path_to_write, success=False, message=err_msg
             )
     elif decision_status in ["approved", "session_approved"]:
         path_to_write = path_to_consider
+        if (
+            decision_status == "approved"
+        ):  # Only print if not session_approved (which prints its own message)
+            console.print(
+                f"[info]Proceeding to write to:[/info] [blue]'{path_to_write}'[/blue]"
+            )
     else:  # denied or cancelled
         error_message = (
             f"Write operation for '{path_to_consider}' was {decision_status} by user."
@@ -252,14 +263,16 @@ async def write_file_tool(  # Made async
     error_from_impl = _write_file_core_logic(path_to_write, args.content)
 
     if error_from_impl:
+        console.print(
+            f"[error]Failed to write to '{path_to_write}':[/error] [red]{error_from_impl}[/red]"
+        )
         return WriteFilePluginOutput(
             path=path_to_write, success=False, message=error_from_impl
         )
     else:
-        # If session_approved, request_confirmation already printed a success message.
-        # If just "approved", it might be good to confirm the write.
-        # However, the original logic didn't print a specific success message here, relying on subsequent tool output.
-        # For now, keeping it consistent. A success message is in the return object.
+        console.print(
+            f"[success]Successfully wrote to:[/success] [green]'{path_to_write}'[/green]"
+        )
         return WriteFilePluginOutput(
             path=path_to_write,
             success=True,
