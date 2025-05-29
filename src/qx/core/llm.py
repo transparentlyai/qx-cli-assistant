@@ -188,6 +188,11 @@ class QXLLMAgent:
             if self.enable_streaming:
                 # Add streaming parameter
                 chat_params["stream"] = True
+                # Add an empty line before the streaming response starts
+                if hasattr(self.console, '_output_widget') and self.console._output_widget:
+                    self.console._output_widget.write("")
+                else:
+                    self.console.print("")
                 return await self._handle_streaming_response(chat_params, messages, user_input)
             else:
                 response = await self.client.chat.completions.create(**chat_params)

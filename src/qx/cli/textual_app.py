@@ -209,6 +209,8 @@ class QXApp(App):
                 )
                 # Only render final output if streaming is disabled to avoid duplication
                 if output_content.strip() and not self.llm_agent.enable_streaming:
+                    # Add an empty line before the response
+                    self.output_log.write("")
                     # Render as Markdown
                     from rich.markdown import Markdown
 
@@ -315,6 +317,7 @@ class QXApp(App):
         self.confirmation_callback = None
 
     # Removed on_button_pressed since we're using Static widgets now
+
 
     async def on_key(self, event: events.Key) -> None:
         """Handle key press events during confirmation."""
