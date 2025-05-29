@@ -214,7 +214,7 @@ class QXApp(App):
                     # Render as Markdown
                     from rich.markdown import Markdown
 
-                    markdown = Markdown(output_content, code_theme="monokai")
+                    markdown = Markdown(output_content, code_theme="rrt")
                     self.output_log.write(markdown)
                     self.output_log.write("")
                 elif self.llm_agent.enable_streaming:
