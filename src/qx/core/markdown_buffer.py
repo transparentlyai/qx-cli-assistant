@@ -18,6 +18,7 @@ class MarkdownStreamBuffer:
         self.max_buffer_size: int = max_buffer_size
         self.md_parser: MarkdownIt = MarkdownIt()
         self._in_code_block: bool = False  # Track code block state manually
+        self._has_rendered_once: bool = False  # Track if we've rendered anything yet
         # Common Markdown block-level elements that have distinct open/close tokens
         # and affect nesting levels directly.
         self._nesting_block_tokens = {
@@ -60,6 +61,8 @@ class MarkdownStreamBuffer:
                 return None
                 
             self.buffer = ""
+            # Mark that we've rendered at least once
+            self._has_rendered_once = True
             # Reset code block state after rendering
             # Since we never force-render inside code blocks now, just check the rendered content
             self._in_code_block = content_to_render.count('```') % 2 == 1
@@ -182,9 +185,14 @@ class MarkdownStreamBuffer:
                 
             # Additional safety check: ensure we have enough content to render meaningfully
             # This helps prevent rendering very short content that might be incomplete
+            # BUT: Don't apply this check at the very beginning of the stream
+            # to avoid buffering initial words unnecessarily
             stripped_buffer = self.buffer.strip()
-            if len(stripped_buffer) < 3:  # Very short content, might be incomplete
-                return False
+            # Only apply minimum length check if we've already rendered something
+            # (i.e., this isn't the first chunk of content)
+            if hasattr(self, '_has_rendered_once') and self._has_rendered_once:
+                if len(stripped_buffer) < 3:  # Very short content, might be incomplete
+                    return False
                 
             # print("DEBUG: Rendering, sentence end with newline.")
             return True

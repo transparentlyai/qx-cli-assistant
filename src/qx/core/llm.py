@@ -147,21 +147,39 @@ class QXLLMAgent:
         Returns the final message content or tool output.
         """
         messages: List[ChatCompletionMessageParam] = []
-        messages.append(
-            cast(
-                ChatCompletionSystemMessageParam,
-                {"role": "system", "content": self.system_prompt},
-            )
+        
+        # Only add system prompt if not already present in message history
+        has_system_message = message_history and any(
+            msg.get("role") == "system" for msg in message_history
         )
+        
+        if not has_system_message:
+            messages.append(
+                cast(
+                    ChatCompletionSystemMessageParam,
+                    {"role": "system", "content": self.system_prompt},
+                )
+            )
 
         if message_history:
             messages.extend(message_history)
 
-        messages.append(
-            cast(
-                ChatCompletionUserMessageParam, {"role": "user", "content": user_input}
+        # Only add user message if not already in the last position of message history
+        should_add_user_message = True
+        if message_history:
+            # Check if the last message is already this user input
+            last_msg = message_history[-1] if message_history else None
+            if (last_msg and 
+                last_msg.get("role") == "user" and 
+                last_msg.get("content") == user_input):
+                should_add_user_message = False
+        
+        if should_add_user_message:
+            messages.append(
+                cast(
+                    ChatCompletionUserMessageParam, {"role": "user", "content": user_input}
+                )
             )
-        )
 
         # Parameters for the chat completion
         chat_params: Dict[str, Any] = {
@@ -236,6 +254,7 @@ class QXLLMAgent:
         accumulated_content = ""
         accumulated_tool_calls = []
         current_tool_call = None
+        first_chunk = True
 
         # Use markdown-aware buffer for streaming
         from qx.core.markdown_buffer import create_markdown_buffer
@@ -256,6 +275,11 @@ class QXLLMAgent:
                 # Handle content streaming
                 if delta.content:
                     accumulated_content += delta.content
+                    
+                    # Log first chunk for debugging
+                    if first_chunk:
+                        logger.debug(f"First chunk content: '{delta.content}'")
+                        first_chunk = False
 
                     # Add to markdown buffer and check if ready to render
                     content_to_render = markdown_buffer.add_content(delta.content)
