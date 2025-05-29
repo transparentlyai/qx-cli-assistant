@@ -10,7 +10,7 @@ from typing import Any, List, Optional
 import anyio
 from openai.types.chat import ChatCompletionMessageParam
 
-from qx.cli.console import qx_console, show_spinner
+from qx.cli.console import TextualRichLogHandler, qx_console, show_spinner
 from qx.cli.textual_app import QXApp
 from qx.core.config_manager import ConfigManager
 from qx.core.constants import DEFAULT_MODEL, DEFAULT_SYNTAX_HIGHLIGHT_THEME
@@ -29,14 +29,21 @@ QX_VERSION = "0.3.3"
 # Configure logging for the application
 logger = logging.getLogger("qx")
 
+# Global variable to hold the temporary stream handler
+temp_stream_handler: Optional[logging.Handler] = None
+
 
 def _configure_logging():
     """
     Configures the application's logging based on QX_LOG_LEVEL environment variable.
+    Initially logs to file and console (for INFO and above). Console logging for INFO
+    will be redirected to Textual RichLog once the app starts.
     """
+    global temp_stream_handler
+
     from pathlib import Path
-    
-    log_level_name = os.getenv("QX_LOG_LEVEL", "ERROR").upper()  # Default to ERROR for cleaner logs
+
+    log_level_name = os.getenv("QX_LOG_LEVEL", "ERROR").upper()  # Default to INFO
     LOG_LEVELS = {
         "DEBUG": logging.DEBUG,
         "INFO": logging.INFO,
@@ -51,31 +58,50 @@ def _configure_logging():
     log_dir.mkdir(exist_ok=True)
     log_file = log_dir / "qx.log"
 
-    # Configure logging to both file and console
-    logging.basicConfig(
-        level=effective_log_level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler()  # Keep console logging for critical errors
-        ]
+    # Clear existing handlers to prevent duplicates on re-configuration
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+
+    # Add file handler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     )
-    
+    logger.addHandler(file_handler)
+
+    # Add a temporary StreamHandler for INFO and above, to be removed later
+    temp_stream_handler = logging.StreamHandler()
+    temp_stream_handler.setLevel(effective_log_level)
+    temp_stream_handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+    logger.addHandler(temp_stream_handler)
+
+    # Ensure critical errors always go to stderr
+    critical_stream_handler = logging.StreamHandler(sys.stderr)
+    critical_stream_handler.setLevel(logging.CRITICAL)
+    critical_stream_handler.setFormatter(
+        logging.Formatter("%(levelname)s: %(message)s")
+    )
+    logger.addHandler(critical_stream_handler)
+
+    logger.setLevel(effective_log_level)
+
     # Set up global exception handler
     def handle_exception(exc_type, exc_value, exc_traceback):
         if issubclass(exc_type, KeyboardInterrupt):
             sys.__excepthook__(exc_type, exc_value, exc_traceback)
             return
-        
-        logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+
+        logger.critical(
+            "Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback)
+        )
         # Also write to file directly in case logger fails
-        with open(log_file, 'a') as f:
+        with open(log_file, "a") as f:
             f.write(f"\n=== UNCAUGHT EXCEPTION ===\n")
             traceback.print_exception(exc_type, exc_value, exc_traceback, file=f)
             f.write(f"=== END EXCEPTION ===\n\n")
-    
+
     sys.excepthook = handle_exception
-    
+
     logger.info(
         f"QX application log level set to: {logging.getLevelName(effective_log_level)} ({effective_log_level})"
     )
@@ -247,6 +273,8 @@ async def _async_main(
     """
     Asynchronous main function to handle the QX agent logic.
     """
+    global temp_stream_handler
+
     try:
         _configure_logging()
     except Exception as e:
@@ -285,7 +313,9 @@ async def _async_main(
                     )
                     keep_sessions = 5
             except ValueError:
-                logger.warning("Invalid value for QX_KEEP_SESSIONS. Using default of 5.")
+                logger.warning(
+                    "Invalid value for QX_KEEP_SESSIONS. Using default of 5."
+                )
                 keep_sessions = 5
 
             # Handle exit after response mode (non-interactive)
@@ -322,19 +352,33 @@ async def _async_main(
             if initial_prompt and not exit_after_response:
                 qx_console.print(f"[bold]Initial Prompt:[/bold] {initial_prompt}")
                 current_message_history = await _handle_llm_interaction(
-                    llm_agent, initial_prompt, current_message_history, code_theme_to_use
+                    llm_agent,
+                    initial_prompt,
+                    current_message_history,
+                    code_theme_to_use,
                 )
-
-            # Show version info
-            if not exit_after_response:
-                info_text = f"QX ver:{QX_VERSION} - {llm_agent.model_name}"
-                qx_console.print(f"[dim]{info_text}[/dim]")
 
             # Run Textual app (only if not in exit-after-response mode)
             if not exit_after_response:
                 app = QXApp()
                 app.set_mcp_manager(config_manager.mcp_manager)
                 app.set_llm_agent(llm_agent)
+                app.set_version_info(
+                    QX_VERSION, llm_agent.model_name
+                )  # Pass version info
+
+                # Remove the temporary stream handler before running Textual app
+                if temp_stream_handler and temp_stream_handler in logger.handlers:
+                    logger.removeHandler(temp_stream_handler)
+                    temp_stream_handler = None  # Clear the global reference
+
+                # Add TextualRichLogHandler to the logger
+                textual_handler = TextualRichLogHandler(qx_console)
+                textual_handler.setLevel(
+                    logger.level
+                )  # Set level to match logger's effective level
+                logger.addHandler(textual_handler)
+                qx_console.set_logger(logger)  # Set the logger in qx_console
 
                 try:
                     # Enable console debugging if QX_DEBUG is set
@@ -353,13 +397,19 @@ async def _async_main(
                 finally:
                     # Cleanup: disconnect all active MCP servers
                     try:
-                        active_servers = list(config_manager.mcp_manager._active_tasks.keys())
+                        active_servers = list(
+                            config_manager.mcp_manager._active_tasks.keys()
+                        )
                         for server_name in active_servers:
-                            logger.info(f"Disconnecting MCP server '{server_name}' before exit.")
-                            await config_manager.mcp_manager.disconnect_server(server_name)
+                            logger.info(
+                                f"Disconnecting MCP server '{server_name}' before exit."
+                            )
+                            await config_manager.mcp_manager.disconnect_server(
+                                server_name
+                            )
                     except Exception as e:
                         logger.error(f"Error during cleanup: {e}", exc_info=True)
-                    
+
     except Exception as e:
         logger.critical(f"Critical error in _async_main: {e}", exc_info=True)
         print(f"Critical error: {e}")
@@ -468,4 +518,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

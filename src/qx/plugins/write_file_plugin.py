@@ -2,20 +2,19 @@ import difflib
 import logging
 import os
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Protocol
 
 from pydantic import BaseModel, Field
-from pygments.lexers import get_lexer_by_name
-from pygments.util import ClassNotFound
-from typing import Protocol
+
+from qx.core.paths import USER_HOME_DIR, _find_project_root
+from qx.core.user_prompts import request_confirmation
+
 
 class ConsoleProtocol(Protocol):
     def print(self, *args, **kwargs): ...
 
-RichConsole = ConsoleProtocol  # Type alias for backward compatibility
 
-from qx.core.paths import USER_HOME_DIR, _find_project_root
-from qx.core.user_prompts import request_confirmation
+RichConsole = ConsoleProtocol  # Type alias for backward compatibility
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +96,7 @@ def _generate_write_preview(
 ) -> str:
     """Generates a text preview for file write (diff or new content)."""
     file_path = Path(os.path.expanduser(file_path_str))
-    
+
     if file_path.exists() and file_path.is_file():
         try:
             old_content = file_path.read_text(encoding="utf-8")
@@ -151,7 +150,9 @@ class WriteFilePluginInput(BaseModel):
     path: str = Field(
         ..., description="Path to the file. Parent dirs created if needed."
     )
-    content: str = Field(..., description="Raw content to write.")
+    content: str = Field(
+        ..., description="Raw content to write. DO NOT escape the content."
+    )
 
 
 class WriteFilePluginOutput(BaseModel):
@@ -168,7 +169,7 @@ async def write_file_tool(  # Made async
     console: RichConsole, args: WriteFilePluginInput
 ) -> WriteFilePluginOutput:
     """
-    Tool to write content to a file.
+    Tool to write content to a file. Raw content expected.
     Allows path modification by user.
     """
     # console is now directly available, no need for ctx.deps.console
@@ -264,122 +265,3 @@ async def write_file_tool(  # Made async
             success=True,
             message=f"Successfully wrote to {path_to_write}",
         )
-
-
-if __name__ == "__main__":
-    import asyncio
-    import shutil
-
-    logging.basicConfig(level=logging.INFO)
-    test_console = RichConsole()
-
-    # No RunContext or QXToolDependencies needed for testing tool directly
-    # dummy_ctx = DummyRunContext(deps=test_deps) # Removed
-
-    test_base = Path("./tmp_write_plugin_test_ctx").resolve()
-    if test_base.exists():
-        shutil.rmtree(test_base)
-    test_base.mkdir(exist_ok=True)
-
-    test_project = test_base / "test_project_write_ctx"
-    test_project.mkdir(exist_ok=True)
-    (test_project / ".Q").mkdir(exist_ok=True)
-
-    original_cwd = Path.cwd()
-    os.chdir(test_project)
-
-    test_console.rule("Testing write_file_tool plugin with direct console passing")
-
-    async def run_tests():  # Wrapped tests in an async function
-        # Test 1: Write new file in project (user approves)
-        test_console.print(
-            "\n[bold]Test 1: Write new project file (approve path)[/bold]"
-        )
-        input1 = WriteFilePluginInput(
-            path="new_project_file.txt", content="Hello from write plugin!"
-        )
-        test_console.print("Please respond 'y' to the prompt.")
-        output1 = await write_file_tool(test_console, input1)  # Updated call
-        test_console.print(f"Output 1: {output1}")
-        if output1.success:
-            assert (
-                test_project / "new_project_file.txt"
-            ).read_text() == "Hello from write plugin!"
-
-        # Test 2: Modify existing file in project (user approves diff)
-        existing_file = test_project / "existing_project_file.txt"
-        existing_file.write_text("Old line 1\nOld line 2")
-        test_console.print(
-            "\n[bold]Test 2: Modify existing project file (approve diff)[/bold]"
-        )
-        input2 = WriteFilePluginInput(
-            path="existing_project_file.txt",
-            content="New line 1\nOld line 2\nNew line 3",
-        )
-        test_console.print("Please respond 'y' to the prompt.")
-        output2 = await write_file_tool(test_console, input2)  # Updated call
-        test_console.print(f"Output 2: {output2}")
-        if output2.success:
-            assert (
-                test_project / "existing_project_file.txt"
-            ).read_text() == "New line 1\nOld line 2\nNew line 3"
-
-        # Test 3: Write to home, path modification (user modifies path)
-        home_test_file_original_name = "qx_write_plugin_home_original.txt"
-        home_test_file_modified_name = "qx_write_plugin_home_MODIFIED.txt"
-
-        os.chdir(
-            original_cwd
-        )  # Change CWD to ensure tilde path is outside project for confirmation
-        test_console.print(
-            f"\n[bold]Test 3: Write to home, user modifies path from ~/{home_test_file_original_name} to ~/{home_test_file_modified_name}[/bold]"
-        )
-        input3 = WriteFilePluginInput(
-            path=f"~/{home_test_file_original_name}",
-            content="Content for modified path.",
-        )
-        test_console.print(
-            f"At the prompt: respond 'm', then enter '~/{home_test_file_modified_name}', then 'y' (if a second confirm appears) or just enter."
-        )
-        output3 = await write_file_tool(test_console, input3)  # Updated call
-        test_console.print(f"Output 3: {output3}")
-        if output3.success:
-            assert (USER_HOME_DIR / home_test_file_modified_name).exists()
-            assert (
-                USER_HOME_DIR / home_test_file_modified_name
-            ).read_text() == "Content for modified path."
-            (USER_HOME_DIR / home_test_file_modified_name).unlink(missing_ok=True)
-        (USER_HOME_DIR / home_test_file_original_name).unlink(
-            missing_ok=True
-        )  # cleanup original if created by mistake
-
-        # Test 4: Denied by policy
-        test_console.print(
-            "\n[bold]Test 4: Write to /etc/somefile (policy denial)[/bold]"
-        )
-        input4 = WriteFilePluginInput(
-            path="/etc/this_should_fail.txt", content="Forbidden content"
-        )
-        output4 = await write_file_tool(
-            test_console, input4
-        )  # No prompt expected, direct denial
-        test_console.print(f"Output 4: {output4}")
-        assert not output4.success and "Access denied by policy" in output4.message
-
-        # Test 5: User denies
-        os.chdir(test_project)  # Back to project dir
-        test_console.print("\n[bold]Test 5: User denies write to project file[/bold]")
-        input5 = WriteFilePluginInput(
-            path="user_denies_this.txt", content="This won't be written."
-        )
-        test_console.print("Please respond 'n' to the prompt.")
-        output5 = await write_file_tool(test_console, input5)  # Updated call
-        test_console.print(f"Output 5: {output5}")
-        assert not output5.success and "denied by user" in output5.message
-        assert not (test_project / "user_denies_this.txt").exists()
-
-        os.chdir(original_cwd)
-        shutil.rmtree(test_base)
-        test_console.print("\nWrite_file_plugin (with context) tests finished.")
-
-    asyncio.run(run_tests())
