@@ -102,11 +102,11 @@ def _configure_logging():
 
     sys.excepthook = handle_exception
 
-    logger.info(
+    logger.debug(
         f"QX application log level set to: {logging.getLevelName(effective_log_level)} ({effective_log_level})"
     )
-    logger.info(f"Logging to file: {log_file}")
-    logger.info("Global exception handler installed")
+    logger.debug(f"Logging to file: {log_file}")
+    logger.debug("Global exception handler installed")
 
 
 async def _initialize_agent_with_mcp(mcp_manager: MCPManager) -> QXLLMAgent:
@@ -287,7 +287,7 @@ async def _async_main(
             config_manager = ConfigManager(qx_console, parent_task_group=tg)
             config_manager.load_configurations()
 
-            logger.info("Using Textual interface.")
+            logger.debug("Using Textual interface.")
 
             syntax_theme_from_env = os.getenv("QX_SYNTAX_HIGHLIGHT_THEME")
             code_theme_to_use = (
@@ -295,7 +295,7 @@ async def _async_main(
                 if syntax_theme_from_env
                 else DEFAULT_SYNTAX_HIGHLIGHT_THEME
             )
-            logger.info(
+            logger.debug(
                 f"Using syntax highlighting theme for Markdown code blocks: {code_theme_to_use}"
             )
 
@@ -389,7 +389,7 @@ async def _async_main(
                     else:
                         await app.run_async()
                 except KeyboardInterrupt:
-                    logger.info("QX terminated by user (Ctrl+C)")
+                    logger.debug("QX terminated by user (Ctrl+C)")
                     qx_console.print("\nQX terminated by user.")
                 except Exception as e:
                     logger.error(f"Error running Textual app: {e}", exc_info=True)
@@ -397,7 +397,7 @@ async def _async_main(
                 finally:
                     # Cleanup: disconnect all active MCP servers
                     try:
-                        logger.info("Disconnecting all MCP servers before exit.")
+                        logger.debug("Disconnecting all MCP servers before exit.")
                         await config_manager.mcp_manager.disconnect_all()
                     except Exception as e:
                         logger.error(f"Error during MCP cleanup: {e}", exc_info=True)

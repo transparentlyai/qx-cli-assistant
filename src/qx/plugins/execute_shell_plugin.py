@@ -230,7 +230,7 @@ def _is_command_prohibited(command: str) -> bool:
 def _is_command_auto_approved(command: str) -> bool:
     for pattern in DEFAULT_AUTO_APPROVED_SHELL_PATTERNS:
         if fnmatch.fnmatch(command, pattern):
-            logger.info(
+            logger.debug(
                 f"Command '{command}' matches auto-approved pattern '{pattern}'."
             )
             return True
@@ -301,7 +301,7 @@ async def execute_shell_tool(  # Made async
                     error=err_msg,
                 )
 
-            logger.info(
+            logger.debug(
                 f"Shell command modified by user from '{command_to_consider}' to '{command_to_execute}'."
             )
             # console.print(f"[info]Command modified by user to:[/info] '{command_to_execute}'") # Covered by request_confirmation
@@ -334,7 +334,7 @@ async def execute_shell_tool(  # Made async
                 error=error_message,
             )
     else:  # Auto-approved
-        logger.info(f"Command '{command_to_execute}' is auto-approved. Executing.")
+        logger.debug(f"Command '{command_to_execute}' is auto-approved. Executing.")
         console.print(
             f"[green]AUTO-APPROVED (PATTERN):[/green] Executing: [blue]'{command_to_execute}'[/blue]"
         )
@@ -358,7 +358,7 @@ async def execute_shell_tool(  # Made async
         process = subprocess.run(
             command_to_execute, shell=True, capture_output=True, text=True, check=False
         )
-        logger.info(
+        logger.debug(
             f"Command '{command_to_execute}' executed. Return code: {process.returncode}"
         )
 
