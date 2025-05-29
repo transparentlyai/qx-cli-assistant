@@ -142,10 +142,10 @@ class WriteFilePluginInput(BaseModel):
     """Input model for the WriteFilePluginTool."""
 
     path: str = Field(
-        ..., description="Path to the file. Parent dirs created if needed."
+        ..., description="Path to the file to write. Can be relative (from CWD), absolute, or start with '~'. Parent directories will be created if needed."
     )
     content: str = Field(
-        ..., description="Raw content to write. DO NOT escape the content."
+        ..., description="Raw content to write to the file. Must NOT be escaped or double-escaped. Pass content exactly as it should appear in the file."
     )
 
 
@@ -153,18 +153,33 @@ class WriteFilePluginOutput(BaseModel):
     """Output model for the WriteFilePluginTool."""
 
     path: str = Field(
-        description="The (expanded and possibly modified) path of the file."
+        description="The final path where content was written (may differ from requested if user modified during approval)."
     )
-    success: bool = Field(description="True if write was successful.")
-    message: str = Field(description="Result message or error.")
+    success: bool = Field(description="True if the write operation completed successfully, False otherwise.")
+    message: str = Field(description="Descriptive message about the operation result. Contains success confirmation or error details.")
 
 
 async def write_file_tool(  # Made async
     console: RichConsole, args: WriteFilePluginInput
 ) -> WriteFilePluginOutput:
     """
-    Tool to write content to a file. Raw content expected.
-    Allows path modification by user.
+    Tool to write content to a file.
+    
+    Features:
+    - Creates parent directories automatically if needed
+    - Shows preview/diff before writing (for existing files)
+    - User can modify the target path during approval
+    - Raw content expected (no escaping needed)
+    
+    File access permissions:
+    - Files within project directory: Requires approval
+    - Files outside project but within user home: Requires approval
+    - Files outside user home: Access denied by policy
+    
+    Returns structured output with:
+    - path: Final path written to (may differ if user modified)
+    - success: Boolean success indicator
+    - message: Result description or error details
     """
     original_path_arg = args.path
     path_to_consider = os.path.expanduser(

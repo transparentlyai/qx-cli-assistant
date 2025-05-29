@@ -20,11 +20,11 @@ class WebFetchPluginInput(BaseModel):
 
     url: str = Field(
         ...,
-        description="The URL of the web page to fetch content from. Must be a valid and accessible URL.",
+        description="The URL to fetch content from. Must be a valid HTTP/HTTPS URL.",
     )
     format: str = Field(
         "markdown",
-        description="The desired output format for the fetched content. Can be 'markdown' (default) to convert HTML to Markdown, or 'raw' to return the content as-is.",
+        description="Output format: 'markdown' (default, converts HTML to Markdown) or 'raw' (returns content as-is).",
     )
 
 
@@ -33,17 +33,17 @@ class WebFetchPluginOutput(BaseModel):
 
     url: str = Field(description="The URL that was attempted to be fetched.")
     content: Optional[str] = Field(
-        None, description="The fetched content, or None if an error occurred."
+        None, description="The fetched content (in requested format). None if fetch failed or was denied."
     )
     error: Optional[str] = Field(
-        None, description="Error message if the operation failed or was denied."
+        None, description="Error message explaining why fetch failed (e.g., 'timeout', 'HTTP error', 'denied by user'). None if successful."
     )
     status_code: Optional[int] = Field(
-        None, description="HTTP status code of the response, if available."
+        None, description="HTTP response status code (e.g., 200, 404). None if request failed before receiving response."
     )
     truncated: bool = Field(
         False,
-        description="True if the fetched content was truncated to MAX_CONTENT_LENGTH due to its original size exceeding the limit.",
+        description="True if content was truncated to 250,000 characters due to size limits.",
     )
 
 
@@ -51,11 +51,25 @@ async def web_fetch_tool(
     console: RichConsole, args: WebFetchPluginInput
 ) -> WebFetchPluginOutput:
     """
-    Fetches content from a specified URL on the internet.
-
-    This tool requires explicit user confirmation for security reasons before accessing any external URL.
-    The fetched content can be returned in either 'markdown' format (default, where HTML is converted to Markdown)
-    or 'raw' format (the original content as received).
+    Fetches content from a specified URL.
+    
+    Features:
+    - Always requires user approval before fetching
+    - Supports HTML to Markdown conversion (default)
+    - 10-second timeout for requests
+    - Content truncated at 250,000 characters if needed
+    - Handles HTTP errors gracefully
+    
+    Output formats:
+    - 'markdown': Converts HTML to Markdown for readability
+    - 'raw': Returns content exactly as received
+    
+    Returns structured output with:
+    - url: The attempted URL
+    - content: Fetched content (if successful)
+    - error: Error details (if failed)
+    - status_code: HTTP response code
+    - truncated: Whether content was truncated
     """
     url_to_fetch = args.url.strip()
     output_format = args.format.lower()
