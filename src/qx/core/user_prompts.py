@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 # --- State for "Approve All" ---
 _approve_all_active: bool = False
+_approve_all_lock = asyncio.Lock()  # Protect global state
 # --- End State for "Approve All" ---
 
 # Define standard choice tuples: (key, display_text, full_word_match)
@@ -41,12 +42,14 @@ async def _execute_prompt_with_live_suspend(
         return ""
 
 
-def is_approve_all_active(console: RichConsole) -> bool:
+async def is_approve_all_active(console: RichConsole) -> bool:
     """
     Checks if the 'Approve All' session is currently active.
+    Thread-safe async version.
     """
     global _approve_all_active
-    return _approve_all_active
+    async with _approve_all_lock:
+        return _approve_all_active
 
 
 
@@ -101,7 +104,7 @@ async def _request_confirmation_textual(
 ) -> Tuple[ApprovalDecisionStatus, Optional[str]]:
     """Handle confirmation requests in Textual environment."""
     # Check if we're in "approve all" mode first
-    if is_approve_all_active(console):
+    if await is_approve_all_active(console):
         console.print("[info]AUTO-APPROVED due to active 'Approve All' session.[/info]")
         return ("session_approved", current_value_for_modification)
     
@@ -130,7 +133,8 @@ async def _request_confirmation_textual(
                 return ("approved", current_value_for_modification)
             elif user_choice == "a":
                 global _approve_all_active
-                _approve_all_active = True
+                async with _approve_all_lock:
+                    _approve_all_active = True
                 console.print("[info]'Approve All' activated for this session.[/info]")
                 return ("session_approved", current_value_for_modification)
             elif user_choice == "c":
@@ -159,7 +163,7 @@ async def _request_confirmation_terminal(
 ) -> Tuple[ApprovalDecisionStatus, Optional[str]]:
     """Handle confirmation requests in terminal environment."""
     # Check if we're in "approve all" mode
-    if is_approve_all_active(console):
+    if await is_approve_all_active(console):
         console.print("[info]AUTO-APPROVED due to active 'Approve All' session.[/info]")
         return ("session_approved", current_value_for_modification)
         
@@ -211,7 +215,8 @@ async def _request_confirmation_terminal(
         elif user_choice == "a":
             # Set approve all
             global _approve_all_active
-            _approve_all_active = True
+            async with _approve_all_lock:
+                _approve_all_active = True
             console.print("[info]'Approve All' activated for this session.[/info]")
             return ("session_approved", current_value_for_modification)
         elif user_choice == "c":

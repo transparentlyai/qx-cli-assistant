@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -13,28 +14,32 @@ logger = logging.getLogger(__name__)
 
 # Global variable to track current session filename
 _current_session_file = None
+_session_lock = asyncio.Lock()  # Protect session file access
 
-def get_or_create_session_filename():
+async def get_or_create_session_filename():
     """
     Returns the current session filename, creating a new one if needed.
+    Thread-safe version using asyncio lock.
     """
     global _current_session_file
-    if _current_session_file is None:
-        QX_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        _current_session_file = QX_SESSIONS_DIR / f"qx_session_{timestamp}.json"
+    async with _session_lock:
+        if _current_session_file is None:
+            QX_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:23]  # Include microseconds
+            _current_session_file = QX_SESSIONS_DIR / f"qx_session_{timestamp}.json"
     return _current_session_file
 
-def save_session(message_history: List[ChatCompletionMessageParam]):
+async def save_session_async(message_history: List[ChatCompletionMessageParam]):
     """
     Saves the given message history to the current session file.
     Creates a new session file only if one doesn't exist for this conversation.
+    Thread-safe async version.
     """
     if not message_history:
         logger.info("No message history to save. Skipping session save.")
         return
 
-    session_filename = get_or_create_session_filename()
+    session_filename = await get_or_create_session_filename()
 
     # Convert ChatCompletionMessageParam objects to dictionaries for JSON serialization
     serializable_history = [
@@ -43,18 +48,83 @@ def save_session(message_history: List[ChatCompletionMessageParam]):
     ]
 
     try:
-        with open(session_filename, "w", encoding="utf-8") as f:
-            json.dump(serializable_history, f, indent=2)
+        # Use asyncio to write file without blocking
+        import aiofiles
+        async with aiofiles.open(session_filename, mode='w', encoding='utf-8') as f:
+            await f.write(json.dumps(serializable_history, indent=2))
         logger.info(f"Session saved to {session_filename}")
+    except ImportError:
+        # Fallback to sync if aiofiles not available
+        try:
+            await asyncio.to_thread(
+                lambda: session_filename.write_text(
+                    json.dumps(serializable_history, indent=2), 
+                    encoding='utf-8'
+                )
+            )
+            logger.info(f"Session saved to {session_filename}")
+        except Exception as e:
+            logger.error(f"Failed to save session to {session_filename}: {e}", exc_info=True)
     except Exception as e:
         logger.error(f"Failed to save session to {session_filename}: {e}", exc_info=True)
 
-def reset_session():
+async def reset_session_async():
     """
     Resets the current session, forcing creation of a new session file on next save.
+    Thread-safe async version.
     """
     global _current_session_file
+    async with _session_lock:
+        _current_session_file = None
+
+# Sync wrappers for backward compatibility
+def save_session_sync(message_history: List[ChatCompletionMessageParam]):
+    """Sync wrapper for save_session."""
+    def _save_sync():
+        # Fallback to synchronous save to avoid blocking
+        global _current_session_file
+        if not message_history:
+            return
+        
+        if _current_session_file is None:
+            QX_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:23]
+            _current_session_file = QX_SESSIONS_DIR / f"qx_session_{timestamp}.json"
+        
+        serializable_history = [
+            msg.model_dump() if hasattr(msg, 'model_dump') else msg
+            for msg in message_history
+        ]
+        
+        try:
+            _current_session_file.write_text(
+                json.dumps(serializable_history, indent=2), 
+                encoding='utf-8'
+            )
+            logger.info(f"Session saved to {_current_session_file}")
+        except Exception as e:
+            logger.error(f"Failed to save session: {e}", exc_info=True)
+    
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # We're in an async context, create a task
+            asyncio.create_task(save_session_async(message_history))
+        else:
+            # Sync context - just do it synchronously
+            _save_sync()
+    except RuntimeError:
+        # No event loop - do it synchronously
+        _save_sync()
+
+def reset_session_sync():
+    """Sync wrapper for reset_session."""
+    global _current_session_file
     _current_session_file = None
+
+# Keep sync versions for compatibility
+save_session = save_session_sync
+reset_session = reset_session_sync
 
 def clean_old_sessions(keep_sessions: int):
     """

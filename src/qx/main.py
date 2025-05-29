@@ -397,18 +397,19 @@ async def _async_main(
                 finally:
                     # Cleanup: disconnect all active MCP servers
                     try:
-                        active_servers = list(
-                            config_manager.mcp_manager._active_tasks.keys()
-                        )
-                        for server_name in active_servers:
-                            logger.info(
-                                f"Disconnecting MCP server '{server_name}' before exit."
-                            )
-                            await config_manager.mcp_manager.disconnect_server(
-                                server_name
-                            )
+                        logger.info("Disconnecting all MCP servers before exit.")
+                        await config_manager.mcp_manager.disconnect_all()
                     except Exception as e:
-                        logger.error(f"Error during cleanup: {e}", exc_info=True)
+                        logger.error(f"Error during MCP cleanup: {e}", exc_info=True)
+                    
+                    # Clean up LLM agent resources
+                    try:
+                        if llm_agent:
+                            await llm_agent.cleanup()
+                    except Exception as e:
+                        logger.error(f"Error during LLM cleanup: {e}", exc_info=True)
+                    
+                    
 
     except Exception as e:
         logger.critical(f"Critical error in _async_main: {e}", exc_info=True)

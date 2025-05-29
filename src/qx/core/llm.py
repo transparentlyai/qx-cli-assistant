@@ -86,6 +86,7 @@ class QXLLMAgent:
         self._tool_functions: Dict[str, Callable] = {}
         self._openai_tools_schema: List[ChatCompletionToolParam] = []
         self._tool_input_models: Dict[str, Type[BaseModel]] = {}
+        self._http_client: Optional[httpx.AsyncClient] = None
 
         for func, schema, input_model_class in tools:
             self._tool_functions[func.__name__] = func
@@ -131,10 +132,21 @@ class QXLLMAgent:
             )
             raise ValueError("OPENROUTER_API_KEY not set.")
 
+        # Create HTTP client with proper configuration
+        self._http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(60.0, connect=10.0),  # 60s total, 10s connect
+            limits=httpx.Limits(
+                max_connections=10,
+                max_keepalive_connections=5,
+                keepalive_expiry=30.0
+            ),
+            follow_redirects=True
+        )
+
         return AsyncOpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=openrouter_api_key,
-            http_client=httpx.AsyncClient(),
+            http_client=self._http_client,
         )
 
     async def run(
@@ -146,6 +158,7 @@ class QXLLMAgent:
         Runs the LLM agent, handling conversation turns and tool calls.
         Returns the final message content or tool output.
         """
+        logger.debug(f"LLM run() called with input: {user_input[:50]}...")
         messages: List[ChatCompletionMessageParam] = []
         
         # Only add system prompt if not already present in message history
@@ -209,7 +222,12 @@ class QXLLMAgent:
             chat_params["extra_body"] = extra_body_params
 
         try:
-            logger.debug(f"LLM Request Parameters: {json.dumps(chat_params, indent=2)}")
+            logger.debug("About to make LLM request")
+            logger.debug(f"Model: {self.model_name}")
+            logger.debug(f"Streaming enabled: {self.enable_streaming}")
+            # Don't log full params as it might be too large
+            logger.debug(f"Number of messages: {len(messages)}")
+            logger.debug(f"Number of tools: {len(self._openai_tools_schema)}")
 
             if self.enable_streaming:
                 # Add streaming parameter
@@ -264,6 +282,7 @@ class QXLLMAgent:
         markdown_buffer = create_markdown_buffer()
 
         # Stream content directly to console
+        stream = None
         try:
             stream = await self.client.chat.completions.create(**chat_params)
 
@@ -369,6 +388,13 @@ class QXLLMAgent:
                 )
             else:
                 return QXRunResult(response_message.content, messages)
+        finally:
+            # Clean up async generator if needed
+            if stream and hasattr(stream, 'aclose'):
+                try:
+                    await stream.aclose()
+                except Exception as e:
+                    logger.debug(f"Error closing stream: {e}")
 
         # Create response message from accumulated data
         response_message_dict = {
@@ -515,10 +541,23 @@ class QXLLMAgent:
                     )
                 )
 
-        # Execute all collected tool tasks in parallel
+        # Execute all collected tool tasks in parallel with timeout
         if tool_tasks:
+            # Create tasks with individual timeouts
+            async def run_tool_with_timeout(task_info):
+                try:
+                    return await asyncio.wait_for(
+                        task_info["coroutine"], 
+                        timeout=120.0  # 2 minute timeout per tool
+                    )
+                except asyncio.TimeoutError:
+                    error_msg = f"Tool '{task_info['function_name']}' timed out after 2 minutes"
+                    logger.error(error_msg)
+                    return Exception(error_msg)
+            
             results = await asyncio.gather(
-                *[task["coroutine"] for task in tool_tasks], return_exceptions=True
+                *[run_tool_with_timeout(task) for task in tool_tasks], 
+                return_exceptions=True
             )
 
             for i, result in enumerate(results):
@@ -550,6 +589,12 @@ class QXLLMAgent:
 
         # After processing all tool calls (or attempting to), make one recursive call
         return await self.run(user_input, messages)
+    
+    async def cleanup(self):
+        """Clean up resources like HTTP client."""
+        if self._http_client:
+            await self._http_client.aclose()
+            self._http_client = None
 
 
 class QXRunResult:
@@ -646,11 +691,14 @@ async def query_llm(
     """
     Queries the LLM agent.
     """
+    logger.debug("query_llm() called")
     try:
+        logger.debug("Calling agent.run()")
         result = await agent.run(
             user_input,
             message_history=message_history,
         )
+        logger.debug("agent.run() completed successfully")
         return result
     except Exception as e:
         logger.error(f"Error during LLM query: {e}", exc_info=True)
