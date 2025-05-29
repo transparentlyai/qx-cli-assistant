@@ -140,7 +140,7 @@ async def web_fetch_tool(
                     )
                     final_content = content  # Fallback to raw if conversion fails
 
-            logger.info(
+            logger.debug(
                 f"Successfully fetched URL: {url_to_fetch} (Status: {response.status_code}, Truncated: {truncated})"
             )
             console.print(

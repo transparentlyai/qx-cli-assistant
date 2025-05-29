@@ -36,7 +36,7 @@ def get_current_time_tool(console: RichConsole) -> CurrentTimePluginOutput:
         formatted_time = now.strftime("%Y-%m-%d %H:%M:%S")
         timezone_name = str(local_tz) if local_tz else "Local"
 
-        logger.info(
+        logger.debug(
             f"Current time requested. Returning: {formatted_time} {timezone_name}"
         )
         console.print(
