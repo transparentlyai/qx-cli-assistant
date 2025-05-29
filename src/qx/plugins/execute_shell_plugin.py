@@ -209,12 +209,12 @@ class ExecuteShellPluginInput(BaseModel):
 
 class ExecuteShellPluginOutput(BaseModel):
     command: str = Field(
-        description="The command that was attempted (possibly modified by the user)."
+        description="The command that was actually executed (may differ from requested if user modified during approval)."
     )
-    stdout: Optional[str] = Field(None, description="Standard output.")
-    stderr: Optional[str] = Field(None, description="Standard error.")
-    return_code: Optional[int] = Field(None, description="Return code.")
-    error: Optional[str] = Field(None, description="Error message if denied or failed.")
+    stdout: Optional[str] = Field(None, description="Standard output from the command. Only present if command was executed.")
+    stderr: Optional[str] = Field(None, description="Standard error from the command. Only present if command was executed.")
+    return_code: Optional[int] = Field(None, description="Exit code from command execution. 0 indicates success, non-zero indicates failure. None if command was not executed.")
+    error: Optional[str] = Field(None, description="Error message explaining why command was not executed (e.g., 'prohibited', 'denied by user', 'empty command'). None if command was executed.")
 
 
 def _is_command_prohibited(command: str) -> bool:
@@ -240,7 +240,20 @@ def _is_command_auto_approved(command: str) -> bool:
 async def execute_shell_tool(  # Made async
     console: RichConsole, args: ExecuteShellPluginInput
 ) -> ExecuteShellPluginOutput:
-    """Tool for executing shell commands."""
+    """Tool for executing shell commands.
+    
+    Executes non-interactive shell commands with user approval flow:
+    - Auto-approved commands (ls, pwd, etc.) execute immediately
+    - Other commands require user confirmation
+    - Users can modify commands during approval
+    - Prohibited commands are blocked
+    
+    Returns structured output with:
+    - command: The actual command executed (may differ if user modified)
+    - stdout/stderr: Command output (only if executed)
+    - return_code: Exit code (0=success, only if executed)
+    - error: Explanation if command was not executed
+    """
     # console is now directly available, no need for ctx.deps.console
 
     command_to_consider = args.command.strip()
