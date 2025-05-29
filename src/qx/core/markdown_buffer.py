@@ -44,6 +44,9 @@ class MarkdownStreamBuffer:
         Returns:
             str: Content to render now, or None if should wait for more content.
         """
+        if not content:  # Guard against empty content
+            return None
+            
         self.buffer += content
         
         # Update code block state based on newly added content
@@ -51,6 +54,11 @@ class MarkdownStreamBuffer:
 
         if self._should_render():
             content_to_render = self.buffer
+            
+            # Safety check: ensure we're not returning empty content
+            if not content_to_render.strip():
+                return None
+                
             self.buffer = ""
             # Reset code block state after rendering
             # Since we never force-render inside code blocks now, just check the rendered content
@@ -171,6 +179,13 @@ class MarkdownStreamBuffer:
             if self._is_in_list_context():
                 # print("DEBUG: Not rendering on sentence end - in list context.")
                 return False
+                
+            # Additional safety check: ensure we have enough content to render meaningfully
+            # This helps prevent rendering very short content that might be incomplete
+            stripped_buffer = self.buffer.strip()
+            if len(stripped_buffer) < 3:  # Very short content, might be incomplete
+                return False
+                
             # print("DEBUG: Rendering, sentence end with newline.")
             return True
 
@@ -212,6 +227,11 @@ class MarkdownStreamBuffer:
         except Exception as e:
             # If parsing fails (e.g., due to highly malformed Markdown mid-stream),
             # it's safer to assume we are in an unstable/incomplete state.
+            # However, for very short content at the beginning, we might be too conservative
+            if len(current_buffer_stripped) < 10:
+                # For very short content, be less conservative about parsing failures
+                # This prevents over-buffering short text at the beginning
+                return False
             # print(f"DEBUG_construct: Parsing failed: {e}. Assuming inside construct.")
             return True
 
@@ -380,12 +400,13 @@ class MarkdownStreamBuffer:
         return False
 
 
-def create_markdown_buffer(max_size: int = 1000) -> MarkdownStreamBuffer:
+def create_markdown_buffer(max_size: int = 4000) -> MarkdownStreamBuffer:
     """
     Factory function to create a new MarkdownStreamBuffer.
 
     Args:
-        max_size: Maximum buffer size before emergency flush.
+        max_size: Maximum buffer size before emergency flush. Increased default to 4000
+                  to allow more complete markdown constructs to form before rendering.
 
     Returns:
         MarkdownStreamBuffer: New buffer instance.
