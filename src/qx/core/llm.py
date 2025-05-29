@@ -158,7 +158,6 @@ class QXLLMAgent:
         Runs the LLM agent, handling conversation turns and tool calls.
         Returns the final message content or tool output.
         """
-        logger.debug(f"LLM run() called with input: {user_input[:50]}...")
         messages: List[ChatCompletionMessageParam] = []
         
         # Only add system prompt if not already present in message history
@@ -222,13 +221,6 @@ class QXLLMAgent:
             chat_params["extra_body"] = extra_body_params
 
         try:
-            logger.debug("About to make LLM request")
-            logger.debug(f"Model: {self.model_name}")
-            logger.debug(f"Streaming enabled: {self.enable_streaming}")
-            # Don't log full params as it might be too large
-            logger.debug(f"Number of messages: {len(messages)}")
-            logger.debug(f"Number of tools: {len(self._openai_tools_schema)}")
-
             if self.enable_streaming:
                 # Add streaming parameter
                 chat_params["stream"] = True
@@ -245,7 +237,6 @@ class QXLLMAgent:
                 )
             else:
                 response = await self.client.chat.completions.create(**chat_params)
-                logger.debug(f"LLM Raw Response: {response.model_dump_json(indent=2)}")
 
                 response_message = response.choices[0].message
                 messages.append(response_message)
@@ -393,8 +384,8 @@ class QXLLMAgent:
             if stream and hasattr(stream, 'aclose'):
                 try:
                     await stream.aclose()
-                except Exception as e:
-                    logger.debug(f"Error closing stream: {e}")
+                except Exception:
+                    pass  # Ignore errors closing stream
 
         # Create response message from accumulated data
         response_message_dict = {
@@ -691,14 +682,11 @@ async def query_llm(
     """
     Queries the LLM agent.
     """
-    logger.debug("query_llm() called")
     try:
-        logger.debug("Calling agent.run()")
         result = await agent.run(
             user_input,
             message_history=message_history,
         )
-        logger.debug("agent.run() completed successfully")
         return result
     except Exception as e:
         logger.error(f"Error during LLM query: {e}", exc_info=True)

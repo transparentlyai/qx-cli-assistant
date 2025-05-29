@@ -16,7 +16,7 @@ from qx.cli.commands import CommandCompleter
 from qx.cli.console import TextualRichLogHandler, qx_console
 from qx.core.llm import query_llm
 from qx.core.paths import QX_HISTORY_FILE
-from qx.core.session_manager import clean_old_sessions, save_session
+from qx.core.session_manager import clean_old_sessions, save_session, save_session_async
 
 logger = logging.getLogger(__name__)
 
@@ -347,7 +347,6 @@ class QXApp(App):
             logger.warning("Confirmation dialog timed out")
             return default  # Return default choice on timeout
         except asyncio.CancelledError:
-            logger.debug("Confirmation dialog cancelled")
             return "c"  # Return cancel on cancellation
         finally:
             # Hide confirmation widget
@@ -410,7 +409,8 @@ class QXApp(App):
 
                 # Save session after each turn
                 if self.current_message_history:
-                    save_session(self.current_message_history)
+                    # Use async version since we're in an async context
+                    await save_session_async(self.current_message_history)
                     clean_old_sessions(self.keep_sessions)
 
             # Stop spinner and reset status to ready
@@ -568,7 +568,8 @@ class QXApp(App):
         # Handle exit commands
         if input_text.lower() in ["exit", "quit"]:
             if self.current_message_history:
-                save_session(self.current_message_history)
+                # Use async version since we're in an async context
+                await save_session_async(self.current_message_history)
                 clean_old_sessions(self.keep_sessions)
             self.exit()
             return
@@ -583,17 +584,14 @@ class QXApp(App):
             # Run LLM query in a separate task to avoid blocking UI
             async def run_query():
                 try:
-                    logger.debug(f"Starting LLM query for: {input_text[:50]}...")
                     await self._handle_llm_query(input_text)
-                    logger.debug("LLM query completed successfully")
                 except asyncio.CancelledError:
-                    logger.debug("LLM query task cancelled")
+                    pass
                 except Exception as e:
                     logger.error(f"Unhandled error in LLM query task: {e}", exc_info=True)
                     if self.output_log:
                         self.output_log.write(f"[red]Critical Error:[/red] {e}")
             
-            logger.debug("Creating task for LLM query")
             asyncio.create_task(run_query())
 
     def on_mount(self) -> None:

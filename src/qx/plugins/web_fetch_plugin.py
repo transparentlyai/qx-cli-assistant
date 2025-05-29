@@ -57,7 +57,6 @@ async def web_fetch_tool(
     The fetched content can be returned in either 'markdown' format (default, where HTML is converted to Markdown)
     or 'raw' format (the original content as received).
     """
-    logger.debug(f"web_fetch_tool called with url='{args.url}', format='{args.format}'")
     url_to_fetch = args.url.strip()
     output_format = args.format.lower()
 
@@ -65,7 +64,6 @@ async def web_fetch_tool(
         err_msg = "Error: Empty URL provided."
         logger.error(err_msg)
         console.print(f"[red]{err_msg}[/red]")
-        logger.debug("Returning due to empty URL.")
         return WebFetchPluginOutput(
             url="", content=None, error=err_msg, status_code=None, truncated=False
         )
@@ -74,7 +72,6 @@ async def web_fetch_tool(
         err_msg = f"Error: Invalid format '{output_format}'. Supported formats are 'markdown' and 'raw'."
         logger.error(err_msg)
         console.print(f"[red]{err_msg}[/red]")
-        logger.debug(f"Returning due to invalid format: {output_format}.")
         return WebFetchPluginOutput(
             url=url_to_fetch,
             content=None,
@@ -87,13 +84,11 @@ async def web_fetch_tool(
         f"[info]Requesting permission to fetch URL:[/info] [blue]'{url_to_fetch}'[/blue]"
     )
     prompt_msg = f"Allow QX to fetch content from URL: '{url_to_fetch}'?"
-    logger.debug(f"Requesting confirmation for URL: {url_to_fetch}")
     decision_status, _ = await request_confirmation(
         prompt_message=prompt_msg,
         console=console,
         allow_modify=False,  # URL modification not allowed for this tool
     )
-    logger.debug(f"Confirmation decision_status: {decision_status}")
 
     if decision_status not in ["approved", "session_approved"]:
         error_message = (
@@ -101,7 +96,6 @@ async def web_fetch_tool(
         )
         logger.warning(error_message)
         # request_confirmation already prints a message for denied/cancelled
-        logger.debug(f"Returning due to user decision: {decision_status}.")
         return WebFetchPluginOutput(
             url=url_to_fetch,
             content=None,
@@ -111,23 +105,17 @@ async def web_fetch_tool(
         )
 
     console.print(f"[info]Fetching content from:[/info] [blue]'{url_to_fetch}'[/blue]")
-    logger.debug(f"Attempting to fetch URL: {url_to_fetch}")
 
     try:
         # Use a simple HTTP client for now
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
             response = await client.get(url_to_fetch)
             response.raise_for_status()  # Raise an exception for 4xx/5xx responses
-            logger.debug(
-                f"Successfully fetched URL. Status code: {response.status_code}"
-            )
+            # URL fetched successfully
 
             content = response.text
             truncated = False
             if len(content) > MAX_CONTENT_LENGTH:
-                logger.debug(
-                    f"Content length ({len(content)}) exceeds MAX_CONTENT_LENGTH ({MAX_CONTENT_LENGTH}). Truncating."
-                )
                 content = content[:MAX_CONTENT_LENGTH]
                 truncated = True
                 console.print(
@@ -136,13 +124,11 @@ async def web_fetch_tool(
 
             final_content = content
             if output_format == "markdown":
-                logger.debug("Output format is markdown. Attempting conversion.")
                 md = MarkItDown()
                 try:
                     from markdownify import markdownify as md_converter
 
                     final_content = md_converter(content)
-                    logger.debug("Content successfully converted to markdown.")
                 except ImportError:
                     logger.warning(
                         "markdownify not installed. Cannot convert to markdown. Returning raw content."
@@ -153,9 +139,6 @@ async def web_fetch_tool(
                         f"Could not convert content to markdown: {e}. Returning raw content."
                     )
                     final_content = content  # Fallback to raw if conversion fails
-                    logger.debug(
-                        "Markdown conversion failed. Falling back to raw content."
-                    )
 
             logger.info(
                 f"Successfully fetched URL: {url_to_fetch} (Status: {response.status_code}, Truncated: {truncated})"
@@ -163,7 +146,6 @@ async def web_fetch_tool(
             console.print(
                 f"[success]Successfully fetched URL:[/success] [green]{url_to_fetch}[/green] [dim](Status: {response.status_code})[/dim]"
             )
-            logger.debug("Returning WebFetchPluginOutput with fetched content.")
             return WebFetchPluginOutput(
                 url=url_to_fetch,
                 content=final_content,
@@ -176,7 +158,6 @@ async def web_fetch_tool(
         err_msg = f"Error: Request to {url_to_fetch} timed out after {REQUEST_TIMEOUT} seconds."
         logger.error(err_msg)
         console.print(f"[red]{err_msg}[/red]")
-        logger.debug("Returning due to TimeoutException.")
         return WebFetchPluginOutput(
             url=url_to_fetch,
             content=None,
@@ -190,7 +171,6 @@ async def web_fetch_tool(
         )
         logger.error(err_msg, exc_info=True)
         console.print(f"[red]{err_msg}[/red]")
-        logger.debug("Returning due to RequestError.")
         return WebFetchPluginOutput(
             url=url_to_fetch,
             content=None,
@@ -202,7 +182,6 @@ async def web_fetch_tool(
         err_msg = f"Error: HTTP status error for {url_to_fetch}: {e.response.status_code} - {e.response.text[:200]}..."
         logger.error(err_msg, exc_info=True)
         console.print(f"[red]{err_msg}[/red]")
-        logger.debug("Returning due to HTTPStatusError.")
         return WebFetchPluginOutput(
             url=url_to_fetch,
             content=None,
@@ -216,7 +195,6 @@ async def web_fetch_tool(
         )
         logger.error(err_msg, exc_info=True)
         console.print(f"[red]{err_msg}[/red]")
-        logger.debug("Returning due to unexpected Exception.")
         return WebFetchPluginOutput(
             url=url_to_fetch,
             content=None,

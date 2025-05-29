@@ -20,18 +20,25 @@ class TextualRichLogHandler(logging.Handler):
     def emit(self, record):
         try:
             msg = self.format(record)
-            # Use qx_console.print to output to the RichLog
-            # We can add styling based on log level if needed
-            if record.levelno >= logging.ERROR:
-                self.qx_console.print(f"[red]{msg}[/red]")
-            elif record.levelno >= logging.WARNING:
-                self.qx_console.print(f"[yellow]{msg}[/yellow]")
-            elif record.levelno >= logging.INFO:
-                self.qx_console.print(f"[blue]{msg}[/blue]")
-            else:
-                self.qx_console.print(f"[dim]{msg}[/dim]")
+            # Check if we're in a Textual context before trying to write
+            if hasattr(self.qx_console, '_output_widget') and self.qx_console._output_widget:
+                try:
+                    # Use qx_console.print to output to the RichLog
+                    # We can add styling based on log level if needed
+                    if record.levelno >= logging.ERROR:
+                        self.qx_console.print(f"[red]{msg}[/red]")
+                    elif record.levelno >= logging.WARNING:
+                        self.qx_console.print(f"[yellow]{msg}[/yellow]")
+                    elif record.levelno >= logging.INFO:
+                        self.qx_console.print(f"[blue]{msg}[/blue]")
+                    else:
+                        self.qx_console.print(f"[dim]{msg}[/dim]")
+                except Exception:
+                    # Textual app might be shutting down, silently ignore
+                    pass
         except Exception:
-            self.handleError(record)
+            # Silently ignore logging errors during shutdown
+            pass
 
 class QXConsole:
     """
@@ -58,12 +65,20 @@ class QXConsole:
         Prints to the console using the RichLog widget or standard output.
         """
         if self._output_widget:
-            # Convert args to a single string message
-            message = " ".join(str(arg) for arg in args)
-            self._output_widget.write(message, **kwargs)
+            try:
+                # Convert args to a single string message
+                message = " ".join(str(arg) for arg in args)
+                self._output_widget.write(message, **kwargs)
+            except Exception:
+                # Widget might be unavailable during shutdown
+                pass
         else:
             # Fallback to standard print
-            print(*args, **kwargs)
+            try:
+                print(*args, **kwargs)
+            except Exception:
+                # Even standard print might fail during shutdown
+                pass
 
     def clear(self):
         """
