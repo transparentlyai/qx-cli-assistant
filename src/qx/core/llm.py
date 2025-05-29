@@ -266,6 +266,7 @@ class QXLLMAgent:
         accumulated_content = ""
         accumulated_tool_calls = []
         current_tool_call = None
+        has_tool_calls = False  # Track if we've seen any tool calls
 
         # Use markdown-aware buffer for streaming
         from qx.core.markdown_buffer import create_markdown_buffer
@@ -287,31 +288,12 @@ class QXLLMAgent:
                 # Handle content streaming
                 if delta.content:
                     accumulated_content += delta.content
-
-                    # Add to markdown buffer and check if ready to render
-                    content_to_render = markdown_buffer.add_content(delta.content)
-
-                    if content_to_render:
-                        if (
-                            hasattr(self.console, "_output_widget")
-                            and self.console._output_widget
-                        ):
-                            # For Textual interface, render as Markdown
-                            try:
-                                from rich.markdown import Markdown
-
-                                markdown = Markdown(content_to_render, code_theme="rrt")
-                                self.console._output_widget.write(markdown)
-                            except Exception as e:
-                                logger.error(f"Error writing to output widget: {e}")
-                                # Fallback to console print
-                                self.console.print(content_to_render, end="")
-                        else:
-                            # Fallback for non-Textual console
-                            self.console.print(content_to_render, end="")
+                    # Buffer content but don't render yet - we need to check for tool calls first
+                    markdown_buffer.add_content(delta.content)
 
                 # Handle tool call streaming
                 if delta.tool_calls:
+                    has_tool_calls = True  # Mark that we've seen tool calls
                     for tool_call_delta in delta.tool_calls:
                         # Start new tool call
                         if tool_call_delta.index is not None:
@@ -344,25 +326,6 @@ class QXLLMAgent:
 
                 # Check if stream is finished
                 if choice.finish_reason:
-                    # Flush any remaining buffer content
-                    remaining_content = markdown_buffer.flush()
-                    if remaining_content:
-                        if (
-                            hasattr(self.console, "_output_widget")
-                            and self.console._output_widget
-                        ):
-                            try:
-                                from rich.markdown import Markdown
-
-                                markdown = Markdown(remaining_content, code_theme="rrt")
-                                self.console._output_widget.write(markdown)
-                            except Exception as e:
-                                logger.error(
-                                    f"Error writing final buffer to output widget: {e}"
-                                )
-                                self.console.print(remaining_content, end="")
-                        else:
-                            self.console.print(remaining_content, end="")
                     break
 
         except Exception as e:
@@ -386,6 +349,61 @@ class QXLLMAgent:
                     await stream.aclose()
                 except Exception:
                     pass  # Ignore errors closing stream
+
+        # Now decide what to display based on whether we have tool calls
+        if not has_tool_calls and accumulated_content:
+            # No tool calls, display all accumulated content
+            # Flush the buffer to get all content
+            all_content = markdown_buffer.flush()
+            if all_content:
+                if (
+                    hasattr(self.console, "_output_widget")
+                    and self.console._output_widget
+                ):
+                    try:
+                        from rich.markdown import Markdown
+                        markdown = Markdown(all_content, code_theme="rrt")
+                        self.console._output_widget.write(markdown)
+                    except Exception as e:
+                        logger.error(f"Error writing to output widget: {e}")
+                        self.console.print(all_content, end="")
+                else:
+                    self.console.print(all_content, end="")
+                
+                # Add newline after content
+                if all_content.strip():
+                    if hasattr(self.console, "_output_widget") and self.console._output_widget:
+                        self.console._output_widget.write("")  # Add empty line for spacing
+                    else:
+                        self.console.print("")
+        elif has_tool_calls:
+            # Check if accumulated content is likely narration
+            narration_patterns = [
+                "with a detailed summary message",
+                "changes with a detailed",
+                "Successfully committed",
+                "Adding files",
+                "Checking changes",
+                "Committing",
+                "Let me",
+                "I'll",
+                "I will",
+                "Now I",
+                "First,",
+                "Next,",
+                "Here's",
+                "Running",
+                "Executing",
+            ]
+            
+            lower_content = accumulated_content.lower().strip()
+            is_likely_narration = any(pattern.lower() in lower_content for pattern in narration_patterns)
+            
+            # If it's likely narration, suppress it
+            if is_likely_narration:
+                accumulated_content = ""
+                # Clear the markdown buffer too
+                markdown_buffer.flush()
 
         # Create response message from accumulated data
         response_message_dict = {
@@ -416,15 +434,11 @@ class QXLLMAgent:
         response_message = ChatCompletionMessage(**response_message_dict)
         messages.append(response_message)
 
-        # Display final newline
-        if accumulated_content and accumulated_content.strip():
-            if hasattr(self.console, "_output_widget") and self.console._output_widget:
-                self.console._output_widget.write("")  # Add empty line for spacing
-            else:
-                self.console.print("")
 
         # Process tool calls if any
         if accumulated_tool_calls:
+            # Pass empty content if we cleared narration
+            response_message.content = accumulated_content if accumulated_content else None
             return await self._process_tool_calls_and_continue(
                 response_message, messages, user_input
             )
