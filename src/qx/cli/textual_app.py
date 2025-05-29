@@ -1,15 +1,14 @@
 import asyncio
 import logging
 from pathlib import Path
-from typing import Any, Optional, Tuple
+from typing import Optional
 
 from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.message import Message
-from textual.reactive import reactive
-from textual.widgets import Footer, Input, RichLog, Static
+from textual.widgets import Input, RichLog, Static
 
 from qx.cli.commands import CommandCompleter
 from qx.cli.console import qx_console
@@ -120,6 +119,8 @@ class QXApp(App):
         Binding("ctrl+d", "quit", "Quit"),
     ]
 
+    enable_mouse_support = True
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.prompt_handler = None
@@ -227,7 +228,9 @@ class QXApp(App):
     def compose(self) -> ComposeResult:
         """Create the UI layout."""
         with Vertical(id="main-container"):
-            yield RichLog(id="output-log", markup=True)
+            log = RichLog(id="output-log", markup=True, wrap=True)
+            log.can_focus = False
+            yield log
             with Horizontal(id="input-container"):
                 yield Static("QX⏵ ", id="prompt-label")
                 yield QXInput(placeholder="Enter your message...", id="user-input")
@@ -254,7 +257,11 @@ class QXApp(App):
             yield StatusFooter(id="status-footer")
 
     def _show_confirmation_widget(
-        self, message: str, choices: str, default: str, allow_modify: bool = False
+        self,
+        message: str,
+        choices: str,
+        default: str,
+        allow_modify: bool = False
     ):
         """Show confirmation widget."""
         # Hide input container and show confirmation container

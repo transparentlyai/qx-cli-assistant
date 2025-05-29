@@ -1,5 +1,5 @@
 #main-container {
-    height: 100%;
+    height: auto;
     background: black;
     padding: 1;
     padding-bottom: 0;
@@ -175,12 +175,4 @@ Footer {
     margin: 0 0 0 1;
     color: white;
     background: black;
-}
-
-#confirm-yes {
-    color: green;
-}
-
-#confirm-no {
-    color: red;
 }
