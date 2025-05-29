@@ -257,7 +257,6 @@ class QXLLMAgent:
         accumulated_content = ""
         accumulated_tool_calls = []
         current_tool_call = None
-        first_chunk = True
 
         # Use markdown-aware buffer for streaming
         from qx.core.markdown_buffer import create_markdown_buffer
@@ -278,11 +277,6 @@ class QXLLMAgent:
                 # Handle content streaming
                 if delta.content:
                     accumulated_content += delta.content
-                    
-                    # Log first chunk for debugging
-                    if first_chunk:
-                        logger.debug(f"First chunk content: '{delta.content}'")
-                        first_chunk = False
 
                     # Add to markdown buffer and check if ready to render
                     content_to_render = markdown_buffer.add_content(delta.content)
