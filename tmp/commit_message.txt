@@ -1,0 +1,22 @@
+Refactor: Improve core module structure and add new plugins
+
+- Moved `async_utils.py`, `config_manager.py`, `markdown_buffer.py`, `plugin_manager.py`, `session_manager.py`, `constants.py`, `paths.py`, `mcp_manager.py`, `http_client_manager.py`, `llm.py`, `user_prompts.py`, and `history_utils.py` into `src/qx/core/` for better organization.
+- Added `write_file_plugin.py`, `current_time_plugin.py`, `web_fetch_plugin.py`, `read_file_plugin.py`, and `execute_shell_plugin.py` to `src/qx/plugins/` to enhance QX capabilities.
+- Updated `.gitignore` to include `uv.lock`.
+- Added `uv.lock` to track package versions.
+- Created `pyproject.toml` for project metadata and dependencies.
+- Initialized `README.md`.
+- Added `.python-version` for Python version management.
+- Created `tmp/sum.py`, `tmp/pt_example.py`, and `tmp/multiply.py` for temporary scripts.
+- Created `src/qx/main.py` as the main entry point.
+- Added `src/qx/cli/textual_app.py`, `src/qx/cli/commands.py`, and `src/qx/cli/console.py` for CLI functionalities.
+- Created `src/qx/cli/__init__.py` and `src/qx/__init__.py` for package initialization.
+- Added `.Q/project.md`, `.Q/mcp_servers.json`, `.Q/projectlog.md`, `.Q/project-stages.md` for project documentation and configuration.
+- Created various session files in `.Q/sessions/`.
+- Added `src/qx/prompts/context_compression_prompt.md` and `src/qx/prompts/system-prompt.md` for prompt management.
+- Created `src/qx/css/main.css` for styling.
+- Added `src/qx/directives/worklogger.md` for work logging.
+- Included documentation files in `.Q/documentation/` for various libraries and tools.
+- Added `src/qx/prompts/.Q/sessions/qx_session_20250524_161230.json`.
+
+This commit significantly improves the project's modularity, extensibility, and overall structure, laying a solid foundation for future development.
