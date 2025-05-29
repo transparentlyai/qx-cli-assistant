@@ -95,7 +95,7 @@ class ReadFilePluginInput(BaseModel):
 
     path: str = Field(
         ...,
-        description="The path to the file to be read. Can be relative, absolute, or start with '~'.",
+        description="The path to the file to read. Can be relative (resolved from CWD), absolute, or start with '~' for home directory.",
     )
 
 
@@ -103,13 +103,13 @@ class ReadFilePluginOutput(BaseModel):
     """Output model for the ReadFilePluginTool."""
 
     path: str = Field(
-        description="The (expanded) path of the file attempted to be read."
+        description="The expanded path that was attempted to be read (may include ~ expansion)."
     )
     content: Optional[str] = Field(
-        None, description="The content of the file if successful, otherwise None."
+        None, description="The complete file content if read was successful. None if operation failed or was denied."
     )
     error: Optional[str] = Field(
-        None, description="Error message if the operation failed or was denied."
+        None, description="Error message explaining why the read failed (e.g., 'file not found', 'permission denied', 'denied by user'). None if successful."
     )
 
 
@@ -119,6 +119,16 @@ async def read_file_tool(  # Made async
 ) -> ReadFilePluginOutput:
     """
     Tool to read the content of a specified file.
+    
+    File access permissions:
+    - Files within project directory: Auto-approved
+    - Files outside project but within user home: Requires approval
+    - Files outside user home: Access denied by policy
+    
+    Returns structured output with:
+    - path: The attempted file path (with expansions)
+    - content: File contents if successful
+    - error: Explanation if read failed
     """
     original_path_arg = args.path
     expanded_path_arg = os.path.expanduser(original_path_arg)

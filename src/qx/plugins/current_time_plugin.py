@@ -12,9 +12,9 @@ logger = logging.getLogger(__name__)
 class CurrentTimePluginOutput(BaseModel):
     """Output model for the GetCurrentTimeTool."""
 
-    current_time: str = Field(description="The current date and time, formatted.")
+    current_time: str = Field(description="The current date and time in YYYY-MM-DD HH:MM:SS format.")
     timezone: str = Field(
-        description="The timezone of the reported time (local system timezone)."
+        description="The system's local timezone name (e.g., 'UTC-05:00', 'Local')."
     )
 
 
@@ -25,7 +25,18 @@ class CurrentTimePluginOutput(BaseModel):
 def get_current_time_tool(console: RichConsole) -> CurrentTimePluginOutput:
     """
     Tool to get the current system date and time.
-    This operation does not require any user approval.
+    
+    Features:
+    - No user approval required
+    - Returns local system time
+    - Includes timezone information
+    - Format: YYYY-MM-DD HH:MM:SS
+    
+    Returns structured output with:
+    - current_time: Formatted date/time string
+    - timezone: System timezone identifier
+    
+    Note: This is a synchronous tool (not async) as it performs no I/O operations.
     """
     console.print("[info]Fetching current system time...[/info]")
     try:
