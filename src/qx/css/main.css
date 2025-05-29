@@ -21,7 +21,9 @@
 #input-container {
     margin-bottom: 1;
     background: black;
-    height: 3;
+    height: auto;
+    min-height: 3;
+    max-height: 15;
     dock: bottom;
 }
 
@@ -30,6 +32,16 @@
     padding: 0;
     border: none;
     background: #020202;
+}
+
+#multiline-input {
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: #020202;
+    height: auto;
+    min-height: 3;
+    max-height: 12;
 }
 
 #prompt-label {

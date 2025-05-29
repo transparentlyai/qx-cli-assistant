@@ -8,7 +8,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.message import Message
-from textual.widgets import Input, RichLog, Static
+from textual.widgets import Input, RichLog, Static, TextArea
 
 from qx.cli.commands import CommandCompleter
 from qx.cli.console import TextualRichLogHandler, qx_console
@@ -58,6 +58,12 @@ class StatusFooter(Static):
         self.update(f"[orange]{spinner_char} {self.base_message}[/orange]")
         self.spinner_index = (self.spinner_index + 1) % len(self.spinner_chars)
 
+
+class QXTextArea(TextArea):
+    """Custom TextArea widget for multiline input."""
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
 class QXInput(Input):
     """Custom input widget with command completion and history support."""
@@ -120,6 +126,7 @@ class QXApp(App):
     BINDINGS = [
         Binding("ctrl+c", "quit", "Quit"),
         Binding("ctrl+d", "quit", "Quit"),
+        Binding("alt+enter", "toggle_multiline_or_submit", "Toggle Multiline/Submit", show=False),
     ]
 
     enable_mouse_support = True
@@ -132,7 +139,6 @@ class QXApp(App):
         self.prompt_label: Optional[Static] = None
         self.status_footer: Optional[StatusFooter] = None
         self.mcp_manager = None
-        self._input_future: Optional[asyncio.Future] = None
         self.llm_agent = None
         self.current_message_history = None
         self.keep_sessions = 5
@@ -140,6 +146,7 @@ class QXApp(App):
         self.confirmation_callback = None
         self._qx_version: str = ""
         self._llm_model_name: str = ""
+        self.is_multiline: bool = False # New state for multiline input
 
     def set_mcp_manager(self, mcp_manager):
         """Set the MCP manager for command completion."""
@@ -244,6 +251,7 @@ class QXApp(App):
             with Horizontal(id="input-container"):
                 yield Static("QX⏵ ", id="prompt-label")
                 yield QXInput(placeholder="Enter your message...", id="user-input")
+                yield QXTextArea(id="multiline-input", classes="hidden")
             # Add a hidden confirmation container
             with Horizontal(id="confirmation-container", classes="hidden"):
                 yield Static("", id="confirmation-message")
@@ -318,10 +326,58 @@ class QXApp(App):
             elif event.key == "escape":
                 self.confirmation_callback.set_result("c")
 
+    async def handle_multiline_submit(self) -> None:
+        """Handle multiline input submission from QXTextArea."""
+        input_text = str(self.multiline_input.text).strip()
+        
+        # Always switch back to single line mode, even if input is empty
+        self.is_multiline = False
+        self.prompt_label.update("QX⏵ ")
+        self.multiline_input.add_class("hidden")
+        self.user_input.remove_class("hidden")
+        self.user_input.focus()
+        
+        # Clear both inputs
+        self.multiline_input.clear()
+        self.user_input.value = ""
+        
+        # Process the input only if it's not empty
+        if input_text:
+            await self._process_user_input(input_text)
+
+    async def _process_user_input(self, input_text: str) -> None:
+        """Process user input after it's been submitted."""
+        # If there's a prompt_handler waiting, resolve its future
+        if self.prompt_handler and self.prompt_handler._input_future and not self.prompt_handler._input_future.done():
+            self.prompt_handler.handle_input(input_text)
+            return # Input handled by prompt_handler, no further processing here
+
+        # Display the input in the output
+        self.output_log.write(f"[red]⏵ {input_text}[/]")
+
+        # Handle exit commands
+        if input_text.lower() in ["exit", "quit"]:
+            if self.current_message_history:
+                save_session(self.current_message_history)
+                clean_old_sessions(self.keep_sessions)
+            self.exit()
+            return
+
+        # Handle commands starting with /
+        if input_text.startswith("/"):
+            await self.handle_command(input_text)
+            return
+
+        # Process LLM interaction
+        if self.llm_agent:
+            # Run LLM query in a separate task to avoid blocking UI
+            asyncio.create_task(self._handle_llm_query(input_text))
+
     def on_mount(self) -> None:
         """Set up the app after mounting."""
         self.output_log = self.query_one("#output-log", RichLog)
         self.user_input = self.query_one("#user-input", QXInput)
+        self.multiline_input = self.query_one("#multiline-input", QXTextArea)
         self.prompt_label = self.query_one("#prompt-label", Static)
         self.status_footer = self.query_one("#status-footer", StatusFooter)
 
@@ -345,41 +401,82 @@ class QXApp(App):
         # Focus on input
         self.user_input.focus()
 
+    async def action_toggle_multiline_or_submit(self) -> None:
+        """Toggle multiline mode or submit if already in multiline mode."""
+        if self.is_multiline:
+            # If already in multiline mode, submit the content
+            await self.handle_multiline_submit()
+        else:
+            # If in single line mode, switch to multiline
+            self.is_multiline = True
+            self.prompt_label.update("M⏵ \\[Alt+Enter to submit] ")
+            # Transfer content from single line to multiline
+            current_text = str(self.user_input.value)
+            self.multiline_input.text = current_text
+            # Hide single line input, show multiline
+            self.user_input.add_class("hidden")
+            self.multiline_input.remove_class("hidden")
+            self.multiline_input.focus()
+            # Position cursor at the end of the text
+            if current_text:
+                # Schedule cursor positioning after the widget is rendered
+                self.call_later(self._position_cursor_at_end)
+
+    def _position_cursor_at_end(self) -> None:
+        """Position cursor at the end of the multiline text."""
+        text = str(self.multiline_input.text)
+        if text:
+            lines = text.splitlines()
+            if lines:
+                # Move to the last line and last character
+                row = len(lines) - 1
+                col = len(lines[-1])
+                self.multiline_input.move_cursor((row, col))
+            else:
+                self.multiline_input.move_cursor((0, 0))
+
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle input submission."""
         try:
-            if event.input.id == "user-input":
-                input_text = str(event.value).strip()
+            if event.input.id in ["user-input", "multiline-input"]:
+                input_text = str(event.value)
+                is_multiline_submit = event.input.id == "multiline-input"
+
+                # If submitting from multiline mode, switch back to single line mode
+                if is_multiline_submit or self.is_multiline:
+                    self.is_multiline = False
+                    self.prompt_label.update("QX⏵ ")
+                    # Hide multiline input, show single line
+                    self.multiline_input.add_class("hidden")
+                    self.user_input.remove_class("hidden")
+                    self.user_input.focus()
 
                 # Skip empty input - don't clear or process anything
                 if not input_text.strip():
+                    if is_multiline_submit:
+                        self.multiline_input.clear()
+                    else:
+                        self.user_input.value = ""
                     return
 
-                # Confirmation mode removed
+                # If there's a prompt_handler waiting, resolve its future
+                if self.prompt_handler and self.prompt_handler._input_future and not self.prompt_handler._input_future.done():
+                    self.prompt_handler.handle_input(input_text)
+                    # Clear the appropriate input after handling
+                    if is_multiline_submit:
+                        self.multiline_input.clear()
+                    else:
+                        self.user_input.value = ""
+                    return # Input handled by prompt_handler, no further processing here
 
-                # Clear the input
-                self.user_input.value = ""
+                # Clear the appropriate input
+                if is_multiline_submit:
+                    self.multiline_input.clear()
+                else:
+                    self.user_input.value = ""
 
-                # Display the input in the output
-                self.output_log.write(f"[red]⏵ {input_text}[/]")
-
-                # Handle exit commands
-                if input_text.lower() in ["exit", "quit"]:
-                    if self.current_message_history:
-                        save_session(self.current_message_history)
-                        clean_old_sessions(self.keep_sessions)
-                    self.exit()
-                    return
-
-                # Handle commands starting with /
-                if input_text.startswith("/"):
-                    await self.handle_command(input_text)
-                    return
-
-                # Process LLM interaction
-                if self.llm_agent:
-                    # Run LLM query in a separate task to avoid blocking UI
-                    asyncio.create_task(self._handle_llm_query(input_text))
+                # Process the input using common logic
+                await self._process_user_input(input_text)
 
                 # Send message to parent components
                 self.post_message(UserInputSubmitted(input_text))
@@ -457,24 +554,10 @@ class QXApp(App):
         if self.prompt_label:
             self.prompt_label.update(new_label)
 
-    async def get_user_input(self) -> str:
-        """Get user input asynchronously."""
-        if self._input_future and not self._input_future.done():
-            self._input_future.cancel()
-
-        self._input_future = asyncio.Future()
-        try:
-            result = await self._input_future
-            return result
-        except asyncio.CancelledError:
-            return ""
-        finally:
-            self._input_future = None
-
     def action_quit(self) -> None:
         """Handle quit action."""
-        if self._input_future and not self._input_future.done():
-            self._input_future.set_result("exit")
+        if self.prompt_handler and self.prompt_handler._input_future and not self.prompt_handler._input_future.done():
+            self.prompt_handler._input_future.set_result("exit")
         self.exit()
 
 
