@@ -11,7 +11,7 @@ from textual.message import Message
 from textual.widgets import Input, RichLog, Static
 
 from qx.cli.commands import CommandCompleter
-from qx.cli.console import qx_console
+from qx.cli.console import TextualRichLogHandler, qx_console
 from qx.cli.qprompt import handle_history_search
 from qx.core.llm import query_llm
 from qx.core.paths import QX_HISTORY_FILE
@@ -34,7 +34,10 @@ class StatusFooter(Static):
     def update_status(self, message: str):
         """Update the status message."""
         self.base_message = message
-        self.update(message)
+        if message == "Ready":
+            self.update(f"[light_green]{message}[/light_green]")
+        else:
+            self.update(message)
 
     def start_spinner(self, message: str = "Thinking..."):
         """Start spinner animation with message."""
@@ -52,7 +55,7 @@ class StatusFooter(Static):
     def update_spinner(self):
         """Update spinner character."""
         spinner_char = self.spinner_chars[self.spinner_index]
-        self.update(f"{spinner_char} {self.base_message}")
+        self.update(f"[orange]{spinner_char} {self.base_message}[/orange]")
         self.spinner_index = (self.spinner_index + 1) % len(self.spinner_chars)
 
 
@@ -135,6 +138,8 @@ class QXApp(App):
         self.keep_sessions = 5
         self.confirmation_widget = None
         self.confirmation_callback = None
+        self._qx_version: str = ""
+        self._llm_model_name: str = ""
 
     def set_mcp_manager(self, mcp_manager):
         """Set the MCP manager for command completion."""
@@ -143,6 +148,11 @@ class QXApp(App):
     def set_llm_agent(self, llm_agent):
         """Set the LLM agent for processing user input."""
         self.llm_agent = llm_agent
+
+    def set_version_info(self, qx_version: str, llm_model_name: str):
+        """Set QX version and LLM model name for display."""
+        self._qx_version = qx_version
+        self._llm_model_name = llm_model_name
 
     async def request_confirmation(
         self,
@@ -223,7 +233,7 @@ class QXApp(App):
             # Stop spinner and reset status on error too
             if self.status_footer:
                 self.status_footer.stop_spinner()
-                self.status_footer.update_status("Ready")
+                self.status_footer.update_status("[red]Error[/red]")
 
     def compose(self) -> ComposeResult:
         """Create the UI layout."""
@@ -257,11 +267,7 @@ class QXApp(App):
             yield StatusFooter(id="status-footer")
 
     def _show_confirmation_widget(
-        self,
-        message: str,
-        choices: str,
-        default: str,
-        allow_modify: bool = False
+        self, message: str, choices: str, default: str, allow_modify: bool = False
     ):
         """Show confirmation widget."""
         # Hide input container and show confirmation container
@@ -323,6 +329,14 @@ class QXApp(App):
         qx_console.set_widgets(self.output_log, self.user_input)
         qx_console._app = self
 
+        # Set the logger in qx_console after widgets are set
+        qx_console.set_logger(logging.getLogger("qx"))
+
+        # Display version info in the Textual log
+        if self._qx_version and self._llm_model_name:
+            info_text = f"QX ver:{self._qx_version} - {self._llm_model_name}"
+            self.output_log.write(f"[dim]{info_text}[/dim]")
+
         # Set up command completion
         if self.mcp_manager:
             command_completer = CommandCompleter(mcp_manager=self.mcp_manager)
@@ -330,9 +344,6 @@ class QXApp(App):
 
         # Focus on input
         self.user_input.focus()
-
-        # Display welcome message
-        self.output_log.write("Use Ctrl+C or 'exit' to quit.")
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle input submission."""
@@ -350,7 +361,7 @@ class QXApp(App):
                 self.user_input.value = ""
 
                 # Display the input in the output
-                self.output_log.write(f"[bold]QX⏵[/bold] [pink]{input_text}[/pink]")
+                self.output_log.write(f"[red]⏵ {input_text}[/]")
 
                 # Handle exit commands
                 if input_text.lower() in ["exit", "quit"]:
@@ -386,7 +397,7 @@ class QXApp(App):
                 self.output_log.write(f"[dim]{error_details}[/dim]")
             if self.status_footer:
                 self.status_footer.stop_spinner()
-                self.status_footer.update_status("Error")
+                self.status_footer.update_status("[red]Error[/red]")
 
     async def handle_command(self, command_input: str):
         """Handle slash commands."""

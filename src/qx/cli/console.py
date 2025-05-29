@@ -8,6 +8,31 @@ from textual.reactive import reactive
 from textual.binding import Binding
 from textual import events
 
+class TextualRichLogHandler(logging.Handler):
+    """
+    A logging handler that directs log records to a Textual RichLog widget
+    via the QXConsole instance.
+    """
+    def __init__(self, qx_console_instance: 'QXConsole', level=logging.NOTSET):
+        super().__init__(level=level)
+        self.qx_console = qx_console_instance
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            # Use qx_console.print to output to the RichLog
+            # We can add styling based on log level if needed
+            if record.levelno >= logging.ERROR:
+                self.qx_console.print(f"[red]{msg}[/red]")
+            elif record.levelno >= logging.WARNING:
+                self.qx_console.print(f"[yellow]{msg}[/yellow]")
+            elif record.levelno >= logging.INFO:
+                self.qx_console.print(f"[blue]{msg}[/blue]")
+            else:
+                self.qx_console.print(f"[dim]{msg}[/dim]")
+        except Exception:
+            self.handleError(record)
+
 class QXConsole:
     """
     A wrapper around Textual widgets to provide QX-specific console utilities.
@@ -17,11 +42,16 @@ class QXConsole:
         self._app = app
         self._output_widget: Optional[RichLog] = None
         self._input_widget: Optional[Input] = None
+        self._logger: Optional[logging.Logger] = None # Add a logger attribute
         
     def set_widgets(self, output_widget: RichLog, input_widget: Input):
         """Set the output and input widgets."""
         self._output_widget = output_widget
         self._input_widget = input_widget
+
+    def set_logger(self, logger: logging.Logger):
+        """Set the logger instance to be used by the console."""
+        self._logger = logger
 
     def print(self, *args, **kwargs):
         """

@@ -1,22 +1,28 @@
 #main-container {
-    height: auto;
+    height: 100%;
     background: black;
     padding: 1;
     padding-bottom: 0;
+    layout: vertical;
 }
 
 #output-log {
     height: 1fr;
+    min-height: 0;
     border: none;
     margin: 0;
     padding: 0;
+    padding-right: 1;
     background: black;
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
 #input-container {
     margin-bottom: 1;
     background: black;
-    height: 1;
+    height: 3;
+    dock: bottom;
 }
 
 #user-input {
@@ -41,6 +47,7 @@
     color: #888;
     padding: 0;
     content-align: left middle;
+    dock: bottom;
 }
 
 Footer {
@@ -156,8 +163,9 @@ Footer {
 #confirmation-container {
     margin-bottom: 1;
     background: black;
-    height: 1;
+    height: 3;
     width: 100%;
+    dock: bottom;
 }
 
 #confirmation-message {
