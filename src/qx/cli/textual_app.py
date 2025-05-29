@@ -337,15 +337,33 @@ class QXApp(App):
         self._show_confirmation_widget(message, choices, default, allow_modify)
 
         try:
-            # Wait for user response
-            result = await self.confirmation_callback
+            # Wait for user response with timeout
+            result = await asyncio.wait_for(
+                self.confirmation_callback, 
+                timeout=300.0  # 5 minute timeout
+            )
             return result
+        except asyncio.TimeoutError:
+            logger.warning("Confirmation dialog timed out")
+            return default  # Return default choice on timeout
+        except asyncio.CancelledError:
+            logger.debug("Confirmation dialog cancelled")
+            return "c"  # Return cancel on cancellation
         finally:
             # Hide confirmation widget
             self._hide_confirmation_widget()
+            # Clean up future if not done
+            if self.confirmation_callback and not self.confirmation_callback.done():
+                self.confirmation_callback.cancel()
 
     async def _handle_llm_query(self, input_text: str) -> None:
         """Handle LLM query in a separate task."""
+        # Check if already processing
+        if self.is_processing:
+            logger.warning("Already processing a query")
+            self.output_log.write("[yellow]Another query is already in progress. Please wait.[/yellow]")
+            return
+        
         try:
             # Set processing state and disable user input
             self.is_processing = True
@@ -361,6 +379,7 @@ class QXApp(App):
             if self.status_footer:
                 self.status_footer.start_spinner("[#af00d7 bold]Thinking...[/]")
 
+            # Query LLM - let individual operations handle their own timeouts
             run_result = await query_llm(
                 self.llm_agent,
                 input_text,
@@ -399,6 +418,13 @@ class QXApp(App):
                 self.status_footer.stop_spinner()
                 self.status_footer.update_status("[#00ff00]Ready[/]")
 
+        except asyncio.CancelledError:
+            # Task was cancelled
+            self.output_log.write("[yellow]Info:[/yellow] Request cancelled")
+            if self.status_footer:
+                self.status_footer.stop_spinner()
+                self.status_footer.update_status("[yellow]Cancelled[/yellow]")
+            raise
         except Exception as e:
             # Log full traceback for debugging
             import traceback
@@ -555,7 +581,20 @@ class QXApp(App):
         # Process LLM interaction
         if self.llm_agent:
             # Run LLM query in a separate task to avoid blocking UI
-            asyncio.create_task(self._handle_llm_query(input_text))
+            async def run_query():
+                try:
+                    logger.debug(f"Starting LLM query for: {input_text[:50]}...")
+                    await self._handle_llm_query(input_text)
+                    logger.debug("LLM query completed successfully")
+                except asyncio.CancelledError:
+                    logger.debug("LLM query task cancelled")
+                except Exception as e:
+                    logger.error(f"Unhandled error in LLM query task: {e}", exc_info=True)
+                    if self.output_log:
+                        self.output_log.write(f"[red]Critical Error:[/red] {e}")
+            
+            logger.debug("Creating task for LLM query")
+            asyncio.create_task(run_query())
 
     def on_mount(self) -> None:
         """Set up the app after mounting."""
@@ -709,8 +748,9 @@ class QXApp(App):
             # Enable approve-all mode
             import qx.core.user_prompts
 
-            # Set approve all
-            qx.core.user_prompts._approve_all_active = True
+            # Set approve all safely
+            async with qx.core.user_prompts._approve_all_lock:
+                qx.core.user_prompts._approve_all_active = True
             self.output_log.write(
                 "[orange]✓ 'Approve All' mode activated for this session.[/orange]"
             )
@@ -727,15 +767,31 @@ class QXApp(App):
         if self.prompt_label:
             self.prompt_label.update(new_label)
 
+    async def cleanup_tasks(self):
+        """Clean up background tasks before shutdown."""
+        # Cancel any pending confirmation
+        if self.confirmation_callback and not self.confirmation_callback.done():
+            self.confirmation_callback.cancel()
+
     def action_quit(self) -> None:
         """Handle quit action."""
-        if (
-            self.prompt_handler
-            and self.prompt_handler._input_future
-            and not self.prompt_handler._input_future.done()
-        ):
-            self.prompt_handler._input_future.set_result("exit")
-        self.exit()
+        # Create task to handle async cleanup
+        asyncio.create_task(self._async_quit())
+    
+    async def _async_quit(self):
+        """Async quit handler."""
+        try:
+            await self.cleanup_tasks()
+        except Exception as e:
+            logger.error(f"Error during cleanup: {e}", exc_info=True)
+        finally:
+            if (
+                self.prompt_handler
+                and self.prompt_handler._input_future
+                and not self.prompt_handler._input_future.done()
+            ):
+                self.prompt_handler._input_future.set_result("exit")
+            self.exit()
 
 
 async def run_textual_app(

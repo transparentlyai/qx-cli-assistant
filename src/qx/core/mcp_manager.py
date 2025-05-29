@@ -191,36 +191,45 @@ class MCPManager:
             self.console.print(f"[blue]Info:[/blue] MCP server '{server_name}' is not currently connected or already disconnected.")
             return False
 
-        task_to_cancel = self._active_tasks.pop(server_name) # Remove before cancelling
+        task_to_cancel = self._active_tasks.get(server_name)
+        if not task_to_cancel:
+            return False
         
         try:
             logger.info(f"Requesting cancellation for MCP task '{server_name}'.")
             task_to_cancel.cancel()
             
             # Wait for the task to finish its cleanup.
-            # Shield to prevent this await from being cancelled if disconnect_server itself is cancelled.
-            await asyncio.wait_for(asyncio.shield(task_to_cancel), timeout=10.0)
+            try:
+                await asyncio.wait_for(task_to_cancel, timeout=10.0)
+            except asyncio.CancelledError:
+                # This is expected - the task was cancelled
+                pass
             logger.info(f"MCP task '{server_name}' finished after cancellation request.")
 
         except asyncio.TimeoutError:
             logger.warning(f"Timeout waiting for MCP task '{server_name}' to finish after cancellation. It might still be cleaning up.")
-        except asyncio.CancelledError:
-            # This means task_to_cancel was cancelled, which is expected.
-            # Or, if shield() was cancelled, this outer CancelledError is raised.
-            logger.info(f"MCP task '{server_name}' cancellation processed (task itself was awaited).")
         except Exception as e:
             # This might happen if awaiting the cancelled task raises something unexpected.
             logger.error(f"Error while waiting for MCP task '{server_name}' to finish after cancellation: {e}", exc_info=True)
             # Continue with other cleanup despite this.
 
+        # Remove from active tasks after cleanup attempt
+        self._active_tasks.pop(server_name, None)
+
         # The task's finally block in _manage_session_task handles cleanup of:
         # - _active_sessions_exit_stack[server_name]
         # - _active_sessions[server_name]
         # - _tools_by_server[server_name]
-        # - _active_tasks[server_name] (already popped above, but defensive removal in finally is good)
 
         self.console.print(f"[green]Success:[/green] Disconnection requested for MCP server '{server_name}'.")
         return True
+    
+    async def disconnect_all(self):
+        """Disconnect all active MCP servers."""
+        server_names = list(self._active_tasks.keys())
+        for server_name in server_names:
+            await self.disconnect_server(server_name)
 
 
     def get_active_tools(self) -> List[Tuple[Callable, Dict[str, Any], Type[BaseModel]]]:

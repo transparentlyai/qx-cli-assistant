@@ -114,8 +114,9 @@ async def web_fetch_tool(
     logger.debug(f"Attempting to fetch URL: {url_to_fetch}")
 
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url_to_fetch, timeout=REQUEST_TIMEOUT)
+        # Use a simple HTTP client for now
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+            response = await client.get(url_to_fetch)
             response.raise_for_status()  # Raise an exception for 4xx/5xx responses
             logger.debug(
                 f"Successfully fetched URL. Status code: {response.status_code}"
