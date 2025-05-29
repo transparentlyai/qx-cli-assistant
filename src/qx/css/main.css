@@ -18,12 +18,17 @@
     overflow-x: hidden;
 }
 
+#bottom-section {
+    height: auto;
+    max-height: 10;
+    dock: bottom;
+}
+
 #input-container {
     background: black;
     height: auto;
-    min-height: 2; /* Changed from 1 to 2 */
-    max-height: 12;
-    dock: bottom;
+    min-height: 1;
+    max-height: 5;
 }
 
 #user-input {
@@ -31,18 +36,11 @@
     padding: 0;
     border: none;
     background: #020202;
-    height: auto; /* Changed from 1 to auto */
-    color: #d70087;
-}
-
-#multiline-input {
-    margin: 0;
-    padding: 0;
-    border: none;
-    background: #020202;
     height: auto;
-    min-height: 3;
-    max-height: 12;
+    min-height: 1;
+    max-height: 4;
+    overflow-y: auto;
+    color: #d70087;
 }
 
 #prompt-label {
@@ -60,111 +58,6 @@
     color: #888;
     padding: 0;
     content-align: left middle;
-    dock: bottom;
-}
-
-Footer {
-    background: black;
-}
-
-/* Confirmation Modal Styles */
-#confirmation-modal {
-    width: 80%;
-    height: auto;
-    min-height: 20;
-    max-height: 80%;
-    background: #1a1a1a;
-    border: solid white;
-    padding: 1;
-    margin: 2;
-}
-
-#confirmation-message {
-    margin-bottom: 1;
-    text-align: center;
-    color: white;
-}
-
-#content-preview {
-    background: #111;
-    border: solid #444;
-    padding: 1;
-    margin: 1 0;
-    max-height: 20;
-    overflow-y: auto;
-}
-
-#preview-header, #preview-footer {
-    color: #888;
-    text-align: center;
-}
-
-#preview-content {
-    background: #111;
-    color: white;
-    padding: 1;
-}
-
-#modification-section {
-    margin: 1 0;
-}
-
-#modification-section.hidden {
-    display: none;
-}
-
-#modify-label {
-    margin-bottom: 1;
-    color: #ccc;
-}
-
-#modification-input {
-    margin-bottom: 1;
-    background: #222;
-    border: solid #666;
-}
-
-#button-container {
-    align: center middle;
-    margin-top: 1;
-    height: 3;
-}
-
-#button-container Button {
-    margin: 0 1;
-    min-width: 12;
-}
-
-/* Duration Modal Styles */
-#duration-modal {
-    width: 50%;
-    height: auto;
-    background: #1a1a1a;
-    border: solid white;
-    padding: 1;
-    margin: 2;
-}
-
-#duration-message {
-    margin-bottom: 1;
-    text-align: center;
-    color: white;
-}
-
-#duration-input {
-    margin-bottom: 1;
-    background: #222;
-    border: solid #666;
-}
-
-#duration-buttons {
-    align: center middle;
-    height: 3;
-}
-
-#duration-buttons Button {
-    margin: 0 1;
-    min-width: 8;
 }
 
 /* Hidden class for toggling visibility */
@@ -174,11 +67,9 @@ Footer {
 
 /* Confirmation container styles */
 #confirmation-container {
-    margin-bottom: 1;
     background: black;
-    height: 3;
+    height: 2;
     width: 100%;
-    dock: bottom;
 }
 
 #confirmation-message {
