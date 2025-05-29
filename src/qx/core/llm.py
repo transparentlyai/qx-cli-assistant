@@ -150,7 +150,8 @@ class QXLLMAgent:
         
         # Only add system prompt if not already present in message history
         has_system_message = message_history and any(
-            msg.get("role") == "system" for msg in message_history
+            (msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None)) == "system" 
+            for msg in message_history
         )
         
         if not has_system_message:
@@ -169,10 +170,12 @@ class QXLLMAgent:
         if message_history:
             # Check if the last message is already this user input
             last_msg = message_history[-1] if message_history else None
-            if (last_msg and 
-                last_msg.get("role") == "user" and 
-                last_msg.get("content") == user_input):
-                should_add_user_message = False
+            if last_msg:
+                # Handle both dict and Pydantic model cases
+                msg_role = last_msg.get("role") if isinstance(last_msg, dict) else getattr(last_msg, "role", None)
+                msg_content = last_msg.get("content") if isinstance(last_msg, dict) else getattr(last_msg, "content", None)
+                if msg_role == "user" and msg_content == user_input:
+                    should_add_user_message = False
         
         if should_add_user_message:
             messages.append(
