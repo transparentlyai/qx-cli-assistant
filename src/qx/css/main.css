@@ -21,7 +21,7 @@
 #input-container {
     background: black;
     height: auto;
-    min-height: 1;
+    min-height: 2; /* Changed from 1 to 2 */
     max-height: 12;
     dock: bottom;
 }
@@ -31,6 +31,7 @@
     padding: 0;
     border: none;
     background: #020202;
+    height: auto; /* Changed from 1 to auto */
 }
 
 #multiline-input {
