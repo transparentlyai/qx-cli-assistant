@@ -318,7 +318,6 @@ class QXApp(App):
 
     # Removed on_button_pressed since we're using Static widgets now
 
-
     async def on_key(self, event: events.Key) -> None:
         """Handle key press events during confirmation."""
         if self.confirmation_callback and not self.confirmation_callback.done():
@@ -422,7 +421,7 @@ class QXApp(App):
         else:
             # If in single line mode, switch to multiline
             self.is_multiline = True
-            self.prompt_label.update("M⏵ \\[Alt+Enter to submit] ")
+            self.prompt_label.update("[#005fff]QM⏵ [/]")
             # Transfer content from single line to multiline
             current_text = str(self.user_input.value)
             self.multiline_input.text = current_text

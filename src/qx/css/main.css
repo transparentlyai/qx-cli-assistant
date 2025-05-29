@@ -32,6 +32,7 @@
     border: none;
     background: #020202;
     height: auto; /* Changed from 1 to auto */
+    color: #d70087;
 }
 
 #multiline-input {
