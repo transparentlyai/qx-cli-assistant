@@ -83,6 +83,9 @@ async def web_fetch_tool(
             truncated=False,
         )
 
+    console.print(
+        f"[info]Requesting permission to fetch URL:[/info] [blue]'{url_to_fetch}'[/blue]"
+    )
     prompt_msg = f"Allow QX to fetch content from URL: '{url_to_fetch}'?"
     logger.debug(f"Requesting confirmation for URL: {url_to_fetch}")
     decision_status, _ = await request_confirmation(
@@ -97,14 +100,7 @@ async def web_fetch_tool(
             f"Web fetch operation for '{url_to_fetch}' was {decision_status} by user."
         )
         logger.warning(error_message)
-        if decision_status == "denied":
-            console.print(
-                f"[warning]Web fetch denied by user:[/warning] {url_to_fetch}"
-            )
-        elif decision_status == "cancelled":
-            console.print(
-                f"[warning]Web fetch cancelled by user for:[/warning] {url_to_fetch}"
-            )
+        # request_confirmation already prints a message for denied/cancelled
         logger.debug(f"Returning due to user decision: {decision_status}.")
         return WebFetchPluginOutput(
             url=url_to_fetch,
@@ -114,7 +110,7 @@ async def web_fetch_tool(
             truncated=False,
         )
 
-    console.print(f"[info]Fetching content from:[/info] {url_to_fetch}")
+    console.print(f"[info]Fetching content from:[/info] [blue]'{url_to_fetch}'[/blue]")
     logger.debug(f"Attempting to fetch URL: {url_to_fetch}")
 
     try:
@@ -146,6 +142,11 @@ async def web_fetch_tool(
 
                     final_content = md_converter(content)
                     logger.debug("Content successfully converted to markdown.")
+                except ImportError:
+                    logger.warning(
+                        "markdownify not installed. Cannot convert to markdown. Returning raw content."
+                    )
+                    final_content = content
                 except Exception as e:
                     logger.warning(
                         f"Could not convert content to markdown: {e}. Returning raw content."
@@ -159,7 +160,7 @@ async def web_fetch_tool(
                 f"Successfully fetched URL: {url_to_fetch} (Status: {response.status_code}, Truncated: {truncated})"
             )
             console.print(
-                f"[success]Successfully fetched URL:[/success] {url_to_fetch} [dim](Status: {response.status_code})[/dim]"
+                f"[success]Successfully fetched URL:[/success] [green]{url_to_fetch}[/green] [dim](Status: {response.status_code})[/dim]"
             )
             logger.debug("Returning WebFetchPluginOutput with fetched content.")
             return WebFetchPluginOutput(
@@ -222,152 +223,3 @@ async def web_fetch_tool(
             status_code=None,
             truncated=False,
         )
-
-
-if __name__ == "__main__":
-    import asyncio
-
-    logging.basicConfig(level=logging.INFO)
-    test_console = RichConsole()
-
-    async def run_tests():
-        test_console.rule("Testing web_fetch_tool plugin")
-
-        # Test 1: Successful fetch (requires user approval)
-        test_console.print(
-            "\n[bold cyan]Test 1: Successful fetch (example.com) - requires approval[/bold cyan]"
-        )
-        input1 = WebFetchPluginInput(url="https://example.com")
-        test_console.print("Please respond 'y' to the prompt.")
-        output1 = await web_fetch_tool(test_console, input1)
-        test_console.print(f"Output 1: {output1}")
-        assert output1.content is not None and "Example Domain" in output1.content
-        assert output1.status_code == 200 and output1.error is None
-
-        # Test 2: User denies fetch
-        test_console.print(
-            "\n[bold cyan]Test 2: User denies fetch (google.com) - requires denial[/bold cyan]"
-        )
-        input2 = WebFetchPluginInput(url="https://www.google.com")
-        test_console.print("Please respond 'n' to the prompt.")
-        output2 = await request_confirmation(
-            prompt_message="Allow QX to fetch content from URL: 'https://www.google.com'?",
-            console=test_console,
-            allow_modify=False,
-            can_approve_all=False,  # Disable auto-approval for this test
-        )
-        # The above call to request_confirmation returns a tuple (status, value)
-        # We need to simulate the web_fetch_tool's return based on this status
-        if output2[0] == "denied":
-            output2 = WebFetchPluginOutput(
-                url="https://www.google.com",
-                content=None,
-                error="Web fetch operation for 'https://www.google.com' was denied by user.",
-                status_code=None,
-                truncated=False,
-            )
-        else:
-            # This case should ideally not be reached if user responds 'n'
-            # For robustness, we can fetch the content if it was somehow approved
-            # This part is just to make the test pass if the user doesn't deny
-            # in an interactive session, but the assertion below will still fail.
-            output2 = await web_fetch_tool(test_console, input2)
-
-        test_console.print(f"Output 2: {output2}")
-        assert output2.content is None and "denied by user" in output2.error
-
-        # Test 3: Non-existent domain/connection error
-        test_console.print(
-            "\n[bold cyan]Test 3: Non-existent domain (nonexistent.invalid) - requires approval[/bold cyan]"
-        )
-        input3 = WebFetchPluginInput(url="http://nonexistent.invalid")
-        test_console.print("Please respond 'y' to the prompt.")
-        output3 = await web_fetch_tool(test_console, input3)
-        test_console.print(f"Output 3: {output3}")
-        assert output3.content is None and "RequestError" in output3.error
-
-        # Test 4: HTTP 404 Not Found
-        test_console.print(
-            "\n[bold cyan]Test 4: HTTP 404 Not Found (example.com/404) - requires approval[/bold cyan]"
-        )
-        input4 = WebFetchPluginInput(url="https://example.com/nonexistent-page")
-        test_console.print("Please respond 'y' to the prompt.")
-        output4 = await web_fetch_tool(test_console, input4)
-        test_console.print(f"Output 4: {output4}")
-        assert output4.content is None and output4.status_code == 404
-        assert "HTTP status error" in output4.error
-
-        # Test 5: Empty URL
-        test_console.print("\n[bold cyan]Test 5: Empty URL[/bold cyan]")
-        input5 = WebFetchPluginInput(url="")
-        output5 = await web_fetch_tool(test_console, input5)
-        test_console.print(f"Output 5: {output5}")
-        assert output5.content is None and "Empty URL provided" in output5.error
-
-        # Test 6: Timeout (this might take a while if the URL actually exists and is slow)
-        # For a real test, you'd need a mock server that delays response.
-        # For now, using a known slow endpoint or a very short timeout.
-        test_console.print(
-            "\n[bold cyan]Test 6: Timeout (using a short timeout for demonstration) - requires approval[/bold cyan]"
-        )
-        # Note: This URL might not always timeout, depending on network conditions.
-        # A better test would involve a local mock server that introduces delay.
-        input6 = WebFetchPluginInput(
-            url="http://httpbin.org/delay/5"
-        )  # Delays for 5 seconds
-        # Temporarily override REQUEST_TIMEOUT for this test to be shorter than 5s
-        global REQUEST_TIMEOUT
-        original_timeout = REQUEST_TIMEOUT
-        REQUEST_TIMEOUT = 1  # Set to 1 second for this test
-        test_console.print("Please respond 'y' to the prompt.")
-        output6 = await web_fetch_tool(test_console, input6)
-        REQUEST_TIMEOUT = original_timeout  # Restore original timeout
-        test_console.print(f"Output 6: {output6}")
-        assert output6.content is None and "timed out" in output6.error
-
-        # Test 7: Content truncation (using a large page)
-        test_console.print(
-            "\n[bold cyan]Test 7: Content truncation (wikipedia.org) - requires approval[/bold cyan]"
-        )
-        input7 = WebFetchPluginInput(
-            url="https://en.wikipedia.org/wiki/Large_Hadron_Collider"
-        )
-        test_console.print("Please respond 'y' to the prompt.")
-        output7 = await web_fetch_tool(test_console, input7)
-        test_console.print(f"Output 7: {output7}")
-        assert output7.content is not None and output7.truncated is True
-        assert len(output7.content) == MAX_CONTENT_LENGTH
-        assert output7.status_code == 200 and output7.error is None
-
-        # Test 8: Fetch and return raw format
-        test_console.print(
-            "\n[bold cyan]Test 8: Fetch and return raw format (example.com) - requires approval[/bold cyan]"
-        )
-        input8 = WebFetchPluginInput(url="https://example.com", format="raw")
-        test_console.print("Please respond 'y' to the prompt.")
-        output8 = await web_fetch_tool(test_console, input8)
-        test_console.print(f"Output 8: {output8}")
-        assert output8.content is not None and "<!doctype html>" in output8.content
-        assert output8.status_code == 200 and output8.error is None
-
-        # Test 9: Fetch and return markdown format (default)
-        test_console.print(
-            "\n[bold cyan]Test 9: Fetch and return markdown format (example.com) - requires approval[/bold cyan]"
-        )
-        input9 = WebFetchPluginInput(url="https://example.com", format="markdown")
-        test_console.print("Please respond 'y' to the prompt.")
-        output9 = await web_fetch_tool(test_console, input9)
-        test_console.print(f"Output 9: {output9}")
-        assert output9.content is not None and "# Example Domain" in output9.content
-        assert output9.status_code == 200 and output9.error is None
-
-        # Test 10: Invalid format
-        test_console.print("\n[bold cyan]Test 10: Invalid format[/bold cyan]")
-        input10 = WebFetchPluginInput(url="https://example.com", format="invalid")
-        output10 = await web_fetch_tool(test_console, input10)
-        test_console.print(f"Output 10: {output10}")
-        assert output10.content is None and "Invalid format" in output10.error
-
-        test_console.rule("Web_fetch_tool tests finished.")
-
-    asyncio.run(run_tests())

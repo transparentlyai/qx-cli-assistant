@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Optional
 
@@ -12,7 +14,6 @@ from textual.widgets import Input, RichLog, Static, TextArea
 
 from qx.cli.commands import CommandCompleter
 from qx.cli.console import TextualRichLogHandler, qx_console
-from qx.cli.qprompt import handle_history_search
 from qx.core.llm import query_llm
 from qx.core.paths import QX_HISTORY_FILE
 from qx.core.session_manager import clean_old_sessions, save_session
@@ -74,10 +75,32 @@ class QXInput(Input):
         self.command_completer: Optional[CommandCompleter] = None
         self.completions: list[str] = []
         self.completion_index = -1
+        self._history: list[str] = []
+        self._history_index: int = -1
 
     def set_command_completer(self, completer: CommandCompleter):
         """Set the command completer."""
         self.command_completer = completer
+
+    def load_history(self) -> None:
+        """Load command history from file."""
+        from qx.core.history_utils import parse_history_file
+        
+        self._history = parse_history_file(QX_HISTORY_FILE)
+        self._history_index = len(self._history)
+        
+        if not QX_HISTORY_FILE.exists():
+            QX_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    def add_to_history(self, command: str) -> None:
+        """Add a command to history and save to file."""
+        from qx.core.history_utils import save_command_to_history
+        
+        command = command.strip()
+        if command and (not self._history or self._history[-1] != command):
+            self._history.append(command)
+            self._history_index = len(self._history)
+            save_command_to_history(QX_HISTORY_FILE, command)
 
     async def key_tab(self) -> None:
         """Handle tab completion."""
@@ -103,12 +126,86 @@ class QXInput(Input):
                     self.value = self.completions[self.completion_index]
                     self.cursor_position = len(self.value)
 
-    async def key_ctrl_r(self) -> None:
-        """Handle Ctrl+R for history search."""
-        selected_command = handle_history_search(qx_console, QX_HISTORY_FILE)
-        if selected_command:
-            self.value = selected_command
+    async def key_up(self) -> None:
+        """Navigate up through history."""
+        if self._history:
+            if self._history_index > 0:
+                self._history_index -= 1
+            self.value = self._history[self._history_index]
             self.cursor_position = len(self.value)
+
+    async def key_down(self) -> None:
+        """Navigate down through history."""
+        if self._history:
+            if self._history_index < len(self._history) - 1:
+                self._history_index += 1
+                self.value = self._history[self._history_index]
+            else:
+                # If at the end of history, clear input
+                self._history_index = len(self._history)
+                self.value = ""
+            self.cursor_position = len(self.value)
+
+    async def key_ctrl_r(self) -> None:
+        """Handle Ctrl+R for history search using fzf."""
+        if not shutil.which("fzf"):
+            self.app.query_one("#output-log").write(
+                "[warning]fzf not found. Ctrl-R history search disabled.[/warning]"
+            )
+            return
+
+        if not QX_HISTORY_FILE.exists() or QX_HISTORY_FILE.stat().st_size == 0:
+            return
+
+        try:
+            from qx.core.history_utils import parse_history_file
+            
+            history_commands = parse_history_file(QX_HISTORY_FILE)
+            if not history_commands:
+                return
+
+            # Reverse history for fzf (most recent first)
+            history_commands.reverse()
+
+            # Use fzf to select a command
+            process = await asyncio.create_subprocess_exec(
+                "fzf",
+                "--height",
+                "40%",
+                "--header=[QX History Search]",
+                "--prompt=Search> ",
+                "--select-1",
+                "--exit-0",
+                "--no-sort",
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await process.communicate(
+                input="\n".join(history_commands).encode("utf-8")
+            )
+
+            if process.returncode == 0:
+                selected_command = stdout.decode("utf-8").strip()
+                if selected_command:
+                    self.value = selected_command
+                    self.cursor_position = len(self.value)
+            elif process.returncode == 130:  # fzf exit code for Ctrl+C
+                pass  # User cancelled fzf, do nothing
+            else:
+                error_msg = stderr.decode("utf-8").strip()
+                self.app.query_one("#output-log").write(
+                    f"[red]Error running fzf: {error_msg}[/red]"
+                )
+                self.app.query_one("#output-log").write(
+                    "[info]Ensure 'fzf' executable is installed and in your PATH.[/info]"
+                )
+
+        except Exception as e:
+            self.app.query_one("#output-log").write(f"[red]Error running fzf: {e}[/red]")
+            self.app.query_one("#output-log").write(
+                "[info]Ensure 'fzf' executable is installed and in your PATH.[/info]"
+            )
 
 
 class UserInputSubmitted(Message):
@@ -142,6 +239,7 @@ class QXApp(App):
         self.prompt_handler = None
         self.output_log: Optional[RichLog] = None
         self.user_input: Optional[QXInput] = None
+        self.multiline_input: Optional[QXTextArea] = None # Added for type hinting
         self.prompt_label: Optional[Static] = None
         self.status_footer: Optional[StatusFooter] = None
         self.mcp_manager = None
@@ -153,6 +251,8 @@ class QXApp(App):
         self._qx_version: str = ""
         self._llm_model_name: str = ""
         self.is_multiline: bool = False  # New state for multiline input
+        self.is_processing: bool = False  # Track if model is processing
+        self.original_prompt_label: str = "QX⏵ "
 
     def set_mcp_manager(self, mcp_manager):
         """Set the MCP manager for command completion."""
@@ -192,9 +292,21 @@ class QXApp(App):
     async def _handle_llm_query(self, input_text: str) -> None:
         """Handle LLM query in a separate task."""
         try:
+            # Set processing state and disable user input
+            self.is_processing = True
+            self.user_input.disabled = True
+            self.multiline_input.disabled = True
+            self.user_input.can_focus = False
+            self.multiline_input.can_focus = False
+            
+            # Store current prompt label and set it to grey
+            self.original_prompt_label = str(self.prompt_label.renderable)
+            grey_prompt = f"[dim]{self.original_prompt_label}[/dim]"
+            self.prompt_label.update(grey_prompt)
+            
             # Start spinner animation
             if self.status_footer:
-                self.status_footer.start_spinner("Thinking...")
+                self.status_footer.start_spinner("[#af00d7 bold]Thinking...[/]")
 
             run_result = await query_llm(
                 self.llm_agent,
@@ -249,6 +361,22 @@ class QXApp(App):
             if self.status_footer:
                 self.status_footer.stop_spinner()
                 self.status_footer.update_status("[red]Error[/red]")
+        finally:
+            # Re-enable user input after model processing is complete
+            self.is_processing = False
+            self.user_input.disabled = False
+            self.multiline_input.disabled = False
+            self.user_input.can_focus = True
+            self.multiline_input.can_focus = True
+            
+            # Restore original prompt label color
+            self.prompt_label.update(self.original_prompt_label)
+            
+            # Restore focus to appropriate input widget
+            if self.is_multiline:
+                self.multiline_input.focus()
+            else:
+                self.user_input.focus()
 
     def compose(self) -> ComposeResult:
         """Create the UI layout."""
@@ -283,9 +411,17 @@ class QXApp(App):
             yield StatusFooter(id="status-footer")
 
     def _show_confirmation_widget(
-        self, message: str, choices: str, default: str, allow_modify: bool = False
+        self,
+        message: str,
+        choices: str,
+        default: str,
+        allow_modify: bool = False
     ):
         """Show confirmation widget."""
+        # Disable focus on input widgets to prevent key capture
+        self.user_input.can_focus = False
+        self.multiline_input.can_focus = False
+        
         # Hide input container and show confirmation container
         input_container = self.query_one("#input-container")
         confirmation_container = self.query_one("#confirmation-container")
@@ -306,14 +442,21 @@ class QXApp(App):
 
     def _hide_confirmation_widget(self):
         """Hide confirmation widget and restore input."""
+        # Re-enable focus on input widgets
+        self.user_input.can_focus = True
+        self.multiline_input.can_focus = True
+        
         input_container = self.query_one("#input-container")
         confirmation_container = self.query_one("#confirmation-container")
 
         confirmation_container.add_class("hidden")
         input_container.remove_class("hidden")
 
-        # Refocus on input
-        self.user_input.focus()
+        # Refocus on the appropriate input based on current mode
+        if self.is_multiline:
+            self.multiline_input.focus()
+        else:
+            self.user_input.focus()
         self.confirmation_callback = None
 
     # Removed on_button_pressed since we're using Static widgets now
@@ -367,6 +510,9 @@ class QXApp(App):
         # Display the input in the output
         self.output_log.write(f"[red]⏵ {input_text}[/]")
 
+        # Add to history
+        self.user_input.add_to_history(input_text)
+
         # Handle exit commands
         if input_text.lower() in ["exit", "quit"]:
             if self.current_message_history:
@@ -410,6 +556,9 @@ class QXApp(App):
             command_completer = CommandCompleter(mcp_manager=self.mcp_manager)
             self.user_input.set_command_completer(command_completer)
 
+        # Load history for the input widget
+        self.user_input.load_history()
+
         # Focus on input
         self.user_input.focus()
 
@@ -450,6 +599,10 @@ class QXApp(App):
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle input submission."""
         try:
+            # Ignore input if model is currently processing
+            if self.is_processing:
+                return
+                
             if event.input.id in ["user-input", "multiline-input"]:
                 input_text = str(event.value)
                 is_multiline_submit = event.input.id == "multiline-input"

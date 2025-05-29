@@ -1,27 +1,14 @@
+
 import sys
 
 def main():
-    """
-    Sums integer arguments passed via the command line.
-    Non-integer arguments are skipped with a warning.
-    """
-    if len(sys.argv) < 2:
-        print("Usage: python tmp/sum.py <number1> [number2] ...")
-        sys.exit(1)
-
-    numbers = []
+    total = 0
     for arg in sys.argv[1:]:
         try:
-            numbers.append(int(arg))
+            total += float(arg)
         except ValueError:
-            print(f"Warning: '{arg}' is not a valid integer and will be skipped.", file=sys.stderr)
-
-    if not numbers:
-        print("No valid numbers provided to sum.")
-        sys.exit(0)
-
-    total = sum(numbers)
-    print(f"Successfully summed {len(numbers)} numbers. The total is: {total}")
+            print(f"Warning: Could not convert '{arg}' to a number. Skipping.")
+    print(f"The sum is: {total}")
 
 if __name__ == "__main__":
     main()
