@@ -3,7 +3,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, cast
+from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, Type, cast
 
 import httpx
 from openai import AsyncOpenAI
@@ -16,15 +16,16 @@ from openai.types.chat import (
 )
 from openai.types.shared_params.function_definition import FunctionDefinition
 from pydantic import BaseModel, ValidationError
-from typing import Protocol
+
 
 class ConsoleProtocol(Protocol):
     def print(self, *args, **kwargs): ...
 
+
 RichConsole = ConsoleProtocol  # Type alias for backward compatibility
 
+from qx.core.mcp_manager import MCPManager  # New import
 from qx.core.plugin_manager import PluginManager
-from qx.core.mcp_manager import MCPManager # New import
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,7 @@ class QXLLMAgent:
 
         for func, schema, input_model_class in tools:
             self._tool_functions[func.__name__] = func
-            
+
             # Handle different schema formats (regular plugins vs MCP tools)
             if "function" in schema:
                 # MCP tools format: {"type": "function", "function": {...}}
@@ -96,26 +97,30 @@ class QXLLMAgent:
             else:
                 # Regular plugins format: {"name": ..., "description": ..., "parameters": ...}
                 function_def = schema
-                
+
             self._openai_tools_schema.append(
                 ChatCompletionToolParam(
                     type="function", function=FunctionDefinition(**function_def)
                 )
             )
             self._tool_input_models[func.__name__] = input_model_class
-            logger.debug(f"QXLLMAgent: Registered tool function '{func.__name__}' with schema name '{function_def.get('name')}'")
+            logger.debug(
+                f"QXLLMAgent: Registered tool function '{func.__name__}' with schema name '{function_def.get('name')}'"
+            )
 
         self.client = self._initialize_openai_client()
         logger.info(f"QXLLMAgent initialized with model: {self.model_name}")
         logger.info(f"Registered {len(self._tool_functions)} tool functions.")
-        
+
         # Debug: Log all registered tools for troubleshooting
         logger.info("Registered tool functions:")
         for tool_name in self._tool_functions.keys():
             logger.info(f"  - {tool_name}")
         logger.info("OpenAI tool schemas:")
         for schema in self._openai_tools_schema:
-            logger.info(f"  - {schema['function']['name'] if 'function' in schema and 'name' in schema['function'] else 'unnamed'}")
+            logger.info(
+                f"  - {schema['function']['name'] if 'function' in schema and 'name' in schema['function'] else 'unnamed'}"
+            )
 
     def _initialize_openai_client(self) -> AsyncOpenAI:
         """Initializes the OpenAI client for OpenRouter."""
@@ -184,16 +189,21 @@ class QXLLMAgent:
 
         try:
             logger.debug(f"LLM Request Parameters: {json.dumps(chat_params, indent=2)}")
-            
+
             if self.enable_streaming:
                 # Add streaming parameter
                 chat_params["stream"] = True
                 # Add an empty line before the streaming response starts
-                if hasattr(self.console, '_output_widget') and self.console._output_widget:
+                if (
+                    hasattr(self.console, "_output_widget")
+                    and self.console._output_widget
+                ):
                     self.console._output_widget.write("")
                 else:
                     self.console.print("")
-                return await self._handle_streaming_response(chat_params, messages, user_input)
+                return await self._handle_streaming_response(
+                    chat_params, messages, user_input
+                )
             else:
                 response = await self.client.chat.completions.create(**chat_params)
                 logger.debug(f"LLM Raw Response: {response.model_dump_json(indent=2)}")
@@ -202,7 +212,9 @@ class QXLLMAgent:
                 messages.append(response_message)
 
                 if response_message.tool_calls:
-                    return await self._process_tool_calls_and_continue(response_message, messages, user_input)
+                    return await self._process_tool_calls_and_continue(
+                        response_message, messages, user_input
+                    )
                 else:
                     return QXRunResult(response_message.content, messages)
 
@@ -211,49 +223,53 @@ class QXLLMAgent:
             self.console.print(f"[red]Error:[/red] LLM chat completion: {e}")
             return None
 
-
     async def _handle_streaming_response(
-        self, 
-        chat_params: Dict[str, Any], 
-        messages: List[ChatCompletionMessageParam], 
-        user_input: str
+        self,
+        chat_params: Dict[str, Any],
+        messages: List[ChatCompletionMessageParam],
+        user_input: str,
     ) -> Any:
         """Handle streaming response from OpenRouter API."""
         import asyncio
         import time
-        
+
         accumulated_content = ""
         accumulated_tool_calls = []
         current_tool_call = None
-        
+
         # Use markdown-aware buffer for streaming
         from qx.core.markdown_buffer import create_markdown_buffer
+
         markdown_buffer = create_markdown_buffer()
-        
+
         # Stream content directly to console
         try:
             stream = await self.client.chat.completions.create(**chat_params)
-            
+
             async for chunk in stream:
                 if not chunk.choices:
                     continue
-                
+
                 choice = chunk.choices[0]
                 delta = choice.delta
-                
+
                 # Handle content streaming
                 if delta.content:
                     accumulated_content += delta.content
-                    
+
                     # Add to markdown buffer and check if ready to render
                     content_to_render = markdown_buffer.add_content(delta.content)
-                    
+
                     if content_to_render:
-                        if hasattr(self.console, '_output_widget') and self.console._output_widget:
+                        if (
+                            hasattr(self.console, "_output_widget")
+                            and self.console._output_widget
+                        ):
                             # For Textual interface, render as Markdown
                             try:
                                 from rich.markdown import Markdown
-                                markdown = Markdown(content_to_render, code_theme="monokai")
+
+                                markdown = Markdown(content_to_render, code_theme="rrt")
                                 self.console._output_widget.write(markdown)
                             except Exception as e:
                                 logger.error(f"Error writing to output widget: {e}")
@@ -262,7 +278,7 @@ class QXLLMAgent:
                         else:
                             # Fallback for non-Textual console
                             self.console.print(content_to_render, end="")
-                
+
                 # Handle tool call streaming
                 if delta.tool_calls:
                     for tool_call_delta in delta.tool_calls:
@@ -270,40 +286,54 @@ class QXLLMAgent:
                         if tool_call_delta.index is not None:
                             # Ensure we have enough space in the list
                             while len(accumulated_tool_calls) <= tool_call_delta.index:
-                                accumulated_tool_calls.append({
-                                    "id": None,
-                                    "type": "function",
-                                    "function": {"name": "", "arguments": ""}
-                                })
-                            
-                            current_tool_call = accumulated_tool_calls[tool_call_delta.index]
-                            
+                                accumulated_tool_calls.append(
+                                    {
+                                        "id": None,
+                                        "type": "function",
+                                        "function": {"name": "", "arguments": ""},
+                                    }
+                                )
+
+                            current_tool_call = accumulated_tool_calls[
+                                tool_call_delta.index
+                            ]
+
                             if tool_call_delta.id:
                                 current_tool_call["id"] = tool_call_delta.id
-                            
+
                             if tool_call_delta.function:
                                 if tool_call_delta.function.name:
-                                    current_tool_call["function"]["name"] = tool_call_delta.function.name
+                                    current_tool_call["function"]["name"] = (
+                                        tool_call_delta.function.name
+                                    )
                                 if tool_call_delta.function.arguments:
-                                    current_tool_call["function"]["arguments"] += tool_call_delta.function.arguments
-                
+                                    current_tool_call["function"]["arguments"] += (
+                                        tool_call_delta.function.arguments
+                                    )
+
                 # Check if stream is finished
                 if choice.finish_reason:
                     # Flush any remaining buffer content
                     remaining_content = markdown_buffer.flush()
                     if remaining_content:
-                        if hasattr(self.console, '_output_widget') and self.console._output_widget:
+                        if (
+                            hasattr(self.console, "_output_widget")
+                            and self.console._output_widget
+                        ):
                             try:
                                 from rich.markdown import Markdown
-                                markdown = Markdown(remaining_content, code_theme="monokai")
+
+                                markdown = Markdown(remaining_content, code_theme="rrt")
                                 self.console._output_widget.write(markdown)
                             except Exception as e:
-                                logger.error(f"Error writing final buffer to output widget: {e}")
+                                logger.error(
+                                    f"Error writing final buffer to output widget: {e}"
+                                )
                                 self.console.print(remaining_content, end="")
                         else:
                             self.console.print(remaining_content, end="")
                     break
-                    
+
         except Exception as e:
             logger.error(f"Error during streaming: {e}", exc_info=True)
             # Fall back to non-streaming
@@ -311,61 +341,68 @@ class QXLLMAgent:
             response = await self.client.chat.completions.create(**chat_params)
             response_message = response.choices[0].message
             messages.append(response_message)
-            
+
             if response_message.tool_calls:
-                return await self._process_tool_calls_and_continue(response_message, messages, user_input)
+                return await self._process_tool_calls_and_continue(
+                    response_message, messages, user_input
+                )
             else:
                 return QXRunResult(response_message.content, messages)
-        
+
         # Create response message from accumulated data
         response_message_dict = {
             "role": "assistant",
-            "content": accumulated_content if accumulated_content else None
+            "content": accumulated_content if accumulated_content else None,
         }
-        
+
         if accumulated_tool_calls:
             # Convert accumulated tool calls to proper format
             tool_calls = []
             for tc in accumulated_tool_calls:
                 if tc["id"] and tc["function"]["name"]:
-                    tool_calls.append({
-                        "id": tc["id"],
-                        "type": "function",
-                        "function": {
-                            "name": tc["function"]["name"],
-                            "arguments": tc["function"]["arguments"]
+                    tool_calls.append(
+                        {
+                            "id": tc["id"],
+                            "type": "function",
+                            "function": {
+                                "name": tc["function"]["name"],
+                                "arguments": tc["function"]["arguments"],
+                            },
                         }
-                    })
+                    )
             response_message_dict["tool_calls"] = tool_calls
-        
+
         # Convert to proper message format
         from openai.types.chat.chat_completion_message import ChatCompletionMessage
+
         response_message = ChatCompletionMessage(**response_message_dict)
         messages.append(response_message)
-        
+
         # Display final newline
         if accumulated_content and accumulated_content.strip():
-            if hasattr(self.console, '_output_widget') and self.console._output_widget:
+            if hasattr(self.console, "_output_widget") and self.console._output_widget:
                 self.console._output_widget.write("")  # Add empty line for spacing
             else:
                 self.console.print("")
-        
+
         # Process tool calls if any
         if accumulated_tool_calls:
-            return await self._process_tool_calls_and_continue(response_message, messages, user_input)
+            return await self._process_tool_calls_and_continue(
+                response_message, messages, user_input
+            )
         else:
             return QXRunResult(accumulated_content, messages)
-    
+
     async def _process_tool_calls_and_continue(
-        self, 
-        response_message, 
-        messages: List[ChatCompletionMessageParam], 
-        user_input: str
+        self,
+        response_message,
+        messages: List[ChatCompletionMessageParam],
+        user_input: str,
     ) -> Any:
         """Process tool calls and continue the conversation."""
         if not response_message.tool_calls:
             return QXRunResult(response_message.content, messages)
-        
+
         tool_tasks = []
         for tool_call in response_message.tool_calls:
             function_name = tool_call.function.name
@@ -429,13 +466,15 @@ class QXLLMAgent:
                         )
                     )
                     continue
-                
+
                 # If validation passes, add the task to the list
                 tool_tasks.append(
                     {
                         "tool_call_id": tool_call_id,
                         "function_name": function_name,
-                        "coroutine": tool_func(console=self.console, args=tool_args_instance),
+                        "coroutine": tool_func(
+                            console=self.console, args=tool_args_instance
+                        ),
                     }
                 )
 
@@ -454,16 +493,18 @@ class QXLLMAgent:
                         },
                     )
                 )
-        
+
         # Execute all collected tool tasks in parallel
         if tool_tasks:
-            results = await asyncio.gather(*[task["coroutine"] for task in tool_tasks], return_exceptions=True)
-            
+            results = await asyncio.gather(
+                *[task["coroutine"] for task in tool_tasks], return_exceptions=True
+            )
+
             for i, result in enumerate(results):
                 tool_call_info = tool_tasks[i]
                 tool_call_id = tool_call_info["tool_call_id"]
                 function_name = tool_call_info["function_name"]
-                
+
                 if isinstance(result, Exception):
                     error_msg = f"Error executing tool '{function_name}': {result}"
                     logger.error(error_msg, exc_info=True)
@@ -474,7 +515,7 @@ class QXLLMAgent:
                         tool_output_content = result.model_dump_json()
                     else:
                         tool_output_content = str(result)
-                
+
                 messages.append(
                     cast(
                         ChatCompletionToolMessageParam,
@@ -506,7 +547,7 @@ class QXRunResult:
 def initialize_llm_agent(
     model_name_str: str,
     console: RichConsole,
-    mcp_manager: MCPManager, # New parameter
+    mcp_manager: MCPManager,  # New parameter
     enable_streaming: bool = True,
 ) -> Optional[QXLLMAgent]:
     """
@@ -560,7 +601,7 @@ def initialize_llm_agent(
         agent = QXLLMAgent(
             model_name=model_name_str,
             system_prompt=system_prompt_content,
-            tools=registered_tools, # Pass combined tools
+            tools=registered_tools,  # Pass combined tools
             console=console,
             temperature=temperature,
             max_output_tokens=max_output_tokens,
