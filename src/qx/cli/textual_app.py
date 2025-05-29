@@ -24,7 +24,7 @@ class StatusFooter(Static):
     """Custom footer widget that displays status messages."""
 
     def __init__(self, *args, **kwargs):
-        super().__init__("Ready", *args, **kwargs)
+        super().__init__("[#00ff00]Ready[/]", *args, **kwargs)
         self.add_class("footer")
         self.spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
         self.spinner_index = 0
@@ -34,8 +34,8 @@ class StatusFooter(Static):
     def update_status(self, message: str):
         """Update the status message."""
         self.base_message = message
-        if message == "Ready":
-            self.update(f"[light_green]{message}[/light_green]")
+        if message == "[#00ff00]Ready[/]":
+            self.update(f"{message}")
         else:
             self.update(message)
 
@@ -61,9 +61,10 @@ class StatusFooter(Static):
 
 class QXTextArea(TextArea):
     """Custom TextArea widget for multiline input."""
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
 
 class QXInput(Input):
     """Custom input widget with command completion and history support."""
@@ -126,7 +127,12 @@ class QXApp(App):
     BINDINGS = [
         Binding("ctrl+c", "quit", "Quit"),
         Binding("ctrl+d", "quit", "Quit"),
-        Binding("alt+enter", "toggle_multiline_or_submit", "Toggle Multiline/Submit", show=False),
+        Binding(
+            "alt+enter",
+            "toggle_multiline_or_submit",
+            "Toggle Multiline/Submit",
+            show=False,
+        ),
     ]
 
     enable_mouse_support = True
@@ -146,7 +152,7 @@ class QXApp(App):
         self.confirmation_callback = None
         self._qx_version: str = ""
         self._llm_model_name: str = ""
-        self.is_multiline: bool = False # New state for multiline input
+        self.is_multiline: bool = False  # New state for multiline input
 
     def set_mcp_manager(self, mcp_manager):
         """Set the MCP manager for command completion."""
@@ -224,7 +230,7 @@ class QXApp(App):
             # Stop spinner and reset status to ready
             if self.status_footer:
                 self.status_footer.stop_spinner()
-                self.status_footer.update_status("Ready")
+                self.status_footer.update_status("[#00ff00]Ready[/]")
 
         except Exception as e:
             # Log full traceback for debugging
@@ -329,18 +335,18 @@ class QXApp(App):
     async def handle_multiline_submit(self) -> None:
         """Handle multiline input submission from QXTextArea."""
         input_text = str(self.multiline_input.text).strip()
-        
+
         # Always switch back to single line mode, even if input is empty
         self.is_multiline = False
         self.prompt_label.update("QX⏵ ")
         self.multiline_input.add_class("hidden")
         self.user_input.remove_class("hidden")
         self.user_input.focus()
-        
+
         # Clear both inputs
         self.multiline_input.clear()
         self.user_input.value = ""
-        
+
         # Process the input only if it's not empty
         if input_text:
             await self._process_user_input(input_text)
@@ -348,9 +354,13 @@ class QXApp(App):
     async def _process_user_input(self, input_text: str) -> None:
         """Process user input after it's been submitted."""
         # If there's a prompt_handler waiting, resolve its future
-        if self.prompt_handler and self.prompt_handler._input_future and not self.prompt_handler._input_future.done():
+        if (
+            self.prompt_handler
+            and self.prompt_handler._input_future
+            and not self.prompt_handler._input_future.done()
+        ):
             self.prompt_handler.handle_input(input_text)
-            return # Input handled by prompt_handler, no further processing here
+            return  # Input handled by prompt_handler, no further processing here
 
         # Display the input in the output
         self.output_log.write(f"[red]⏵ {input_text}[/]")
@@ -460,14 +470,18 @@ class QXApp(App):
                     return
 
                 # If there's a prompt_handler waiting, resolve its future
-                if self.prompt_handler and self.prompt_handler._input_future and not self.prompt_handler._input_future.done():
+                if (
+                    self.prompt_handler
+                    and self.prompt_handler._input_future
+                    and not self.prompt_handler._input_future.done()
+                ):
                     self.prompt_handler.handle_input(input_text)
                     # Clear the appropriate input after handling
                     if is_multiline_submit:
                         self.multiline_input.clear()
                     else:
                         self.user_input.value = ""
-                    return # Input handled by prompt_handler, no further processing here
+                    return  # Input handled by prompt_handler, no further processing here
 
                 # Clear the appropriate input
                 if is_multiline_submit:
@@ -556,7 +570,11 @@ class QXApp(App):
 
     def action_quit(self) -> None:
         """Handle quit action."""
-        if self.prompt_handler and self.prompt_handler._input_future and not self.prompt_handler._input_future.done():
+        if (
+            self.prompt_handler
+            and self.prompt_handler._input_future
+            and not self.prompt_handler._input_future.done()
+        ):
             self.prompt_handler._input_future.set_result("exit")
         self.exit()
 
