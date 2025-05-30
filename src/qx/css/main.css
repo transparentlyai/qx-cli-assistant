@@ -99,6 +99,7 @@ OptionSelector {
     /* width: 50%; */
     /* height: auto; */
     /* background: $panel; */
+  width: 100%;
 }
 
 /* The Vertical container holding the option labels within OptionSelector */
