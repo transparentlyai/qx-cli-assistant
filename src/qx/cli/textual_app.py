@@ -268,7 +268,7 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
         choices: str = "ynac", 
         default: str = "n", 
     ) -> Optional[str]: # Return Optional[str] as None is possible for timeout/cancel
-        option_map = { "y": "Yes", "n": "No", "m": "Modify", "a": "Approve All", "c": "Cancel", "s": "Skip", "o": "OK"}
+        option_map = { "y": "Yes", "n": "No", "a": "Approve All", "c": "Cancel", "s": "Skip", "o": "OK"}
         built_options: List[Tuple[str, str]] = []
         default_option_tuple: Optional[Tuple[str, str]] = None
         if default in choices and default in option_map:
@@ -276,7 +276,6 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
             built_options.append(default_option_tuple)
         for char_key in choices:
             if char_key == default and default_option_tuple is not None: continue 
-            if char_key == 'm': continue # Always skip 'm'
             if char_key in option_map: built_options.append((option_map[char_key], char_key))
         if not built_options: return default 
         selected_key = await self.request_approval_with_selector(prompt=message, options=built_options)

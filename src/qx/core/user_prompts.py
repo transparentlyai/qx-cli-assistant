@@ -16,11 +16,10 @@ _approve_all_lock = asyncio.Lock()
 
 CHOICE_YES = ("y", "Yes", "yes")
 CHOICE_NO = ("n", "No", "no")
-CHOICE_MODIFY = ("m", "Modify", "modify")
 CHOICE_APPROVE_ALL = ("a", "Approve All", "all")
 CHOICE_CANCEL = ("c", "Cancel", "cancel")
 
-ApprovalDecisionStatus = Literal["approved", "denied", "modified", "cancelled", "session_approved"]
+ApprovalDecisionStatus = Literal["approved", "denied", "cancelled", "session_approved"]
 
 async def _execute_prompt_with_live_suspend(console: RichConsole, *args: Any, **kwargs: Any) -> Any:
     prompt_text = args[0] if args else "Enter choice: "
@@ -72,7 +71,6 @@ def _is_textual_environment(console: RichConsole) -> bool:
 
 async def _request_confirmation_textual(
     prompt_message: str, console: RichConsole, content_to_display: Optional[RenderableType] = None,
-    # allow_modify: bool = False, # Removed allow_modify
     current_value_for_modification: Optional[str] = None,
     default_choice_key: str = "n"
 ) -> Tuple[ApprovalDecisionStatus, Optional[str]]:
@@ -110,8 +108,6 @@ async def _request_confirmation_textual(
             return ("cancelled", None)
         if user_selected_key == "y": return ("approved", current_value_for_modification)
         elif user_selected_key == "n": console.print("[info]Operation denied by user.[/info]"); return ("denied", None)
-        # Modification logic removed as allow_modify is always False
-        # elif user_selected_key == "m" and allow_modify: ...
         elif user_selected_key == "a":
             global _approve_all_active # Corrected: global on its own line
             async with _approve_all_lock:
@@ -130,7 +126,6 @@ async def _request_confirmation_textual(
 
 async def _request_confirmation_terminal(
     prompt_message: str, console: RichConsole, content_to_display: Optional[RenderableType] = None,
-    # allow_modify: bool = False, # Removed allow_modify
     current_value_for_modification: Optional[str] = None,
     default_choice_key: str = "n"
 ) -> Tuple[ApprovalDecisionStatus, Optional[str]]:
@@ -143,15 +138,11 @@ async def _request_confirmation_terminal(
         return ("approved", current_value_for_modification)
     if content_to_display: console.print(f"\n--- Content Preview ---\n{content_to_display}\n--- End Preview ---\n")
     choices_map = [CHOICE_YES, CHOICE_NO]
-    # Modification logic removed as allow_modify is always False
-    # if allow_modify: choices_map.append(CHOICE_MODIFY)
     choices_map.extend([CHOICE_APPROVE_ALL, CHOICE_CANCEL])
     try:
         user_choice_key = await _ask_basic_confirmation(console=console, choices=choices_map, prompt_message_text=prompt_message)
         if user_choice_key == "y": return ("approved", current_value_for_modification)
         elif user_choice_key == "n": console.print("[info]Operation denied by user.[/info]"); return ("denied", None)
-        # Modification logic removed
-        # elif user_choice_key == "m" and allow_modify: ...
         elif user_choice_key == "a":
             global _approve_all_active # Corrected: global on its own line
             async with _approve_all_lock:
@@ -167,12 +158,9 @@ async def _request_confirmation_terminal(
 
 async def request_confirmation(
     prompt_message: str, console: RichConsole, content_to_display: Optional[RenderableType] = None,
-    # allow_modify: bool = False, # Removed allow_modify
     current_value_for_modification: Optional[str] = None,
     default_choice_key: str = "n"
 ) -> Tuple[ApprovalDecisionStatus, Optional[str]]:
-    # The allow_modify parameter is removed from the function signature and all internal calls.
-    # The logic related to 'm' (Modify) option is also removed or commented out.
     if _is_textual_environment(console):
         return await _request_confirmation_textual(
             prompt_message, console, content_to_display, 

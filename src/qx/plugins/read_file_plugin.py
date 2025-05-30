@@ -192,7 +192,6 @@ async def read_file_tool(  # Made async
         decision_status, _ = await request_confirmation(  # Await
             prompt_message=prompt_msg,
             console=console,
-            allow_modify=False,  # Read operations typically don't modify the path
         )
         if decision_status not in ["approved", "session_approved"]:
             error_message = f"Read operation for '{expanded_path_arg}' was {decision_status} by user."

@@ -245,11 +245,10 @@ async def execute_shell_tool(  # Made async
     Executes non-interactive shell commands with user approval flow:
     - Auto-approved commands (ls, pwd, etc.) execute immediately
     - Other commands require user confirmation
-    - Users can modify commands during approval
     - Prohibited commands are blocked
     
     Returns structured output with:
-    - command: The actual command executed (may differ if user modified)
+    - command: The actual command executed
     - stdout/stderr: Command output (only if executed)
     - return_code: Exit code (0=success, only if executed)
     - error: Explanation if command was not executed
@@ -294,46 +293,10 @@ async def execute_shell_tool(  # Made async
         decision_status, final_value = await request_confirmation(  # Await
             prompt_message=prompt_msg,
             console=console,
-            allow_modify=True,
             current_value_for_modification=command_to_consider,
         )
 
-        if decision_status == "modified" and final_value is not None:
-            command_to_execute = final_value.strip()
-            if not command_to_execute:
-                err_msg = "Error: Command modified to an empty string."
-                logger.warning(
-                    f"Original command '{command_to_consider}' modified to empty."
-                )
-                console.print(f"[red]{err_msg}[/red] Original: '{command_to_consider}'")
-                return ExecuteShellPluginOutput(
-                    command=command_to_consider,
-                    stdout=None,
-                    stderr=None,
-                    return_code=None,
-                    error=err_msg,
-                )
-
-            logger.debug(
-                f"Shell command modified by user from '{command_to_consider}' to '{command_to_execute}'."
-            )
-            # console.print(f"[info]Command modified by user to:[/info] '{command_to_execute}'") # Covered by request_confirmation
-
-            if _is_command_prohibited(command_to_execute):
-                err_msg = f"Error: Modified command '{command_to_execute}' is prohibited by policy."
-                logger.error(err_msg)
-                console.print(
-                    f"[red]Modified command prohibited by policy:[/red] '{command_to_execute}'"
-                )
-                return ExecuteShellPluginOutput(
-                    command=command_to_execute,
-                    stdout=None,
-                    stderr=None,
-                    return_code=None,
-                    error=err_msg,
-                )
-
-        elif decision_status in ["approved", "session_approved"]:
+        if decision_status in ["approved", "session_approved"]:
             command_to_execute = command_to_consider
         else:  # denied or cancelled
             error_message = f"Shell command execution for '{command_to_consider}' was {decision_status} by user."
@@ -360,11 +323,7 @@ async def execute_shell_tool(  # Made async
         decision_status == "session_approved"
     ):  # Session approved (already printed by request_confirmation)
         pass
-    elif command_to_execute != command_to_consider:  # Manually modified and approved
-        console.print(
-            f"[info]Executing modified command:[/info] '{command_to_execute}'"
-        )
-    else:  # Manually approved without modification
+    else:  # Manually approved
         console.print(f"[info]Executing command:[/info] '{command_to_execute}'")
 
     try:

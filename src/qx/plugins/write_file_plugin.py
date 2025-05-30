@@ -168,7 +168,6 @@ async def write_file_tool(  # Made async
     Features:
     - Creates parent directories automatically if needed
     - Shows preview/diff before writing (for existing files)
-    - User can modify the target path during approval (REMOVED)
     - Raw content expected (no escaping needed)
     
     File access permissions:
@@ -223,13 +222,10 @@ async def write_file_tool(  # Made async
         prompt_message=prompt_msg,
         console=console,
         content_to_display=preview_renderable,
-        # allow_modify=True,  # Allow path modification - REMOVED
         current_value_for_modification=path_to_consider,
     )
 
     path_to_write: str
-    # Modification logic is removed as allow_modify is no longer passed and handled
-    # if decision_status == "modified" and final_value is not None: ...
     if decision_status in ["approved", "session_approved"]:
         path_to_write = path_to_consider # final_value is path_to_consider if not modified
         if (

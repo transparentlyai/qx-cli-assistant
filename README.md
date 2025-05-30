@@ -72,7 +72,7 @@ To create a new plugin for QX, follow these steps:
 5.  **User Approvals and Interaction (If Applicable)**:
     *   For operations that modify the file system, execute shell commands, or perform other sensitive actions, always seek user approval.
     *   Use the `qx.core.user_prompts.request_confirmation` function.
-    *   This function can display rich content (like file diffs or previews) and optionally allow users to modify the input before approval (e.g., changing a file path or a shell command).
+    *   This function can display rich content (like file diffs or previews) for user review before approval.
 
     ```python
     # Inside your tool function, if confirmation is needed:
@@ -82,8 +82,6 @@ To create a new plugin for QX, follow these steps:
     #     prompt_message=f"Allow plugin to process '{args.parameter_name}'?",
     #     console=console,
     #     # content_to_display=my_preview_renderable, # Optional: a Rich renderable
-    #     allow_modify=False, # Set to True if user should be able to change 'args.parameter_name'
-    #     # current_value_for_modification=args.parameter_name # If allow_modify is True
     # )
     #
     # if decision_status not in ["approved", "session_approved"]:

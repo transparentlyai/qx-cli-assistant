@@ -101,7 +101,6 @@ async def web_fetch_tool(
     decision_status, _ = await request_confirmation(
         prompt_message=prompt_msg,
         console=console,
-        allow_modify=False,  # URL modification not allowed for this tool
     )
 
     if decision_status not in ["approved", "session_approved"]:
