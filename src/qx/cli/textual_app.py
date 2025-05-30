@@ -261,6 +261,10 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
     def set_version_info(self, qx_version: str, llm_model_name: str):
         self._qx_version = qx_version
         self._llm_model_name = llm_model_name
+    
+    def set_message_history(self, message_history):
+        """Set the message history (used when recovering a session)."""
+        self.current_message_history = message_history
 
     async def request_confirmation(
         self,
