@@ -113,15 +113,6 @@ class QXLLMAgent:
         logger.info(f"QXLLMAgent initialized with model: {self.model_name}")
         logger.info(f"Registered {len(self._tool_functions)} tool functions.")
 
-        # Debug: Log all registered tools for troubleshooting
-        logger.info("Registered tool functions:")
-        for tool_name in self._tool_functions.keys():
-            logger.info(f"  - {tool_name}")
-        logger.info("OpenAI tool schemas:")
-        for schema in self._openai_tools_schema:
-            logger.info(
-                f"  - {schema['function']['name'] if 'function' in schema and 'name' in schema['function'] else 'unnamed'}"
-            )
 
     def _initialize_openai_client(self) -> AsyncOpenAI:
         """Initializes the OpenAI client for OpenRouter."""
@@ -177,24 +168,49 @@ class QXLLMAgent:
         if message_history:
             messages.extend(message_history)
 
-        # Only add user message if not already in the last position of message history
-        should_add_user_message = True
-        if message_history:
-            # Check if the last message is already this user input
-            last_msg = message_history[-1] if message_history else None
-            if last_msg:
-                # Handle both dict and Pydantic model cases
-                msg_role = last_msg.get("role") if isinstance(last_msg, dict) else getattr(last_msg, "role", None)
-                msg_content = last_msg.get("content") if isinstance(last_msg, dict) else getattr(last_msg, "content", None)
-                if msg_role == "user" and msg_content == user_input:
-                    should_add_user_message = False
-        
-        if should_add_user_message:
-            messages.append(
-                cast(
-                    ChatCompletionUserMessageParam, {"role": "user", "content": user_input}
+        # Special handling for continuation after tool calls
+        if user_input == "__CONTINUE_AFTER_TOOLS__":
+            # Don't add any user message, just continue with existing messages
+            pass
+        else:
+            # Only add user message if not already in the last position of message history and not empty
+            should_add_user_message = user_input.strip() != ""  # Don't add empty messages
+            if should_add_user_message and message_history:
+                # Check if the last message is already this user input
+                last_msg = message_history[-1] if message_history else None
+                if last_msg:
+                    # Handle both dict and Pydantic model cases
+                    msg_role = last_msg.get("role") if isinstance(last_msg, dict) else getattr(last_msg, "role", None)
+                    msg_content = last_msg.get("content") if isinstance(last_msg, dict) else getattr(last_msg, "content", None)
+                    if msg_role == "user" and msg_content == user_input:
+                        should_add_user_message = False
+            
+            if should_add_user_message:
+                messages.append(
+                    cast(
+                        ChatCompletionUserMessageParam, {"role": "user", "content": user_input}
+                    )
                 )
-            )
+
+        # Log the last message being sent if QX_LOG_SENT is set
+        if os.getenv("QX_LOG_SENT") and messages:
+            # Skip logging if this is a continuation after tools (to avoid duplicate logging)
+            if user_input == "__CONTINUE_AFTER_TOOLS__":
+                # The tool responses were already logged when they were added
+                pass
+            else:
+                last_message = messages[-1]
+                # Convert to dict if it's a BaseModel
+                if isinstance(last_message, BaseModel):
+                    last_message = last_message.model_dump()
+                logger.info(f"Sending message to LLM:\n{json.dumps(last_message, indent=2)}")
+                
+                # Also log available tools on first user message
+                if last_message.get("role") == "user" and self._openai_tools_schema:
+                    logger.info(f"Available tools ({len(self._openai_tools_schema)}):")
+                    for tool in self._openai_tools_schema[:3]:  # Show first 3 tools
+                        tool_dict = tool.model_dump() if hasattr(tool, 'model_dump') else dict(tool)
+                        logger.info(f"  - {tool_dict.get('function', {}).get('name', 'unknown')}")
 
         # Parameters for the chat completion
         chat_params: Dict[str, Any] = {
@@ -239,14 +255,35 @@ class QXLLMAgent:
                 response = await self.client.chat.completions.create(**chat_params)
 
                 response_message = response.choices[0].message
+                
+                # Log the received message if QX_LOG_RECEIVED is set
+                if os.getenv("QX_LOG_RECEIVED"):
+                    response_dict = {
+                        "role": response_message.role,
+                        "content": response_message.content,
+                    }
+                    if response_message.tool_calls:
+                        response_dict["tool_calls"] = [
+                            {
+                                "id": tc.id,
+                                "type": tc.type,
+                                "function": {
+                                    "name": tc.function.name,
+                                    "arguments": tc.function.arguments
+                                }
+                            }
+                            for tc in response_message.tool_calls
+                        ]
+                    logger.info(f"Received message from LLM:\n{json.dumps(response_dict, indent=2)}")
+                
                 messages.append(response_message)
 
                 if response_message.tool_calls:
                     return await self._process_tool_calls_and_continue(
-                        response_message, messages, user_input
+                        response_message, messages, user_input, retry_count
                     )
                 else:
-                    return QXRunResult(response_message.content, messages)
+                    return QXRunResult(response_message.content or "", messages)
 
         except Exception as e:
             logger.error(f"Error during LLM chat completion: {e}", exc_info=True)
@@ -294,6 +331,8 @@ class QXLLMAgent:
                 # Handle tool call streaming
                 if delta.tool_calls:
                     has_tool_calls = True  # Mark that we've seen tool calls
+                    if os.getenv("QX_LOG_RECEIVED"):
+                        logger.info(f"Received tool call delta: {delta.tool_calls}")
                     for tool_call_delta in delta.tool_calls:
                         # Start new tool call
                         if tool_call_delta.index is not None:
@@ -377,33 +416,30 @@ class QXLLMAgent:
                     else:
                         self.console.print("")
         elif has_tool_calls:
-            # Check if accumulated content is likely narration
-            narration_patterns = [
+            # Only suppress very specific git-related narration patterns
+            # We want to be conservative here to avoid suppressing legitimate responses
+            git_narration_patterns = [
                 "with a detailed summary message",
                 "changes with a detailed",
                 "Successfully committed",
                 "Adding files",
                 "Checking changes",
                 "Committing",
-                "Let me",
-                "I'll",
-                "I will",
-                "Now I",
-                "First,",
-                "Next,",
-                "Here's",
-                "Running",
-                "Executing",
             ]
             
             lower_content = accumulated_content.lower().strip()
-            is_likely_narration = any(pattern.lower() in lower_content for pattern in narration_patterns)
             
-            # If it's likely narration, suppress it
-            if is_likely_narration:
+            # Only suppress if it matches specific git patterns
+            is_git_narration = any(pattern.lower() in lower_content for pattern in git_narration_patterns)
+            
+            # If it's git narration, suppress it
+            if is_git_narration:
                 accumulated_content = ""
                 # Clear the markdown buffer too
                 markdown_buffer.flush()
+            
+            # Note: We're NOT suppressing general tool announcements anymore.
+            # The model should be smart enough to provide proper responses after tool use.
 
         # Create response message from accumulated data
         response_message_dict = {
@@ -432,6 +468,11 @@ class QXLLMAgent:
         from openai.types.chat.chat_completion_message import ChatCompletionMessage
 
         response_message = ChatCompletionMessage(**response_message_dict)
+        
+        # Log the received message if QX_LOG_RECEIVED is set (for streaming)
+        if os.getenv("QX_LOG_RECEIVED"):
+            logger.info(f"Received message from LLM (streaming):\n{json.dumps(response_message_dict, indent=2)}")
+        
         messages.append(response_message)
 
 
@@ -443,7 +484,7 @@ class QXLLMAgent:
                 response_message, messages, user_input
             )
         else:
-            return QXRunResult(accumulated_content, messages)
+            return QXRunResult(accumulated_content or "", messages)
 
     async def _process_tool_calls_and_continue(
         self,
@@ -453,7 +494,9 @@ class QXLLMAgent:
     ) -> Any:
         """Process tool calls and continue the conversation."""
         if not response_message.tool_calls:
-            return QXRunResult(response_message.content, messages)
+            # Ensure we have content to return
+            content = response_message.content if response_message.content else ""
+            return QXRunResult(content, messages)
 
         tool_tasks = []
         for tool_call in response_message.tool_calls:
@@ -581,19 +624,27 @@ class QXLLMAgent:
                     else:
                         tool_output_content = str(result)
 
+                tool_message = {
+                    "role": "tool",
+                    "tool_call_id": tool_call_id,
+                    "content": tool_output_content,
+                }
+                
+                # Log tool response if QX_LOG_SENT is set (since we're sending it to the model)
+                if os.getenv("QX_LOG_SENT"):
+                    logger.info(f"Sending tool response to LLM:\n{json.dumps(tool_message, indent=2)}")
+                
                 messages.append(
                     cast(
                         ChatCompletionToolMessageParam,
-                        {
-                            "role": "tool",
-                            "tool_call_id": tool_call_id,
-                            "content": tool_output_content,
-                        },
+                        tool_message,
                     )
                 )
 
         # After processing all tool calls (or attempting to), make one recursive call
-        return await self.run(user_input, messages)
+        # The model needs to generate a response based on the tool outputs
+        # We pass a special marker that won't be added to messages but triggers response generation
+        return await self.run("__CONTINUE_AFTER_TOOLS__", messages)
     
     async def cleanup(self):
         """Clean up resources like HTTP client."""

@@ -88,3 +88,51 @@
     color: white;
     background: black;
 }
+
+/* OptionSelector Widget Styles */
+
+/* Main container of the OptionSelector widget */
+OptionSelector {
+    /* Example: Customize border, padding, width, height */
+    /* border: tall $primary-darken-2; */
+    /* padding: 1 2; */
+    /* width: 50%; */
+    /* height: auto; */
+    /* background: $panel; */
+}
+
+/* The Vertical container holding the option labels within OptionSelector */
+OptionSelector > Vertical {
+    /* Example: Customize spacing or alignment if needed */
+    /* width: auto; */
+    /* height: auto; */
+}
+
+/* Individual option labels within OptionSelector */
+OptionSelector Label {
+    /* Example: Customize text color, padding for all labels */
+    /* color: $text; */
+    /* padding: 1; */ /* Overrides default padding: 0 1 */
+}
+
+/* The currently selected/highlighted option label */
+OptionSelector Label.selected {
+    /* Example: Customize background and text color for selected item */
+    /* background: $accent; */
+    /* color: $text-accent; */
+    /* text-style: bold; */
+}
+
+/* Styling for the bold part (typically the selection key) within an OptionSelector Label */
+OptionSelector Label b {
+    /* Example: Customize color or style of the bolded key character */
+    /* color: $warning; */
+    /* text-style: italic; */
+}
+
+/* Styling for the underlined part (typically the selection key) within an OptionSelector Label */
+OptionSelector Label u {
+    /* Example: Customize color or style of the underlined key character */
+    /* text-decoration-color: $warning; */
+    /* No direct color property for underline, but can affect text if needed */
+}

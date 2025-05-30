@@ -9,34 +9,37 @@ from rich.console import (
 logger = logging.getLogger(__name__)
 
 
+class CurrentTimeInput(BaseModel):
+    """Input model for the GetCurrentTimeTool - no parameters required."""
+    pass
+
+
 class CurrentTimePluginOutput(BaseModel):
     """Output model for the GetCurrentTimeTool."""
 
-    current_time: str = Field(description="The current date and time in YYYY-MM-DD HH:MM:SS format.")
+    current_time: str = Field(
+        description="The current date and time in YYYY-MM-DD HH:MM:SS format."
+    )
     timezone: str = Field(
         description="The system's local timezone name (e.g., 'UTC-05:00', 'Local')."
     )
 
 
-# No input model is strictly necessary if the tool takes no arguments.
-# The PluginManager will generate an empty schema for tools with no Pydantic input.
-# For consistency in tool signatures, we'll add a 'console' parameter, even if not used.
-# This allows the PluginManager to pass the console to all tools uniformly.
-def get_current_time_tool(console: RichConsole) -> CurrentTimePluginOutput:
+async def get_current_time_tool(console: RichConsole, args: CurrentTimeInput) -> CurrentTimePluginOutput:
     """
-    Tool to get the current system date and time.
-    
+    Get the current date and time.
+
     Features:
     - No user approval required
     - Returns local system time
     - Includes timezone information
     - Format: YYYY-MM-DD HH:MM:SS
-    
+
     Returns structured output with:
-    - current_time: Formatted date/time string
+    - current_time: Formatted date/time string (YYYY-MM-DD HH:MM:SS)
     - timezone: System timezone identifier
     
-    Note: This is a synchronous tool (not async) as it performs no I/O operations.
+    Note: This is an async tool for consistency with other QX tools.
     """
     console.print("[info]Fetching current system time...[/info]")
     try:
