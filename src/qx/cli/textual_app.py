@@ -264,9 +264,8 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
     async def request_confirmation(
         self,
         message: str, 
-        choices: str = "ynmac", 
+        choices: str = "ynac", 
         default: str = "n", 
-        allow_modify: bool = False, 
     ) -> Optional[str]: # Return Optional[str] as None is possible for timeout/cancel
         option_map = { "y": "Yes", "n": "No", "m": "Modify", "a": "Approve All", "c": "Cancel", "s": "Skip", "o": "OK"}
         built_options: List[Tuple[str, str]] = []
@@ -276,7 +275,7 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
             built_options.append(default_option_tuple)
         for char_key in choices:
             if char_key == default and default_option_tuple is not None: continue 
-            if char_key == 'm' and not allow_modify: continue
+            if char_key == 'm': continue # Always skip 'm'
             if char_key in option_map: built_options.append((option_map[char_key], char_key))
         if not built_options: return default 
         selected_key = await self.request_approval_with_selector(prompt=message, options=built_options)
