@@ -122,6 +122,14 @@ def reset_session_sync():
     global _current_session_file
     _current_session_file = None
 
+def set_current_session_file(session_path: Path):
+    """
+    Sets the current session file to an existing file.
+    Used when recovering a session to ensure continued use of the same file.
+    """
+    global _current_session_file
+    _current_session_file = session_path
+
 # Keep sync versions for compatibility
 save_session = save_session_sync
 reset_session = reset_session_sync
@@ -169,7 +177,11 @@ def load_latest_session() -> Optional[List[ChatCompletionMessageParam]]:
             return None
 
         latest_session_file = session_files[0]
-        return load_session_from_path(latest_session_file)
+        loaded_history = load_session_from_path(latest_session_file)
+        if loaded_history:
+            # Set the current session file to the recovered one
+            set_current_session_file(latest_session_file)
+        return loaded_history
 
     except FileNotFoundError:
         logger.info("Session directory or file not found during load.")
@@ -192,6 +204,10 @@ def load_session_from_path(session_path: Path) -> Optional[List[ChatCompletionMe
 
         message_history: List[ChatCompletionMessageParam] = cast(List[ChatCompletionMessageParam], raw_messages)
         logger.info(f"Loaded session from {session_path}")
+        
+        # Set the current session file to the recovered one
+        set_current_session_file(session_path)
+        
         return message_history
 
     except json.JSONDecodeError as e:
