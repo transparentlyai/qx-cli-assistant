@@ -203,7 +203,7 @@ class QXLLMAgent:
                 # Convert to dict if it's a BaseModel
                 if isinstance(last_message, BaseModel):
                     last_message = last_message.model_dump()
-                logger.info(f"Sending message to LLM:\n{json.dumps(last_message, indent=2)}")
+                logger.info(f"Sending message to LLM:\\n{json.dumps(last_message, indent=2)}")
                 
                 # Also log available tools on first user message
                 if last_message.get("role") == "user" and self._openai_tools_schema:
@@ -232,6 +232,23 @@ class QXLLMAgent:
         if self.reasoning_effort is not None:
             # Pass reasoning_effort as 'effort' string
             extra_body_params["reasoning"] = {"effort": self.reasoning_effort}
+
+        # Add provider settings from environment variables
+        provider_name = os.environ.get("QX_MODEL_PROVIDER")
+        allow_fallbacks_str = os.environ.get("QX_ALLOW_PROVIDER_FALLBACK")
+        
+        if provider_name or allow_fallbacks_str is not None:
+            provider_config = {}
+            if provider_name:
+                provider_config["order"] = [p.strip() for p in provider_name.split(",")]
+            
+            if allow_fallbacks_str is not None:
+                # Convert string to boolean: "true", "1", "yes" -> True; otherwise False
+                allow_fallbacks = allow_fallbacks_str.lower() in ("true", "1", "yes")
+                provider_config["allow_fallbacks"] = allow_fallbacks
+            
+            if provider_config:
+                extra_body_params["provider"] = provider_config
 
         if extra_body_params:
             chat_params["extra_body"] = extra_body_params
@@ -274,7 +291,7 @@ class QXLLMAgent:
                             }
                             for tc in response_message.tool_calls
                         ]
-                    logger.info(f"Received message from LLM:\n{json.dumps(response_dict, indent=2)}")
+                    logger.info(f"Received message from LLM:\\n{json.dumps(response_dict, indent=2)}")
                 
                 messages.append(response_message)
 
@@ -471,7 +488,7 @@ class QXLLMAgent:
         
         # Log the received message if QX_LOG_RECEIVED is set (for streaming)
         if os.getenv("QX_LOG_RECEIVED"):
-            logger.info(f"Received message from LLM (streaming):\n{json.dumps(response_message_dict, indent=2)}")
+            logger.info(f"Received message from LLM (streaming):\\n{json.dumps(response_message_dict, indent=2)}")
         
         messages.append(response_message)
 
@@ -632,7 +649,7 @@ class QXLLMAgent:
                 
                 # Log tool response if QX_LOG_SENT is set (since we're sending it to the model)
                 if os.getenv("QX_LOG_SENT"):
-                    logger.info(f"Sending tool response to LLM:\n{json.dumps(tool_message, indent=2)}")
+                    logger.info(f"Sending tool response to LLM:\\n{json.dumps(tool_message, indent=2)}")
                 
                 messages.append(
                     cast(
