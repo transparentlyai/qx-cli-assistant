@@ -18,6 +18,7 @@ from qx.core.llm import QXLLMAgent, initialize_llm_agent, query_llm
 from qx.core.mcp_manager import MCPManager
 from qx.core.session_manager import (
     clean_old_sessions,
+    load_latest_session,
     load_session_from_path,
     reset_session,
     save_session,
@@ -336,17 +337,26 @@ async def _async_main(
 
             # Handle session recovery
             if recover_session_path:
-                qx_console.print(
-                    f"[info]Attempting to recover session from: {recover_session_path}[/info]"
-                )
-                loaded_history = load_session_from_path(recover_session_path)
-                if loaded_history:
-                    current_message_history = loaded_history
-                    qx_console.print("[info]Session recovered successfully![/info]")
+                if recover_session_path == "LATEST":
+                    qx_console.print("[info]Attempting to recover latest session...[/info]")
+                    loaded_history = load_latest_session()
+                    if loaded_history:
+                        current_message_history = loaded_history
+                        qx_console.print("[info]Latest session recovered successfully![/info]")
+                    else:
+                        qx_console.print("[red]No previous sessions found. Starting new session.[/red]")
                 else:
                     qx_console.print(
-                        "[red]Failed to recover session. Starting new session.[/red]"
+                        f"[info]Attempting to recover session from: {recover_session_path}[/info]"
                     )
+                    loaded_history = load_session_from_path(Path(recover_session_path))
+                    if loaded_history:
+                        current_message_history = loaded_history
+                        qx_console.print("[info]Session recovered successfully![/info]")
+                    else:
+                        qx_console.print(
+                            "[red]Failed to recover session. Starting new session.[/red]"
+                        )
 
             # Handle initial prompt
             if initial_prompt and not exit_after_response:
@@ -465,7 +475,9 @@ def main():
         "-r",
         "--recover-session",
         type=str,
-        help="Path to a JSON session file to recover and continue the conversation.",
+        nargs="?",
+        const="LATEST",
+        help="Path to a JSON session file to recover and continue the conversation. If no path is provided, recovers the latest session.",
     )
     parser.add_argument(
         "initial_prompt",
