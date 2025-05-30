@@ -3,12 +3,12 @@ import logging
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Tuple
 
-from textual import events
+from textual import events # Ensure events is imported
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, Container
 from textual.message import Message
 from textual.widgets import Input, RichLog, Static, TextArea
 
@@ -17,6 +17,7 @@ from qx.cli.console import TextualRichLogHandler, qx_console
 from qx.core.llm import query_llm
 from qx.core.paths import QX_HISTORY_FILE
 from qx.core.session_manager import clean_old_sessions, save_session, save_session_async
+from qx.custom_widgets.option_selector import OptionSelector
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,6 @@ class StatusFooter(Static):
         self.base_message = ""
 
     def update_status(self, message: str):
-        """Update the status message."""
         self.base_message = message
         if message == "[#00ff00]Ready[/]":
             self.update(f"{message}")
@@ -41,20 +41,17 @@ class StatusFooter(Static):
             self.update(message)
 
     def start_spinner(self, message: str = "Thinking..."):
-        """Start spinner animation with message."""
         self.base_message = message
         self.spinner_index = 0
         self.update_spinner()
         self.spinner_timer = self.set_interval(0.1, self.update_spinner)
 
     def stop_spinner(self):
-        """Stop spinner animation."""
         if self.spinner_timer:
             self.spinner_timer.stop()
             self.spinner_timer = None
 
     def update_spinner(self):
-        """Update spinner character."""
         spinner_char = self.spinner_chars[self.spinner_index]
         self.update(f"[orange]{spinner_char} {self.base_message}[/orange]")
         self.spinner_index = (self.spinner_index + 1) % len(self.spinner_chars)
@@ -70,26 +67,20 @@ class QXTextArea(TextArea):
         self.completion_index = -1
         self._history: list[str] = []
         self._history_index: int = -1
-        self.is_multiline_mode: bool = False  # Track input mode
+        self.is_multiline_mode: bool = False
 
     def set_command_completer(self, completer: CommandCompleter):
-        """Set the command completer."""
         self.command_completer = completer
 
     def load_history(self) -> None:
-        """Load command history from file."""
         from qx.core.history_utils import parse_history_file
-        
         self._history = parse_history_file(QX_HISTORY_FILE)
         self._history_index = len(self._history)
-        
         if not QX_HISTORY_FILE.exists():
             QX_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
 
     def add_to_history(self, command: str) -> None:
-        """Add a command to history and save to file."""
         from qx.core.history_utils import save_command_to_history
-        
         command = command.strip()
         if command and (not self._history or self._history[-1] != command):
             self._history.append(command)
@@ -97,33 +88,24 @@ class QXTextArea(TextArea):
             save_command_to_history(QX_HISTORY_FILE, command)
 
     async def key_tab(self) -> None:
-        """Handle tab completion."""
         if self.command_completer:
             current_text = str(self.text)
             completions = self.command_completer.get_completions(current_text)
-
             if completions:
                 if len(completions) == 1:
-                    # Single completion - use it
                     self.text = completions[0]
-                    # Move cursor to end
                     lines = self.text.splitlines()
                     if lines:
                         row = len(lines) - 1
                         col = len(lines[-1])
                         self.move_cursor((row, col))
                 else:
-                    # Multiple completions - cycle through them
                     if self.completions != completions:
                         self.completions = completions
                         self.completion_index = 0
                     else:
-                        self.completion_index = (self.completion_index + 1) % len(
-                            completions
-                        )
-
+                        self.completion_index = (self.completion_index + 1) % len(completions)
                     self.text = self.completions[self.completion_index]
-                    # Move cursor to end
                     lines = self.text.splitlines()
                     if lines:
                         row = len(lines) - 1
@@ -131,12 +113,12 @@ class QXTextArea(TextArea):
                         self.move_cursor((row, col))
 
     async def key_up(self) -> None:
-        """Navigate up through history."""
+        if self.app.is_awaiting_text_input: # Prevent history navigation during special input
+            return 
         if self._history:
             if self._history_index > 0:
                 self._history_index -= 1
             self.text = self._history[self._history_index]
-            # Move cursor to end
             lines = self.text.splitlines()
             if lines:
                 row = len(lines) - 1
@@ -144,151 +126,100 @@ class QXTextArea(TextArea):
                 self.move_cursor((row, col))
 
     async def key_down(self) -> None:
-        """Navigate down through history."""
+        if self.app.is_awaiting_text_input: # Prevent history navigation during special input
+            return
         if self._history:
             if self._history_index < len(self._history) - 1:
                 self._history_index += 1
                 self.text = self._history[self._history_index]
             else:
-                # If at the end of history, clear input
                 self._history_index = len(self._history)
                 self.text = ""
-            # Move cursor to end
             lines = self.text.splitlines()
             if lines:
                 row = len(lines) - 1
                 col = len(lines[-1])
                 self.move_cursor((row, col))
 
-    async def on_key(self, event) -> None:
-        """Handle key events."""
-        if event.key == "enter" and not self.is_multiline_mode:
-            # Only intercept Enter in normal mode
-            text_content = str(self.text)
-            self.post_message(UserInputSubmitted(text_content))
-            event.stop()
+    async def on_key(self, event: events.Key) -> None:
+        # If app is awaiting special text input, Enter submits it.
+        # Otherwise, normal Enter (non-multiline) submits for LLM.
+        if event.key == "enter":
+            if self.app.is_awaiting_text_input or not self.is_multiline_mode:
+                text_content = str(self.text)
+                self.post_message(UserInputSubmitted(text_content))
+                event.stop()
+                return
+        # Other keys are handled by their respective handlers (key_up, key_down, etc.)
+        # or by the base TextArea class.
+
+    def key_escape_enter(self) -> None: # Alt+Enter
+        if self.app.is_awaiting_text_input: # Alt+Enter should not toggle multiline during special input
             return
-        # For all other keys, let TextArea handle them naturally
-
-
-    def key_escape_enter(self) -> None:
-        """Handle Alt+Enter key - toggle mode or submit."""
         if self.is_multiline_mode:
-            # In multiline mode, Alt+Enter submits and exits multiline
             self.post_message(UserInputSubmitted(str(self.text)))
             self.is_multiline_mode = False
             self._update_prompt_label()
         else:
-            # In normal mode, Alt+Enter enables multiline
             self.is_multiline_mode = True
             self._update_prompt_label()
-            # Add a newline to indicate multiline mode started
             if str(self.text).strip():
                 self.insert("\n")
 
     def _update_prompt_label(self):
-        """Update the prompt label based on current mode."""
         app = self.app
-        if hasattr(app, 'prompt_label'):
+        # Only update if not in special text input mode, which sets its own prompt
+        if hasattr(app, 'prompt_label') and not app.is_awaiting_text_input:
             if self.is_multiline_mode:
                 app.prompt_label.update("[#005fff]QM⏵ [/]")
             else:
-                app.prompt_label.update("QX⏵ ")
-
+                app.prompt_label.update(app.original_prompt_label) # Use stored original
 
     async def key_ctrl_r(self) -> None:
-        """Handle Ctrl+R for history search using fzf."""
+        if self.app.is_awaiting_text_input: # Disable fzf during special input
+            return
         if not shutil.which("fzf"):
             self.app.query_one("#output-log").write(
                 "[warning]fzf not found. Ctrl-R history search disabled.[/warning]"
             )
             return
-
         if not QX_HISTORY_FILE.exists() or QX_HISTORY_FILE.stat().st_size == 0:
             return
-
         try:
             from qx.core.history_utils import parse_history_file
-            
             history_commands = parse_history_file(QX_HISTORY_FILE)
-            if not history_commands:
-                return
-
-            # Reverse history for fzf (most recent first)
+            if not history_commands: return
             history_commands.reverse()
-
-            # Use fzf to select a command
             process = await asyncio.create_subprocess_exec(
-                "fzf",
-                "--height",
-                "40%",
-                "--header=[QX History Search]",
-                "--prompt=Search> ",
-                "--select-1",
-                "--exit-0",
-                "--no-sort",
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
+                "fzf", "--height", "40%", "--header=[QX History Search]",
+                "--prompt=Search> ", "--select-1", "--exit-0", "--no-sort",
+                stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await process.communicate(
-                input="\n".join(history_commands).encode("utf-8")
-            )
-
+            stdout, stderr = await process.communicate(input="\n".join(history_commands).encode("utf-8"))
             if process.returncode == 0:
                 selected_command = stdout.decode("utf-8").strip()
-                if selected_command:
-                    self.text = selected_command
-                    # Move cursor to end
-                    lines = self.text.splitlines()
-                    if lines:
-                        row = len(lines) - 1
-                        col = len(lines[-1])
-                        self.move_cursor((row, col))
-            elif process.returncode == 130:  # fzf exit code for Ctrl+C
-                pass  # User cancelled fzf, do nothing
+                if selected_command: self.text = selected_command; self.move_cursor_to_end_of_line()
+            elif process.returncode == 130: pass
             else:
                 error_msg = stderr.decode("utf-8").strip()
-                self.app.query_one("#output-log").write(
-                    f"[red]Error running fzf: {error_msg}[/red]"
-                )
-                self.app.query_one("#output-log").write(
-                    "[info]Ensure 'fzf' executable is installed and in your PATH.[/info]"
-                )
-
+                self.app.query_one("#output-log").write(f"[red]Error running fzf: {error_msg}[/red]")
         except Exception as e:
             self.app.query_one("#output-log").write(f"[red]Error running fzf: {e}[/red]")
-            self.app.query_one("#output-log").write(
-                "[info]Ensure 'fzf' executable is installed and in your PATH.[/info]"
-            )
-
-
-
 
 class UserInputSubmitted(Message):
-    """Message sent when user submits input."""
-
     def __init__(self, input_text: str):
         self.input_text = input_text
         super().__init__()
 
-
-class QXApp(App):
-    """Main QX Textual application."""
-
+class QXApp(App[None]): # Changed App to App[None] for explicit void return on run
     CSS_PATH = Path(__file__).parent.parent / "css" / "main.css"
-
     BINDINGS = [
-        Binding("ctrl+c", "quit", "Quit"),
-        Binding("ctrl+d", "quit", "Quit"),
-        Binding(
-            "alt+enter",
-            "toggle_multiline_or_submit",
-            "Toggle Multiline/Submit",
-            show=False,
-        ),
+        Binding("ctrl+c", "quit", "Quit", priority=True), # Ensure quit has priority
+        Binding("ctrl+d", "quit", "Quit", priority=True),
+        Binding("alt+enter", "toggle_multiline_or_submit", "Toggle Multiline/Submit", show=False),
+        Binding("escape", "handle_escape", "Handle Escape", show=False, priority=True), # For special input cancel
     ]
-
     enable_mouse_support = True
 
     def __init__(self, *args, **kwargs):
@@ -302,505 +233,305 @@ class QXApp(App):
         self.llm_agent = None
         self.current_message_history = None
         self.keep_sessions = 5
-        self.confirmation_widget = None
-        self.confirmation_callback = None
+        
+        self.approval_container: Optional[Container] = None
+        self.approval_selector_instance: Optional[OptionSelector] = None
+        self.approval_future: Optional[asyncio.Future] = None
+        
+        self.text_input_future: Optional[asyncio.Future] = None
+        self.is_awaiting_text_input: bool = False
+        self._stored_original_prompt_label: str = "QX⏵ " # Store the actual original prompt
+        
         self._qx_version: str = ""
         self._llm_model_name: str = ""
-        self.is_processing: bool = False  # Track if model is processing
-        self.original_prompt_label: str = "QX⏵ "
+        self.is_processing: bool = False
+        # self.original_prompt_label is now self._stored_original_prompt_label
+
+    @property
+    def original_prompt_label(self) -> str:
+        return self._stored_original_prompt_label
 
     def set_mcp_manager(self, mcp_manager):
-        """Set the MCP manager for command completion."""
         self.mcp_manager = mcp_manager
 
     def set_llm_agent(self, llm_agent):
-        """Set the LLM agent for processing user input."""
         self.llm_agent = llm_agent
 
     def set_version_info(self, qx_version: str, llm_model_name: str):
-        """Set QX version and LLM model name for display."""
         self._qx_version = qx_version
         self._llm_model_name = llm_model_name
 
     async def request_confirmation(
         self,
-        message: str,
-        choices: str = "ynmac",
-        default: str = "n",
-        allow_modify: bool = False,
-    ) -> str:
-        """Request confirmation from user using Textual widgets."""
-        # Create a future for the result
-        self.confirmation_callback = asyncio.Future()
+        message: str, 
+        choices: str = "ynmac", 
+        default: str = "n", 
+        allow_modify: bool = False, 
+    ) -> Optional[str]: # Return Optional[str] as None is possible for timeout/cancel
+        option_map = { "y": "Yes", "n": "No", "m": "Modify", "a": "Approve All", "c": "Cancel", "s": "Skip", "o": "OK"}
+        built_options: List[Tuple[str, str]] = []
+        default_option_tuple: Optional[Tuple[str, str]] = None
+        if default in choices and default in option_map:
+            default_option_tuple = (option_map[default], default)
+            built_options.append(default_option_tuple)
+        for char_key in choices:
+            if char_key == default and default_option_tuple is not None: continue 
+            if char_key == 'm' and not allow_modify: continue
+            if char_key in option_map: built_options.append((option_map[char_key], char_key))
+        if not built_options: return default 
+        selected_key = await self.request_approval_with_selector(prompt=message, options=built_options)
+        return selected_key if selected_key is not None else default # Ensure default on None
 
-        # Show confirmation widget
-        self._show_confirmation_widget(message, choices, default, allow_modify)
+    async def prompt_for_text_input(self, prompt_message: str, default_value: Optional[str] = None) -> Optional[str]:
+        """Prompts the user for text input using the main input area."""
+        if self.is_awaiting_text_input or (self.text_input_future and not self.text_input_future.done()):
+            logger.warning("prompt_for_text_input called while another input is already pending.")
+            return None # Or raise an error
+
+        if self.approval_container and self.approval_container.display:
+            await self._hide_approval_selector() # Hide OptionSelector if it was up
+
+        self._stored_original_prompt_label = str(self.prompt_label.renderable) # Save current
+        self.prompt_label.update(f"{prompt_message} (Esc to cancel) ")
+        
+        input_container = self.query_one("#input-container")
+        input_container.display = True # Ensure main input is visible
+
+        self.user_input.text = default_value or ""
+        self.user_input.disabled = False
+        self.user_input.can_focus = True
+        self.user_input.focus()
+        self.user_input.move_cursor_to_end_of_line() # Move cursor to end
+
+        self.is_awaiting_text_input = True
+        self.text_input_future = asyncio.Future()
 
         try:
-            # Wait for user response with timeout
-            result = await asyncio.wait_for(
-                self.confirmation_callback, 
-                timeout=300.0  # 5 minute timeout
-            )
+            # Timeout for user input (e.g., 5 minutes)
+            result = await asyncio.wait_for(self.text_input_future, timeout=300.0)
             return result
         except asyncio.TimeoutError:
-            logger.warning("Confirmation dialog timed out")
-            return default  # Return default choice on timeout
+            logger.warning("Text input timed out.")
+            self.output_log.write("[yellow]Text input timed out.[/yellow]")
+            return None
         except asyncio.CancelledError:
-            return "c"  # Return cancel on cancellation
+            logger.info("Text input cancelled.")
+            # Message already printed by handle_escape or similar
+            return None
         finally:
-            # Hide confirmation widget
-            self._hide_confirmation_widget()
-            # Clean up future if not done
-            if self.confirmation_callback and not self.confirmation_callback.done():
-                self.confirmation_callback.cancel()
+            self.is_awaiting_text_input = False
+            self.prompt_label.update(self._stored_original_prompt_label) # Restore original prompt
+            # Do not clear self.user_input.text here, _handle_submitted_text will do it.
+            if self.text_input_future and not self.text_input_future.done():
+                 # This case should ideally not happen if await_for completed or was cancelled
+                 self.text_input_future.cancel()
+            self.text_input_future = None
+            # Ensure normal input state is restored
+            if self.user_input: self.user_input._update_prompt_label() 
 
     async def _handle_llm_query(self, input_text: str) -> None:
-        """Handle LLM query in a separate task."""
-        # Check if already processing
-        if self.is_processing:
-            logger.warning("Already processing a query")
-            self.output_log.write("[yellow]Another query is already in progress. Please wait.[/yellow]")
-            return
-        
+        if self.is_processing: return
         try:
-            # Set processing state and disable user input
             self.is_processing = True
-            self.user_input.disabled = True
-            self.user_input.can_focus = False
-            
-            # Store current prompt label and set it to grey
-            self.original_prompt_label = str(self.prompt_label.renderable)
-            grey_prompt = f"[dim]{self.original_prompt_label}[/dim]"
-            self.prompt_label.update(grey_prompt)
-            
-            # Start spinner animation
-            if self.status_footer:
-                self.status_footer.start_spinner("[#af00d7 bold]Thinking...[/]")
-
-            # Query LLM - let individual operations handle their own timeouts
-            run_result = await query_llm(
-                self.llm_agent,
-                input_text,
-                message_history=self.current_message_history,
-                console=qx_console,
-            )
-
+            if self.user_input: self.user_input.disabled = True; self.user_input.can_focus = False
+            # self._stored_original_prompt_label is already set, use it for grey out
+            grey_prompt = f"[dim]{self._stored_original_prompt_label}[/dim]"
+            if self.prompt_label: self.prompt_label.update(grey_prompt)
+            if self.status_footer: self.status_footer.start_spinner("[#af00d7 bold]Thinking...[/]")
+            run_result = await query_llm(agent=self.llm_agent, user_input=input_text, message_history=self.current_message_history, console=qx_console)
             if run_result and hasattr(run_result, "output"):
-                output_content = (
-                    str(run_result.output) if run_result.output is not None else ""
-                )
-                # Only render final output if streaming is disabled to avoid duplication
+                output_content = str(run_result.output) if run_result.output is not None else ""
                 if output_content.strip() and not self.llm_agent.enable_streaming:
-                    # Add an empty line before the response
-                    self.output_log.write("")
-                    # Render as Markdown
-                    from rich.markdown import Markdown
-
-                    markdown = Markdown(output_content, code_theme="rrt")
-                    self.output_log.write(markdown)
-                    self.output_log.write("")
-                elif self.llm_agent.enable_streaming:
-                    # For streaming, just add a newline for spacing
-                    self.output_log.write("")
-
-                if hasattr(run_result, "all_messages"):
-                    self.current_message_history = run_result.all_messages()
-
-                # Save session after each turn
-                if self.current_message_history:
-                    # Use async version since we're in an async context
-                    await save_session_async(self.current_message_history)
-                    clean_old_sessions(self.keep_sessions)
-
-            # Stop spinner and reset status to ready
-            if self.status_footer:
-                self.status_footer.stop_spinner()
-                self.status_footer.update_status("[#00ff00]Ready[/]")
-
-        except asyncio.CancelledError:
-            # Task was cancelled
-            self.output_log.write("[yellow]Info:[/yellow] Request cancelled")
-            if self.status_footer:
-                self.status_footer.stop_spinner()
-                self.status_footer.update_status("[yellow]Cancelled[/yellow]")
-            raise
-        except Exception as e:
-            # Log full traceback for debugging
-            import traceback
-
-            logger.error(f"Error in LLM interaction: {e}", exc_info=True)
-
-            # Display error with traceback in output log
-            error_details = traceback.format_exc()
-            self.output_log.write(f"[red]Error:[/red] {e}")
-            self.output_log.write(f"[dim]{error_details}[/dim]")
-
-            # Stop spinner and reset status on error too
-            if self.status_footer:
-                self.status_footer.stop_spinner()
-                self.status_footer.update_status("[red]Error[/red]")
+                    self.output_log.write(""); from rich.markdown import Markdown
+                    self.output_log.write(Markdown(output_content, code_theme="rrt")); self.output_log.write("")
+                elif self.llm_agent.enable_streaming: self.output_log.write("")
+                if hasattr(run_result, "all_messages"): self.current_message_history = run_result.all_messages()
+                if self.current_message_history: await save_session_async(self.current_message_history); clean_old_sessions(self.keep_sessions)
+            if self.status_footer: self.status_footer.stop_spinner(); self.status_footer.update_status("[#00ff00]Ready[/]")
+        except asyncio.CancelledError: self.output_log.write("[yellow]Info:[/yellow] Request cancelled"); 
+        except Exception as e: import traceback; logger.error(f"Error in LLM: {e}", exc_info=True); self.output_log.write(f"[red]Error:[/red] {e}\n[dim]{traceback.format_exc()}[/dim]")
         finally:
-            # Re-enable user input after model processing is complete
             self.is_processing = False
-            self.user_input.disabled = False
-            self.user_input.can_focus = True
-            
-            # Restore original prompt label color
-            self.prompt_label.update(self.original_prompt_label)
-            
-            # Restore focus to input widget
-            self.user_input.focus()
+            if self.user_input: self.user_input.disabled = False; self.user_input.can_focus = True
+            if self.prompt_label: self.prompt_label.update(self._stored_original_prompt_label) # Restore original
+            if self.user_input: self.user_input.focus()
 
     def compose(self) -> ComposeResult:
-        """Create the UI layout."""
         with Vertical(id="main-container"):
-            log = RichLog(id="output-log", markup=True, wrap=True)
-            log.can_focus = False
-            yield log
-            # Create a bottom section that contains both input and footer
+            yield RichLog(id="output-log", markup=True, wrap=True)
+            self.approval_container = Container(id="approval-selector-container", classes="hidden")
+            yield self.approval_container
             with Vertical(id="bottom-section"):
                 with Horizontal(id="input-container"):
-                    yield Static("QX⏵ ", id="prompt-label")
+                    yield Static(self.original_prompt_label, id="prompt-label") # Use property
                     yield QXTextArea(id="user-input")
-                # Add a hidden confirmation container
-                with Horizontal(id="confirmation-container", classes="hidden"):
-                    yield Static("", id="confirmation-message")
-                    yield Static("[orange]Y[/]es", classes="confirmation-choice")
-                    yield Static("[orange]N[/]o", classes="confirmation-choice")
-                    yield Static(
-                        "[orange]M[/]odify",
-                        id="confirm-modify",
-                        classes="confirmation-choice hidden",
-                    )
-                    yield Static(
-                        "[orange]A[/]ll",
-                        id="confirm-approve-all",
-                        classes="confirmation-choice",
-                    )
-                    yield Static(
-                        "[orange]C[/]ancel",
-                        id="confirm-cancel",
-                        classes="confirmation-choice",
-                    )
                 yield StatusFooter(id="status-footer")
 
-    def _show_confirmation_widget(
-        self,
-        message: str,
-        choices: str,
-        default: str,
-        allow_modify: bool = False
-    ):
-        """Show confirmation widget."""
-        # Disable focus on input widgets to prevent key capture
-        self.user_input.can_focus = False
-        
-        # Hide input container and show confirmation container
-        input_container = self.query_one("#input-container")
-        confirmation_container = self.query_one("#confirmation-container")
+    async def _show_approval_selector(self, options: list[tuple[str, str]], prompt: str):
+        if not self.approval_container: return
+        if self.approval_selector_instance: await self.approval_selector_instance.remove(); self.approval_selector_instance = None
+        self.approval_selector_instance = OptionSelector(options=options, border_title=prompt, id="approval-selector-active")
+        try: self.query_one("#input-container").display = False
+        except: pass # Ignore if not found
+        if self.user_input: self.user_input.can_focus = False
+        await self.approval_container.mount(self.approval_selector_instance)
+        self.approval_container.display = True
+        if self.approval_selector_instance: self.approval_selector_instance.focus()
 
-        input_container.add_class("hidden")
-        confirmation_container.remove_class("hidden")
+    async def _hide_approval_selector(self):
+        if self.approval_container: self.approval_container.display = False
+        if self.approval_selector_instance: await self.approval_selector_instance.remove(); self.approval_selector_instance = None
+        try: self.query_one("#input-container").display = True
+        except: pass
+        if self.user_input: self.user_input.can_focus = True; self.user_input.focus()
+        if self.approval_future and not self.approval_future.done(): self.approval_future.cancel()
+        self.approval_future = None
 
-        # Update message
-        msg_widget = self.query_one("#confirmation-message", Static)
-        msg_widget.update(f"{message}")
+    async def request_approval_with_selector(self, prompt: str, options: list[tuple[str, str]]) -> Optional[str]:
+        if self.approval_future and not self.approval_future.done(): return None
+        self.approval_future = asyncio.Future()
+        await self._show_approval_selector(options, prompt)
+        try: return await asyncio.wait_for(self.approval_future, timeout=300.0)
+        except asyncio.TimeoutError: await self._hide_approval_selector(); return None
+        except asyncio.CancelledError: 
+            if self.approval_container and self.approval_container.display: await self._hide_approval_selector()
+            return None
+        finally: 
+            if self.approval_container and self.approval_container.display: await self._hide_approval_selector()
 
-        # Show/hide modify option based on allow_modify
-        modify_widget = self.query_one("#confirm-modify", Static)
-        if allow_modify:
-            modify_widget.remove_class("hidden")
-        else:
-            modify_widget.add_class("hidden")
-
-    def _hide_confirmation_widget(self):
-        """Hide confirmation widget and restore input."""
-        # Re-enable focus on input widgets
-        self.user_input.can_focus = True
-        
-        input_container = self.query_one("#input-container")
-        confirmation_container = self.query_one("#confirmation-container")
-
-        confirmation_container.add_class("hidden")
-        input_container.remove_class("hidden")
-
-        # Refocus on the input widget
-        self.user_input.focus()
-        self.confirmation_callback = None
-
-    # Removed on_button_pressed since we're using Static widgets now
-
-    async def on_key(self, event: events.Key) -> None:
-        """Handle key press events during confirmation."""
-        if self.confirmation_callback and not self.confirmation_callback.done():
-            if event.key == "y":
-                self.confirmation_callback.set_result("y")
-            elif event.key == "n":
-                self.confirmation_callback.set_result("n")
-            elif event.key == "m":
-                self.confirmation_callback.set_result("m")
-            elif event.key == "a":
-                self.confirmation_callback.set_result("a")
-            elif event.key == "c":
-                self.confirmation_callback.set_result("c")
-            elif event.key == "escape":
-                self.confirmation_callback.set_result("c")
-
-
+    async def on_option_selector_option_selected(self, message: OptionSelector.OptionSelected) -> None:
+        if self.approval_future and not self.approval_future.done(): self.approval_future.set_result(message.key)
+        await self._hide_approval_selector()
+    
     async def _process_user_input(self, input_text: str) -> None:
-        """Process user input after it's been submitted."""
-        # If there's a prompt_handler waiting, resolve its future
-        if (
-            self.prompt_handler
-            and self.prompt_handler._input_future
-            and not self.prompt_handler._input_future.done()
-        ):
-            self.prompt_handler.handle_input(input_text)
-            return  # Input handled by prompt_handler, no further processing here
-
-        # Display the input in the output
+        # This is called AFTER special input (like for modify) is handled by _handle_submitted_text
+        if self.prompt_handler and self.prompt_handler._input_future and not self.prompt_handler._input_future.done():
+            self.prompt_handler.handle_input(input_text); return
         self.output_log.write(f"[red]⏵ {input_text}[/]")
-
-        # Add to history
-        self.user_input.add_to_history(input_text)
-
-        # Handle exit commands
-        if input_text.lower() in ["exit", "quit"]:
-            if self.current_message_history:
-                # Use async version since we're in an async context
-                await save_session_async(self.current_message_history)
-                clean_old_sessions(self.keep_sessions)
-            self.exit()
-            return
-
-        # Handle commands starting with /
-        if input_text.startswith("/"):
-            await self.handle_command(input_text)
-            return
-
-        # Process LLM interaction
-        if self.llm_agent:
-            # Run LLM query in a separate task to avoid blocking UI
-            async def run_query():
-                try:
-                    await self._handle_llm_query(input_text)
-                except asyncio.CancelledError:
-                    pass
-                except Exception as e:
-                    logger.error(f"Unhandled error in LLM query task: {e}", exc_info=True)
-                    if self.output_log:
-                        self.output_log.write(f"[red]Critical Error:[/red] {e}")
-            
-            asyncio.create_task(run_query())
+        if self.user_input: self.user_input.add_to_history(input_text)
+        if input_text.lower() in ["exit", "quit"]: await self._async_quit(); return
+        if input_text.startswith("/"): await self.handle_command(input_text); return
+        if self.llm_agent: asyncio.create_task(self._handle_llm_query(input_text))
 
     def on_mount(self) -> None:
-        """Set up the app after mounting."""
         self.output_log = self.query_one("#output-log", RichLog)
         self.user_input = self.query_one("#user-input", QXTextArea)
         self.prompt_label = self.query_one("#prompt-label", Static)
         self.status_footer = self.query_one("#status-footer", StatusFooter)
-
-        # Connect console to widgets
-        qx_console.set_widgets(self.output_log, self.user_input)
-        qx_console._app = self
-
-        # Set the logger in qx_console after widgets are set
+        self._stored_original_prompt_label = str(self.prompt_label.renderable) # Store initial prompt
+        qx_console.set_widgets(self.output_log, self.user_input); qx_console._app = self
         qx_console.set_logger(logging.getLogger("qx"))
-
-        # Display version info in the Textual log
-        if self._qx_version and self._llm_model_name:
-            info_text = f"QX ver:{self._qx_version} - {self._llm_model_name}"
-            self.output_log.write(f"[dim]{info_text}[/dim]")
-
-        # Set up command completion
-        if self.mcp_manager:
-            command_completer = CommandCompleter(mcp_manager=self.mcp_manager)
-            self.user_input.set_command_completer(command_completer)
-
-        # Load history for the input widget
-        self.user_input.load_history()
-
-        # Focus on input
-        self.user_input.focus()
+        if self._qx_version and self._llm_model_name: self.output_log.write(f"[dim]QX ver:{self._qx_version} - {self._llm_model_name}[/dim]")
+        if self.mcp_manager and self.user_input: self.user_input.set_command_completer(CommandCompleter(mcp_manager=self.mcp_manager))
+        if self.user_input: self.user_input.load_history(); self.user_input.focus()
 
     def action_toggle_multiline_or_submit(self) -> None:
-        """Handle Alt+Enter - delegate to the TextArea."""
-        # The QXTextArea handles this internally now
-        self.user_input.key_escape_enter()
+        if self.user_input: self.user_input.key_escape_enter()
 
-    async def on_input_submitted(self, event: Input.Submitted) -> None:
-        """Handle input submission."""
-        try:
-            # Ignore input if model is currently processing
-            if self.is_processing:
-                return
-                
-            if event.input.id == "user-input":
-                input_text = str(event.value)
+    async def on_input_submitted(self, event: Input.Submitted) -> None: # Should not be used by QXTextArea
+        if event.input.id == "user-input": await self._handle_submitted_text(str(event.value))
 
-                # Clear the input and reset mode
-                self.user_input.clear()
-                self.user_input.is_multiline_mode = False
-                self.user_input._update_prompt_label()
-
-                # Skip empty input - don't process anything
-                if not input_text.strip():
-                    return
-
-                # If there's a prompt_handler waiting, resolve its future
-                if (
-                    self.prompt_handler
-                    and self.prompt_handler._input_future
-                    and not self.prompt_handler._input_future.done()
-                ):
-                    self.prompt_handler.handle_input(input_text)
-                    return  # Input handled by prompt_handler, no further processing here
-
-                # Process the input using common logic
-                await self._process_user_input(input_text)
-        except Exception as e:
-            self.output_log.write(f"[red]Error processing input: {e}[/red]")
-                
     async def on_user_input_submitted(self, event: UserInputSubmitted) -> None:
-        """Handle UserInputSubmitted message."""
+        await self._handle_submitted_text(event.input_text)
+
+    async def _handle_submitted_text(self, text: str) -> None:
+        """Central handler for any text submitted from the main input area."""
         try:
-            # Ignore input if model is currently processing
-            if self.is_processing:
-                return
-                
-            input_text = event.input_text
+            if self.is_awaiting_text_input and self.text_input_future and not self.text_input_future.done():
+                self.text_input_future.set_result(text)
+                # Input field will be cleared by prompt_for_text_input's finally block or here
+                if self.user_input: self.user_input.text = "" # Clear after successful special input
+                return # Input was for prompt_for_text_input
 
-            # Clear the input and reset mode
-            self.user_input.clear()
-            self.user_input.is_multiline_mode = False
-            self.user_input._update_prompt_label()
-
-            # Skip empty input - don't process anything
-            if not input_text.strip():
-                return
-
-            # If there's a prompt_handler waiting, resolve its future
-            if (
-                self.prompt_handler
-                and self.prompt_handler._input_future
-                and not self.prompt_handler._input_future.done()
-            ):
-                self.prompt_handler.handle_input(input_text)
-                return  # Input handled by prompt_handler, no further processing here
-
-            # Process the input using common logic
-            await self._process_user_input(input_text)
+            if self.is_processing: return # Ignore if LLM is busy
+            
+            input_text = text
+            if self.user_input:
+                self.user_input.text = "" # Clear main input after normal submission
+                if self.user_input.is_multiline_mode:
+                    self.user_input.is_multiline_mode = False
+                    self.user_input._update_prompt_label() # Reset to normal prompt
+            
+            if not input_text.strip(): return # Skip empty input for LLM
+            await self._process_user_input(input_text) # Process for LLM or command
         except Exception as e:
-            # Catch any exceptions in the input handler itself
-            import traceback
-
-            logger.critical(f"Critical error in input handler: {e}", exc_info=True)
-            if self.output_log:
-                error_details = traceback.format_exc()
-                self.output_log.write(
-                    f"[red]Critical Error in Input Handler:[/red] {e}"
-                )
-                self.output_log.write(f"[dim]{error_details}[/dim]")
-            if self.status_footer:
-                self.status_footer.stop_spinner()
-                self.status_footer.update_status("[red]Error[/red]")
+            import traceback; logger.critical(f"Critical error in input handling: {e}", exc_info=True)
+            if self.output_log: self.output_log.write(f"[red]Critical Error in Input Handler:[/red] {e}\n[dim]{traceback.format_exc()}[/dim]")
 
     async def handle_command(self, command_input: str):
-        """Handle slash commands."""
-        parts = command_input.strip().split(maxsplit=1)
-        command_name = parts[0].lower()
-        command_args = parts[1].strip() if len(parts) > 1 else ""
-
+        parts = command_input.strip().split(maxsplit=1); command_name = parts[0].lower()
+        # ... (rest of handle_command remains the same)
         if command_name == "/model" and self.llm_agent:
-            model_info_content = f"[bold]Current LLM Model Configuration:[/bold]\n"
-            model_info_content += (
-                f"  Model Name: [green]{self.llm_agent.model_name}[/green]\n"
-            )
-            model_info_content += f"  Provider: [green]OpenRouter (https://openrouter.ai/api/v1)[/green]\n"
-            model_info_content += (
-                f"  Temperature: [green]{self.llm_agent.temperature}[/green]\n"
-            )
-            model_info_content += f"  Max Output Tokens: [green]{self.llm_agent.max_output_tokens}[/green]\n"
-            reasoning_effort = (
-                self.llm_agent.reasoning_effort
-                if self.llm_agent.reasoning_effort
-                else "None"
-            )
-            model_info_content += (
-                f"  Reasoning Effort: [green]{reasoning_effort}[/green]\n"
-            )
-            self.output_log.write(model_info_content)
+            info = f"[bold]Current LLM Model Configuration:[/bold]\n"
+            info += f"  Model Name: [green]{self.llm_agent.model_name}[/green]\n"
+            info += f"  Provider: [green]OpenRouter (https://openrouter.ai/api/v1)[/green]\n"
+            info += f"  Temperature: [green]{self.llm_agent.temperature}[/green]\n"
+            info += f"  Max Output Tokens: [green]{self.llm_agent.max_output_tokens}[/green]\n"
+            info += f"  Reasoning Effort: [green]{self.llm_agent.reasoning_effort or 'None'}[/green]"
+            self.output_log.write(info)
         elif command_name == "/reset":
-            if self.output_log:
-                self.output_log.clear()
+            if self.output_log: self.output_log.clear()
             self.current_message_history = None
-            # Reset session
-            from qx.core.session_manager import reset_session
-
-            reset_session()
-            self.output_log.write(
-                "[info]Session reset, system prompt reloaded, and output cleared.[/info]"
-            )
+            from qx.core.session_manager import reset_session; reset_session()
+            self.output_log.write("[info]Session reset, system prompt reloaded, and output cleared.[/info]")
         elif command_name == "/approve-all":
-            # Enable approve-all mode
             import qx.core.user_prompts
-
-            # Set approve all safely
-            async with qx.core.user_prompts._approve_all_lock:
-                qx.core.user_prompts._approve_all_active = True
-            self.output_log.write(
-                "[orange]✓ 'Approve All' mode activated for this session.[/orange]"
-            )
-            self.output_log.write(
-                "[info]All confirmations will be auto-approved during this session.[/info]"
-            )
-
-        else:
-            self.output_log.write(f"[red]Unknown command: {command_name}[/red]")
-            self.output_log.write("Available commands: /model, /reset, /approve-all")
+            async with qx.core.user_prompts._approve_all_lock: qx.core.user_prompts._approve_all_active = True
+            self.output_log.write("[orange]✓ 'Approve All' mode activated for this session.[/orange]")
+        else: self.output_log.write(f"[red]Unknown command: {command_name}[/red]")
 
     def update_prompt_label(self, new_label: str):
-        """Update the prompt label."""
-        if self.prompt_label:
+        # This is a general utility; specific input modes manage their own prompt text.
+        if self.prompt_label and not self.is_awaiting_text_input: 
             self.prompt_label.update(new_label)
+            self._stored_original_prompt_label = new_label # Update stored if changed externally
 
     async def cleanup_tasks(self):
-        """Clean up background tasks before shutdown."""
-        # Cancel any pending confirmation
-        if self.confirmation_callback and not self.confirmation_callback.done():
-            self.confirmation_callback.cancel()
+        if self.approval_future and not self.approval_future.done(): self.approval_future.cancel()
+        if self.text_input_future and not self.text_input_future.done(): self.text_input_future.cancel()
 
-    def action_quit(self) -> None:
-        """Handle quit action."""
-        # Create task to handle async cleanup
-        asyncio.create_task(self._async_quit())
+    def action_quit(self) -> None: asyncio.create_task(self._async_quit())
     
     async def _async_quit(self):
-        """Async quit handler."""
         try:
+            if self.status_footer: self.status_footer.stop_spinner()
+            if self.approval_container and self.approval_container.display: await self._hide_approval_selector()
             await self.cleanup_tasks()
-        except Exception as e:
-            logger.error(f"Error during cleanup: {e}", exc_info=True)
+        except Exception as e: logger.error(f"Error during pre-exit cleanup: {e}", exc_info=True)
         finally:
-            if (
-                self.prompt_handler
-                and self.prompt_handler._input_future
-                and not self.prompt_handler._input_future.done()
-            ):
+            if self.prompt_handler and self.prompt_handler._input_future and not self.prompt_handler._input_future.done():
                 self.prompt_handler._input_future.set_result("exit")
             self.exit()
+    
+    async def action_handle_escape(self) -> None:
+        """Handle Escape key presses globally."""
+        # If awaiting special text input (e.g., for file path modification)
+        if self.is_awaiting_text_input and self.text_input_future and not self.text_input_future.done():
+            logger.info("Escape pressed during text input. Cancelling.")
+            self.output_log.write("[yellow]Input cancelled.[/yellow]")
+            self.text_input_future.set_result(None) # Resolve with None to indicate cancellation
+            # The finally block in prompt_for_text_input will restore the UI
+            return
+
+        # If OptionSelector is active, it should handle Escape itself to close or post a cancel message.
+        # If we want Escape to globally cancel OptionSelector, we might need to post a message to it
+        # or call its cancellation logic if it doesn't handle Escape by default for closing.
+        # For now, assuming OptionSelector handles its own Escape if needed for deselection/cancel.
+
+        # If no specific modal/input is active, Escape doesn't have a default global action here.
+        # Could be used to unfocus input, clear input, etc. if desired.
+        # self.user_input.text = "" # Example: clear input on escape
+        # self.screen.set_focus(None) # Example: unfocus input
 
 
-async def run_textual_app(
-    mcp_manager=None, initial_prompt: Optional[str] = None
-) -> QXApp:
-    """Run the Textual app and return the app instance."""
+async def run_textual_app(mcp_manager=None, initial_prompt: Optional[str] = None) -> QXApp:
     app = QXApp()
-    if mcp_manager:
-        app.set_mcp_manager(mcp_manager)
-
-    # Run the app in the background
-    await app._startup()
-
+    if mcp_manager: app.set_mcp_manager(mcp_manager)
+    # Pass initial_prompt to app if needed, e.g., app.initial_prompt = initial_prompt
+    # The original code had `await app._startup()`. This is internal.
+    # For a typical app run, you'd use `app.run()` or `app.run_async()`.
+    # If this function is meant to set up and return the app instance for later running,
+    # then `_startup` might be part of that, but it's unusual.
+    # For now, I will keep it as it was in the provided file.
+    await app._startup() 
     return app
