@@ -418,6 +418,7 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
 
     def on_mount(self) -> None:
         self.output_log = self.query_one("#output-log", RichLog)
+        self.output_log.can_focus = False # <--- MODIFIED HERE
         self.user_input = self.query_one("#user-input", QXTextArea)
         self.prompt_label = self.query_one("#prompt-label", Static)
         self.status_footer = self.query_one("#status-footer", StatusFooter)
