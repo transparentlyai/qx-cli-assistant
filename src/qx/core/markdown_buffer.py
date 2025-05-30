@@ -1,4 +1,6 @@
+import asyncio
 import re
+import threading
 from typing import Optional
 
 from markdown_it import MarkdownIt
@@ -37,53 +39,60 @@ class MarkdownStreamBuffer:
             "image_open",
             # Note: `code_inline` has nesting 0. `backtick_open` isn't a standard token type.
         }
+        # Thread safety lock
+        self._lock = threading.Lock()
 
     def add_content(self, content: str) -> Optional[str]:
         """
         Add content to the buffer and return content to render if safe, otherwise None.
+        Thread-safe version.
 
         Returns:
             str: Content to render now, or None if should wait for more content.
         """
         if not content:  # Guard against empty content
             return None
-            
-        self.buffer += content
         
-        # Update code block state based on newly added content
-        self._update_code_block_state(content)
-
-        if self._should_render():
-            content_to_render = self.buffer
+        with self._lock:
+            self.buffer += content
             
-            # Safety check: ensure we're not returning empty content
-            if not content_to_render.strip():
-                return None
-                
-            self.buffer = ""
-            # Mark that we've rendered at least once
-            self._has_rendered_once = True
-            # Reset code block state after rendering
-            # Since we never force-render inside code blocks now, just check the rendered content
-            self._in_code_block = content_to_render.count('```') % 2 == 1
-            return content_to_render
+            # Update code block state based on newly added content
+            self._update_code_block_state(content)
 
-        return None
+            if self._should_render():
+                content_to_render = self.buffer
+                
+                # Safety check: ensure we're not returning empty content
+                if not content_to_render.strip():
+                    return None
+                    
+                self.buffer = ""
+                # Mark that we've rendered at least once
+                self._has_rendered_once = True
+                # Reset code block state after rendering
+                # Since we never force-render inside code blocks now, just check the rendered content
+                self._in_code_block = content_to_render.count('```') % 2 == 1
+                return content_to_render
+
+            return None
 
     def flush(self) -> str:
         """
         Flush any remaining buffer content (called when stream ends).
+        Thread-safe version.
 
         Returns:
             str: Any remaining buffer content.
         """
-        content_to_render = self.buffer
-        self.buffer = ""
-        self._in_code_block = False  # Reset state
-        return content_to_render
+        with self._lock:
+            content_to_render = self.buffer
+            self.buffer = ""
+            self._in_code_block = False  # Reset state
+            return content_to_render
 
     def _update_code_block_state(self, new_content: str) -> None:
-        """Update the code block state based on newly added content."""
+        """Update the code block state based on newly added content.
+        Must be called within a lock."""
         # Count ``` in the new content
         fence_count = new_content.count('```')
         

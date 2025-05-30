@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from pathlib import Path
@@ -46,7 +47,7 @@ def is_path_allowed(
 
 
 # --- Copied and adapted from src/qx/tools/read_file.py (read_file_impl) ---
-def _read_file_core_logic(path_str: str) -> Tuple[Optional[str], Optional[str]]:
+async def _read_file_core_logic(path_str: str) -> Tuple[Optional[str], Optional[str]]:
     """
     Core logic to read file content. Does not handle approval or console output.
     Returns (content, error_message). content is None if error.
@@ -65,7 +66,8 @@ def _read_file_core_logic(path_str: str) -> Tuple[Optional[str], Optional[str]]:
                 f"Error: File not found or is not a regular file: {absolute_path}",
             )
 
-        content = absolute_path.read_text(encoding="utf-8")
+        # Run blocking I/O in thread pool to avoid blocking the event loop
+        content = await asyncio.to_thread(absolute_path.read_text, encoding="utf-8")
         logger.info(f"Successfully read file (core logic): {absolute_path}")
         return content, None
 
@@ -218,7 +220,7 @@ async def read_file_tool(  # Made async
         )
         return ReadFilePluginOutput(path=expanded_path_arg, content=None, error=err_msg)
 
-    content, error_from_core = _read_file_core_logic(str(absolute_path_to_evaluate))
+    content, error_from_core = await _read_file_core_logic(str(absolute_path_to_evaluate))
 
     if error_from_core:
         # _read_file_core_logic already logs its specific errors.

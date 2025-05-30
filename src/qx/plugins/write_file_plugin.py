@@ -1,3 +1,4 @@
+import asyncio
 import difflib
 import logging
 import os
@@ -43,7 +44,7 @@ def is_path_allowed(
 
 
 # --- Copied and adapted from src/qx/tools/write_file.py (write_file_impl) ---
-def _write_file_core_logic(path_str: str, content: str) -> Optional[str]:
+async def _write_file_core_logic(path_str: str, content: str) -> Optional[str]:
     """
     Core logic to write content to a file. Does not handle approval.
     Returns None if successful, or an error message string.
@@ -64,8 +65,12 @@ def _write_file_core_logic(path_str: str, content: str) -> Optional[str]:
             logger.error(f"Write access denied by policy (core logic): {absolute_path}")
             return f"Error: Access denied by policy for path: {absolute_path}"
 
-        absolute_path.parent.mkdir(parents=True, exist_ok=True)
-        absolute_path.write_text(content, encoding="utf-8")
+        # Run blocking I/O operations in a thread pool to avoid blocking the event loop
+        def _write_file_sync():
+            absolute_path.parent.mkdir(parents=True, exist_ok=True)
+            absolute_path.write_text(content, encoding="utf-8")
+        
+        await asyncio.to_thread(_write_file_sync)
         logger.info(f"Successfully wrote to file: {absolute_path}")
         return None
     except PermissionError:
@@ -83,7 +88,7 @@ def _write_file_core_logic(path_str: str, content: str) -> Optional[str]:
 
 
 # --- Adapted from ApprovalManager._get_file_preview_renderables for write_file ---
-def _generate_write_preview(
+async def _generate_write_preview(
     file_path_str: str,
     new_content: str,
     syntax_theme: str = "vim",  # Default theme
@@ -93,7 +98,8 @@ def _generate_write_preview(
 
     if file_path.exists() and file_path.is_file():
         try:
-            old_content = file_path.read_text(encoding="utf-8")
+            # Run blocking I/O in thread pool
+            old_content = await asyncio.to_thread(file_path.read_text, encoding="utf-8")
             if old_content == new_content:
                 return "[bold yellow]No changes detected - file content is identical.[/bold yellow]"
 
@@ -213,7 +219,7 @@ async def write_file_tool(  # Made async
         )
 
     # Generate preview
-    preview_renderable = _generate_write_preview(
+    preview_renderable = await _generate_write_preview(
         path_to_consider, args.content, syntax_theme="vim"
     )
 
@@ -244,7 +250,7 @@ async def write_file_tool(  # Made async
         )
 
     # Proceed to write
-    error_from_impl = _write_file_core_logic(path_to_write, args.content)
+    error_from_impl = await _write_file_core_logic(path_to_write, args.content)
 
     if error_from_impl:
         console.print(

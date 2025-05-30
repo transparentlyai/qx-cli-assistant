@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, cast
@@ -14,7 +15,8 @@ logger = logging.getLogger(__name__)
 
 # Global variable to track current session filename
 _current_session_file = None
-_session_lock = asyncio.Lock()  # Protect session file access
+_session_lock = asyncio.Lock()  # Protect session file access in async context
+_session_lock_sync = threading.Lock()  # Protect session file access in sync context
 
 async def get_or_create_session_filename():
     """
@@ -48,23 +50,14 @@ async def save_session_async(message_history: List[ChatCompletionMessageParam]):
     ]
 
     try:
-        # Use asyncio to write file without blocking
-        import aiofiles
-        async with aiofiles.open(session_filename, mode='w', encoding='utf-8') as f:
-            await f.write(json.dumps(serializable_history, indent=2))
-        logger.info(f"Session saved to {session_filename}")
-    except ImportError:
-        # Fallback to sync if aiofiles not available
-        try:
-            await asyncio.to_thread(
-                lambda: session_filename.write_text(
-                    json.dumps(serializable_history, indent=2), 
-                    encoding='utf-8'
-                )
+        # Use asyncio.to_thread for file I/O to avoid blocking
+        await asyncio.to_thread(
+            lambda: session_filename.write_text(
+                json.dumps(serializable_history, indent=2), 
+                encoding='utf-8'
             )
-            logger.info(f"Session saved to {session_filename}")
-        except Exception as e:
-            logger.error(f"Failed to save session to {session_filename}: {e}", exc_info=True)
+        )
+        logger.info(f"Session saved to {session_filename}")
     except Exception as e:
         logger.error(f"Failed to save session to {session_filename}: {e}", exc_info=True)
 
@@ -86,24 +79,25 @@ def save_session_sync(message_history: List[ChatCompletionMessageParam]):
         if not message_history:
             return
         
-        if _current_session_file is None:
-            QX_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:23]
-            _current_session_file = QX_SESSIONS_DIR / f"qx_session_{timestamp}.json"
-        
-        serializable_history = [
-            msg.model_dump() if hasattr(msg, 'model_dump') else msg
-            for msg in message_history
-        ]
-        
-        try:
-            _current_session_file.write_text(
-                json.dumps(serializable_history, indent=2), 
-                encoding='utf-8'
-            )
-            logger.info(f"Session saved to {_current_session_file}")
-        except Exception as e:
-            logger.error(f"Failed to save session: {e}", exc_info=True)
+        with _session_lock_sync:
+            if _current_session_file is None:
+                QX_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:23]
+                _current_session_file = QX_SESSIONS_DIR / f"qx_session_{timestamp}.json"
+            
+            serializable_history = [
+                msg.model_dump() if hasattr(msg, 'model_dump') else msg
+                for msg in message_history
+            ]
+            
+            try:
+                _current_session_file.write_text(
+                    json.dumps(serializable_history, indent=2), 
+                    encoding='utf-8'
+                )
+                logger.info(f"Session saved to {_current_session_file}")
+            except Exception as e:
+                logger.error(f"Failed to save session: {e}", exc_info=True)
     
     try:
         loop = asyncio.get_event_loop()
@@ -120,7 +114,8 @@ def save_session_sync(message_history: List[ChatCompletionMessageParam]):
 def reset_session_sync():
     """Sync wrapper for reset_session."""
     global _current_session_file
-    _current_session_file = None
+    with _session_lock_sync:
+        _current_session_file = None
 
 def set_current_session_file(session_path: Path):
     """
@@ -128,31 +123,37 @@ def set_current_session_file(session_path: Path):
     Used when recovering a session to ensure continued use of the same file.
     """
     global _current_session_file
-    _current_session_file = session_path
+    with _session_lock_sync:
+        _current_session_file = session_path
 
 # Keep sync versions for compatibility
 save_session = save_session_sync
 reset_session = reset_session_sync
 
-def clean_old_sessions(keep_sessions: int):
+async def clean_old_sessions_async(keep_sessions: int):
     """
     Deletes the oldest session files, ensuring only `keep_sessions` number of files remain.
+    Async version.
     """
     if keep_sessions < 0:
         logger.warning(f"Invalid QX_KEEP_SESSIONS value: {keep_sessions}. Must be non-negative. Skipping session cleanup.")
         return
 
     try:
-        session_files = sorted(
-            [f for f in QX_SESSIONS_DIR.iterdir() if f.is_file() and f.name.startswith("qx_session_") and f.suffix == ".json"],
-            key=lambda f: f.name,
-        )
+        # Run file operations in thread pool
+        def _get_session_files():
+            return sorted(
+                [f for f in QX_SESSIONS_DIR.iterdir() if f.is_file() and f.name.startswith("qx_session_") and f.suffix == ".json"],
+                key=lambda f: f.name,
+            )
+        
+        session_files = await asyncio.to_thread(_get_session_files)
 
         if len(session_files) > keep_sessions:
             files_to_delete = session_files[: -(keep_sessions)]
             for file_path in files_to_delete:
                 try:
-                    file_path.unlink()
+                    await asyncio.to_thread(file_path.unlink)
                     logger.info(f"Deleted old session file: {file_path}")
                 except Exception as e:
                     logger.error(f"Failed to delete old session file {file_path}: {e}")
@@ -160,6 +161,64 @@ def clean_old_sessions(keep_sessions: int):
             logger.info(f"Number of sessions ({len(session_files)}) is within the limit ({keep_sessions}). No old sessions to delete.")
     except Exception as e:
         logger.error(f"Error during session cleanup: {e}", exc_info=True)
+
+def clean_old_sessions(keep_sessions: int):
+    """
+    Sync wrapper for clean_old_sessions.
+    """
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # We're in an async context, create a task
+            asyncio.create_task(clean_old_sessions_async(keep_sessions))
+        else:
+            # Sync context - do it synchronously
+            if keep_sessions < 0:
+                logger.warning(f"Invalid QX_KEEP_SESSIONS value: {keep_sessions}. Must be non-negative. Skipping session cleanup.")
+                return
+
+            try:
+                session_files = sorted(
+                    [f for f in QX_SESSIONS_DIR.iterdir() if f.is_file() and f.name.startswith("qx_session_") and f.suffix == ".json"],
+                    key=lambda f: f.name,
+                )
+
+                if len(session_files) > keep_sessions:
+                    files_to_delete = session_files[: -(keep_sessions)]
+                    for file_path in files_to_delete:
+                        try:
+                            file_path.unlink()
+                            logger.info(f"Deleted old session file: {file_path}")
+                        except Exception as e:
+                            logger.error(f"Failed to delete old session file {file_path}: {e}")
+                else:
+                    logger.info(f"Number of sessions ({len(session_files)}) is within the limit ({keep_sessions}). No old sessions to delete.")
+            except Exception as e:
+                logger.error(f"Error during session cleanup: {e}", exc_info=True)
+    except RuntimeError:
+        # No event loop - do it synchronously
+        if keep_sessions < 0:
+            logger.warning(f"Invalid QX_KEEP_SESSIONS value: {keep_sessions}. Must be non-negative. Skipping session cleanup.")
+            return
+
+        try:
+            session_files = sorted(
+                [f for f in QX_SESSIONS_DIR.iterdir() if f.is_file() and f.name.startswith("qx_session_") and f.suffix == ".json"],
+                key=lambda f: f.name,
+            )
+
+            if len(session_files) > keep_sessions:
+                files_to_delete = session_files[: -(keep_sessions)]
+                for file_path in files_to_delete:
+                    try:
+                        file_path.unlink()
+                        logger.info(f"Deleted old session file: {file_path}")
+                    except Exception as e:
+                        logger.error(f"Failed to delete old session file {file_path}: {e}")
+            else:
+                logger.info(f"Number of sessions ({len(session_files)}) is within the limit ({keep_sessions}). No old sessions to delete.")
+        except Exception as e:
+            logger.error(f"Error during session cleanup: {e}", exc_info=True)
 
 def load_latest_session() -> Optional[List[ChatCompletionMessageParam]]:
     """
