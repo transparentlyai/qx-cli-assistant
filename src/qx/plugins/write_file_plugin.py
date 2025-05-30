@@ -153,7 +153,7 @@ class WriteFilePluginOutput(BaseModel):
     """Output model for the WriteFilePluginTool."""
 
     path: str = Field(
-        description="The final path where content was written (may differ from requested if user modified during approval)."
+        description="The path where content was written."
     )
     success: bool = Field(description="True if the write operation completed successfully, False otherwise.")
     message: str = Field(description="Descriptive message about the operation result. Contains success confirmation or error details.")
@@ -218,16 +218,15 @@ async def write_file_tool(  # Made async
     )
 
     prompt_msg = f"Allow QX to write to file: '{path_to_consider}'?"
-    decision_status, final_value = await request_confirmation(  # Await
+    decision_status, _ = await request_confirmation(  # Await
         prompt_message=prompt_msg,
         console=console,
-        content_to_display=preview_renderable,
-        current_value_for_modification=path_to_consider,
+        content_to_display=preview_renderable
     )
 
     path_to_write: str
     if decision_status in ["approved", "session_approved"]:
-        path_to_write = path_to_consider # final_value is path_to_consider if not modified
+        path_to_write = path_to_consider
         if (
             decision_status == "approved"
         ):  # Only print if not session_approved (which prints its own message)

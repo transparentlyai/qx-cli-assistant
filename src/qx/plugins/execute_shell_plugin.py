@@ -209,7 +209,7 @@ class ExecuteShellPluginInput(BaseModel):
 
 class ExecuteShellPluginOutput(BaseModel):
     command: str = Field(
-        description="The command that was actually executed (may differ from requested if user modified during approval)."
+        description="The command that was executed."
     )
     stdout: Optional[str] = Field(None, description="Standard output from the command. Only present if command was executed.")
     stderr: Optional[str] = Field(None, description="Standard error from the command. Only present if command was executed.")
@@ -282,18 +282,16 @@ async def execute_shell_tool(  # Made async
     command_to_execute = command_to_consider
     needs_confirmation = not _is_command_auto_approved(command_to_consider)
 
-    # Initialize decision_status and final_value to safe defaults
+    # Initialize decision_status to safe defaults
     decision_status = (
         "approved" if not needs_confirmation else "pending"
     )  # "pending" is a placeholder, will be overwritten
-    final_value = command_to_consider
 
     if needs_confirmation:
         prompt_msg = f"Allow QX to execute shell command: '{command_to_consider}'?"
-        decision_status, final_value = await request_confirmation(  # Await
+        decision_status, _ = await request_confirmation(  # Await
             prompt_message=prompt_msg,
-            console=console,
-            current_value_for_modification=command_to_consider,
+            console=console
         )
 
         if decision_status in ["approved", "session_approved"]:
