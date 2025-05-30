@@ -144,11 +144,18 @@ class QXLLMAgent:
         self,
         user_input: str,
         message_history: Optional[List[ChatCompletionMessageParam]] = None,
+        _recursion_depth: int = 0,
     ) -> Any:
         """
         Runs the LLM agent, handling conversation turns and tool calls.
         Returns the final message content or tool output.
         """
+        # Prevent infinite recursion in tool calling
+        MAX_RECURSION_DEPTH = 10
+        if _recursion_depth > MAX_RECURSION_DEPTH:
+            error_msg = f"Maximum recursion depth ({MAX_RECURSION_DEPTH}) exceeded in tool calling"
+            logger.error(error_msg)
+            return QXRunResult(f"Error: {error_msg}", message_history or [])
         messages: List[ChatCompletionMessageParam] = []
         
         # Only add system prompt if not already present in message history
@@ -266,7 +273,7 @@ class QXLLMAgent:
                 else:
                     self.console.print("")
                 return await self._handle_streaming_response(
-                    chat_params, messages, user_input
+                    chat_params, messages, user_input, _recursion_depth
                 )
             else:
                 response = await self.client.chat.completions.create(**chat_params)
@@ -312,6 +319,7 @@ class QXLLMAgent:
         chat_params: Dict[str, Any],
         messages: List[ChatCompletionMessageParam],
         user_input: str,
+        recursion_depth: int = 0,
     ) -> Any:
         """Handle streaming response from OpenRouter API."""
         import asyncio
@@ -498,7 +506,7 @@ class QXLLMAgent:
             # Pass empty content if we cleared narration
             response_message.content = accumulated_content if accumulated_content else None
             return await self._process_tool_calls_and_continue(
-                response_message, messages, user_input
+                response_message, messages, user_input, recursion_depth
             )
         else:
             return QXRunResult(accumulated_content or "", messages)
@@ -508,6 +516,7 @@ class QXLLMAgent:
         response_message,
         messages: List[ChatCompletionMessageParam],
         user_input: str,
+        recursion_depth: int = 0,
     ) -> Any:
         """Process tool calls and continue the conversation."""
         if not response_message.tool_calls:
@@ -613,10 +622,10 @@ class QXLLMAgent:
                 try:
                     return await asyncio.wait_for(
                         task_info["coroutine"], 
-                        timeout=120.0  # 2 minute timeout per tool
+                        timeout=30.0  # 30 second timeout per tool
                     )
                 except asyncio.TimeoutError:
-                    error_msg = f"Tool '{task_info['function_name']}' timed out after 2 minutes"
+                    error_msg = f"Tool '{task_info['function_name']}' timed out after 30 seconds"
                     logger.error(error_msg)
                     return Exception(error_msg)
             
@@ -661,7 +670,7 @@ class QXLLMAgent:
         # After processing all tool calls (or attempting to), make one recursive call
         # The model needs to generate a response based on the tool outputs
         # We pass a special marker that won't be added to messages but triggers response generation
-        return await self.run("__CONTINUE_AFTER_TOOLS__", messages)
+        return await self.run("__CONTINUE_AFTER_TOOLS__", messages, recursion_depth + 1)
     
     async def cleanup(self):
         """Clean up resources like HTTP client."""

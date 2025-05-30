@@ -14,6 +14,7 @@ from textual.widgets import Input, RichLog, Static, TextArea
 
 from qx.cli.commands import CommandCompleter
 from qx.cli.console import TextualRichLogHandler, qx_console
+from qx.core.async_utils import TaskTracker
 from qx.core.llm import query_llm
 from qx.core.paths import QX_HISTORY_FILE
 from qx.core.session_manager import clean_old_sessions, save_session, save_session_async
@@ -197,7 +198,11 @@ class QXTextArea(TextArea):
                 stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await process.communicate(input="\n".join(history_commands).encode("utf-8"))
+            # Add timeout to subprocess communication to prevent hanging
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(input="\n".join(history_commands).encode("utf-8")),
+                timeout=10.0
+            )
             if process.returncode == 0:
                 selected_command = stdout.decode("utf-8").strip()
                 if selected_command: self.text = selected_command; self.move_cursor_to_end_of_line()
@@ -205,6 +210,11 @@ class QXTextArea(TextArea):
             else:
                 error_msg = stderr.decode("utf-8").strip()
                 self.app.query_one("#output-log").write(f"[red]Error running fzf: {error_msg}[/red]")
+        except asyncio.TimeoutError:
+            self.app.query_one("#output-log").write("[red]fzf search timed out[/red]")
+            if process and process.returncode is None:
+                process.terminate()
+                await process.wait()
         except Exception as e:
             self.app.query_one("#output-log").write(f"[red]Error running fzf: {e}[/red]")
 
@@ -247,6 +257,9 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
         self._llm_model_name: str = ""
         self.is_processing: bool = False
         # self.original_prompt_label is now self._stored_original_prompt_label
+        
+        # Task tracker for managing background tasks
+        self._task_tracker = TaskTracker()
 
     @property
     def original_prompt_label(self) -> str:
@@ -414,7 +427,12 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
         if self.user_input: self.user_input.add_to_history(input_text)
         if input_text.lower() in ["exit", "quit"]: await self._async_quit(); return
         if input_text.startswith("/"): await self.handle_command(input_text); return
-        if self.llm_agent: asyncio.create_task(self._handle_llm_query(input_text))
+        if self.llm_agent: 
+            await self._task_tracker.create_task(
+                self._handle_llm_query(input_text),
+                name="llm_query",
+                error_handler=lambda e: self.output_log.write(f"[red]LLM Error: {e}[/red]")
+            )
 
     def on_mount(self) -> None:
         self.output_log = self.query_one("#output-log", RichLog)
@@ -493,8 +511,11 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
     async def cleanup_tasks(self):
         if self.approval_future and not self.approval_future.done(): self.approval_future.cancel()
         if self.text_input_future and not self.text_input_future.done(): self.text_input_future.cancel()
+        # Cancel all tracked background tasks
+        await self._task_tracker.cancel_all(timeout=2.0)
 
-    def action_quit(self) -> None: asyncio.create_task(self._async_quit())
+    def action_quit(self) -> None: 
+        asyncio.create_task(self._async_quit())
     
     async def _async_quit(self):
         try:
