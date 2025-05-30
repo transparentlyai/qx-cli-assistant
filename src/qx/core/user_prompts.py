@@ -5,18 +5,15 @@ from typing import Callable, List, Literal, Optional, Tuple, Union, Any, Protoco
 
 class ConsoleProtocol(Protocol):
     def print(self, *args, **kwargs): ...
+    _app: Optional[Any] 
 
-RichConsole = ConsoleProtocol  # Type alias for backward compatibility
-RenderableType = str  # Simplified type
+RichConsole = ConsoleProtocol
+RenderableType = str
 
 logger = logging.getLogger(__name__)
-
-# --- State for "Approve All" ---
 _approve_all_active: bool = False
-_approve_all_lock = asyncio.Lock()  # Protect global state
-# --- End State for "Approve All" ---
+_approve_all_lock = asyncio.Lock()
 
-# Define standard choice tuples: (key, display_text, full_word_match)
 CHOICE_YES = ("y", "Yes", "yes")
 CHOICE_NO = ("n", "No", "no")
 CHOICE_MODIFY = ("m", "Modify", "modify")
@@ -25,229 +22,180 @@ CHOICE_CANCEL = ("c", "Cancel", "cancel")
 
 ApprovalDecisionStatus = Literal["approved", "denied", "modified", "cancelled", "session_approved"]
 
-
-async def _execute_prompt_with_live_suspend(
-    console: RichConsole, *args: Any, **kwargs: Any
-) -> Any:
-    """
-    Simplified prompt execution.
-    """
+async def _execute_prompt_with_live_suspend(console: RichConsole, *args: Any, **kwargs: Any) -> Any:
     prompt_text = args[0] if args else "Enter choice: "
     try:
         import sys
-        print(prompt_text, end="", flush=True)
-        line = sys.stdin.readline()
-        return line.strip() if line else ""
+        if hasattr(sys, 'stdin') and sys.stdin.isatty():
+            print(prompt_text, end="", flush=True)
+            line = sys.stdin.readline()
+            return line.strip() if line else ""
+        else:
+            logger.warning("_execute_prompt_with_live_suspend called in non-interactive context")
+            return "c"
     except (EOFError, KeyboardInterrupt):
-        return ""
+        return "c"
+    except Exception as e:
+        logger.error(f"Error in _execute_prompt_with_live_suspend: {e}")
+        return "c"
 
-
-async def is_approve_all_active(console: RichConsole) -> bool:
-    """
-    Checks if the 'Approve All' session is currently active.
-    Thread-safe async version.
-    """
+async def is_approve_all_active() -> bool:
     global _approve_all_active
     async with _approve_all_lock:
         return _approve_all_active
 
-
-
-
-async def _ask_basic_confirmation(
-    console: RichConsole,
-    choices: List[Tuple[str, str, str]],
-    prompt_message_text: str,
-    **_kwargs: Any
-) -> str:
-    """
-    Asks the user to choose from a list of choices.
-    """
+async def _ask_basic_confirmation(console: RichConsole, choices: List[Tuple[str, str, str]], prompt_message_text: str, **_kwargs: Any) -> str:
     choices_str = "/".join([choice[0] for choice in choices])
     full_prompt = f"{prompt_message_text} ({choices_str}): "
-    
     while True:
         try:
             user_input = await _execute_prompt_with_live_suspend(console, full_prompt)
-            if not user_input:
-                continue
-                
+            if not user_input: continue
             user_input_lower = user_input.lower()
-            
             for key, display, full_word in choices:
                 if user_input_lower == key.lower() or user_input_lower == full_word.lower():
                     return key
-                    
+            if user_input_lower == 'c' and any(choice[0] == 'c' for choice in choices):
+                return 'c'
             console.print(f"[red]Invalid choice. Please enter one of: {choices_str}[/red]")
-            
         except (EOFError, KeyboardInterrupt):
-            logger.warning("User cancelled confirmation prompt.")
+            logger.warning("User cancelled confirmation prompt (_ask_basic_confirmation).")
             console.print("\n[warning]Input cancelled.[/warning]")
-            return "c"  # Cancel
+            return "c"
         except Exception as e:
             logger.error(f"Error in confirmation prompt: {e}", exc_info=True)
             console.print(f"[red]Error: {e}[/red]")
-            return "c"  # Cancel
-
+            return "c"
 
 def _is_textual_environment(console: RichConsole) -> bool:
-    """Check if we're running in a Textual environment."""
     return hasattr(console, '_app') and console._app is not None
 
-
 async def _request_confirmation_textual(
-    prompt_message: str,
-    console: RichConsole,
-    content_to_display: Optional[RenderableType] = None,
-    allow_modify: bool = False,
-    current_value_for_modification: Optional[str] = None,
+    prompt_message: str, console: RichConsole, content_to_display: Optional[RenderableType] = None,
+    allow_modify: bool = False, current_value_for_modification: Optional[str] = None,
+    default_choice_key: str = "n"
 ) -> Tuple[ApprovalDecisionStatus, Optional[str]]:
-    """Handle confirmation requests in Textual environment."""
-    # Check if we're in "approve all" mode first
-    if await is_approve_all_active(console):
+    if await is_approve_all_active():
         console.print("[info]AUTO-APPROVED due to active 'Approve All' session.[/info]")
         return ("session_approved", current_value_for_modification)
     
-    # Display content preview first
     if content_to_display:
         console.print("\n--- Content Preview ---")
         console.print(content_to_display)
         console.print("--- End Preview ---\n")
     
-    # Use Textual app's confirmation method
     app = console._app
-    if hasattr(app, 'request_confirmation'):
-        try:
-            # Request confirmation through Textual UI
-            user_choice = await app.request_confirmation(prompt_message, "ynmac", "n", allow_modify)
-            
-            if user_choice == "y":
-                return ("approved", current_value_for_modification)
-            elif user_choice == "n":
-                console.print("[info]Operation denied by user.[/info]")
-                return ("denied", None)
-            elif user_choice == "m" and allow_modify:
-                # For Textual, we'd need a separate input modal for modification
-                # For now, fallback to simple approval with current value
-                console.print("[info]Modification not yet implemented in Textual UI. Using current value.[/info]")
-                return ("approved", current_value_for_modification)
-            elif user_choice == "a":
-                global _approve_all_active
-                async with _approve_all_lock:
-                    _approve_all_active = True
-                console.print("[info]'Approve All' activated for this session.[/info]")
-                return ("session_approved", current_value_for_modification)
-            elif user_choice == "c":
-                console.print("[info]Operation cancelled by user.[/info]")
-                return ("cancelled", None)
-            else:
-                console.print("[info]Operation denied by user.[/info]")
-                return ("denied", None)
-        except Exception as e:
-            logger.error(f"Error in Textual confirmation: {e}", exc_info=True)
-            console.print(f"[red]Error during confirmation: {e}[/red]")
-            return ("cancelled", None)
-    else:
-        # Fallback to auto-approval if app doesn't have the method
-        console.print(f"[yellow]⚠️  AUTO-APPROVED (Textual UI limitation):[/yellow] {prompt_message}")
-        console.print("[dim]Note: Update to latest version for interactive confirmations[/dim]")
+    
+    logger.debug(f"_request_confirmation_textual: app type: {type(app)}")
+    has_req_confirm = hasattr(app, 'request_confirmation')
+    has_prompt_text = hasattr(app, 'prompt_for_text_input')
+    logger.debug(f"_request_confirmation_textual: hasattr(app, 'request_confirmation'): {has_req_confirm}")
+    logger.debug(f"_request_confirmation_textual: hasattr(app, 'prompt_for_text_input'): {has_prompt_text}")
+
+    if not app or not has_req_confirm or not has_prompt_text:
+        logger.error("Textual app instance or required methods not found. App: %s, HasReqConfirm: %s, HasPromptText: %s", app, has_req_confirm, has_prompt_text)
+        console.print("[yellow]⚠️ AUTO-APPROVED (UI limitation - app methods missing).[/yellow]")
         return ("approved", current_value_for_modification)
 
-
-async def _request_confirmation_terminal(
-    prompt_message: str,
-    console: RichConsole,
-    content_to_display: Optional[RenderableType] = None,
-    allow_modify: bool = False,
-    current_value_for_modification: Optional[str] = None,
-) -> Tuple[ApprovalDecisionStatus, Optional[str]]:
-    """Handle confirmation requests in terminal environment."""
-    # Check if we're in "approve all" mode
-    if await is_approve_all_active(console):
-        console.print("[info]AUTO-APPROVED due to active 'Approve All' session.[/info]")
-        return ("session_approved", current_value_for_modification)
-        
-    # Auto-approve in non-interactive environments (e.g., when stdin is not a tty)
-    import sys
-    import os
-    if not sys.stdin.isatty() or os.environ.get("QX_AUTO_APPROVE", "false").lower() == "true":
-        console.print(f"[info]AUTO-APPROVED (non-interactive environment):[/info] {prompt_message}")
-        return ("approved", current_value_for_modification)
-
-    # Display content if provided
-    if content_to_display:
-        console.print("\n--- Content Preview ---")
-        console.print(content_to_display)
-        console.print("--- End Preview ---\n")
-
-    # Build choices
-    choices = [CHOICE_YES, CHOICE_NO]
-    if allow_modify:
-        choices.append(CHOICE_MODIFY)
-    choices.extend([CHOICE_APPROVE_ALL, CHOICE_CANCEL])
+    textual_choices_param = "ync" 
+    if allow_modify: textual_choices_param += "m"
+    textual_choices_param += "a" 
 
     try:
-        user_choice = await _ask_basic_confirmation(
-            console=console,
-            choices=choices,
-            prompt_message_text=prompt_message
+        user_selected_key = await app.request_confirmation(
+            message=prompt_message, choices=textual_choices_param, 
+            default=default_choice_key, allow_modify=allow_modify
         )
-
-        if user_choice == "y":
-            return ("approved", current_value_for_modification)
-        elif user_choice == "n":
-            console.print("[info]Operation denied by user.[/info]")
-            return ("denied", None)
-        elif user_choice == "m" and allow_modify:
-            # Ask for modification
-            modify_prompt = f"Enter new value (current: {current_value_for_modification}): "
-            try:
-                new_value = await _execute_prompt_with_live_suspend(console, modify_prompt)
-                if new_value.strip():
-                    console.print(f"[info]Value modified to: {new_value}[/info]")
-                    return ("modified", new_value.strip())
-                else:
-                    console.print("[warning]No modification entered. Using original value.[/warning]")
-                    return ("approved", current_value_for_modification)
-            except (EOFError, KeyboardInterrupt):
-                console.print("\n[warning]Modification cancelled.[/warning]")
+        if user_selected_key is None: 
+            console.print("[info]Operation cancelled or timed out.[/info]")
+            return ("cancelled", None)
+        if user_selected_key == "y": return ("approved", current_value_for_modification)
+        elif user_selected_key == "n": console.print("[info]Operation denied by user.[/info]"); return ("denied", None)
+        elif user_selected_key == "m" and allow_modify:
+            console.print("[info]Modification requested.[/info]")
+            modified_value = await app.prompt_for_text_input(
+                prompt_message=f"Enter new value (current: '{current_value_for_modification or ""}')",
+                default_value=current_value_for_modification
+            )
+            if modified_value is not None: 
+                console.print(f"[info]Value modified to: '{modified_value}'[/info]")
+                return ("modified", modified_value)
+            else: 
+                console.print("[info]Modification cancelled. No changes made.[/info]")
                 return ("cancelled", None)
-        elif user_choice == "a":
-            # Set approve all
-            global _approve_all_active
+        elif user_selected_key == "a":
+            global _approve_all_active # Corrected: global on its own line
             async with _approve_all_lock:
                 _approve_all_active = True
             console.print("[info]'Approve All' activated for this session.[/info]")
             return ("session_approved", current_value_for_modification)
-        elif user_choice == "c":
-            console.print("[info]Operation cancelled by user.[/info]")
-            return ("cancelled", None)
+        elif user_selected_key == "c": console.print("[info]Operation cancelled by user.[/info]"); return ("cancelled", None)
         else:
-            console.print("[warning]Unexpected choice. Treating as cancelled.[/warning]")
-            return ("cancelled", None)
-
+            logger.warning(f"Unexpected choice '{user_selected_key}' from app.request_confirmation. Denying.")
+            console.print("[info]Operation denied by user (unexpected choice).[/info]")
+            return ("denied", None)
     except Exception as e:
-        logger.error(f"Error in request_confirmation: {e}", exc_info=True)
+        logger.error(f"Error in Textual confirmation: {e}", exc_info=True)
         console.print(f"[red]Error during confirmation: {e}[/red]")
         return ("cancelled", None)
 
+async def _request_confirmation_terminal(
+    prompt_message: str, console: RichConsole, content_to_display: Optional[RenderableType] = None,
+    allow_modify: bool = False, current_value_for_modification: Optional[str] = None,
+    default_choice_key: str = "n"
+) -> Tuple[ApprovalDecisionStatus, Optional[str]]:
+    if await is_approve_all_active():
+        console.print("[info]AUTO-APPROVED due to active 'Approve All' session.[/info]")
+        return ("session_approved", current_value_for_modification)
+    import sys, os
+    if not sys.stdin.isatty() or os.environ.get("QX_AUTO_APPROVE", "false").lower() == "true":
+        console.print(f"[info]AUTO-APPROVED (non-interactive environment):[/info] {prompt_message}")
+        return ("approved", current_value_for_modification)
+    if content_to_display: console.print(f"\n--- Content Preview ---\n{content_to_display}\n--- End Preview ---\n")
+    choices_map = [CHOICE_YES, CHOICE_NO]
+    if allow_modify: choices_map.append(CHOICE_MODIFY)
+    choices_map.extend([CHOICE_APPROVE_ALL, CHOICE_CANCEL])
+    try:
+        user_choice_key = await _ask_basic_confirmation(console=console, choices=choices_map, prompt_message_text=prompt_message)
+        if user_choice_key == "y": return ("approved", current_value_for_modification)
+        elif user_choice_key == "n": console.print("[info]Operation denied by user.[/info]"); return ("denied", None)
+        elif user_choice_key == "m" and allow_modify:
+            modify_prompt = f"Enter new value (current: {current_value_for_modification or ''}): "
+            try:
+                new_value = await _execute_prompt_with_live_suspend(console, modify_prompt)
+                if new_value is not None and new_value.strip():
+                    console.print(f"[info]Value modified to: {new_value.strip()}[/info]")
+                    return ("modified", new_value.strip())
+                else:
+                    if new_value == 'c': console.print("[info]Modification cancelled.[/info]"); return ("cancelled", None)
+                    console.print("[warning]No modification entered. Defaulting to cancel modification.[/warning]")
+                    return ("cancelled", None)
+            except (EOFError, KeyboardInterrupt): console.print("\n[warning]Modification cancelled.[/warning]"); return ("cancelled", None)
+        elif user_choice_key == "a":
+            global _approve_all_active # Corrected: global on its own line
+            async with _approve_all_lock:
+                _approve_all_active = True
+            console.print("[info]'Approve All' activated for this session.[/info]")
+            return ("session_approved", current_value_for_modification)
+        elif user_choice_key == "c": console.print("[info]Operation cancelled by user.[/info]"); return ("cancelled", None)
+        else: logger.warning(f"Unexpected choice '{user_choice_key}'. Cancelling."); return ("cancelled", None)
+    except Exception as e:
+        logger.error(f"Error in request_confirmation_terminal: {e}", exc_info=True)
+        console.print(f"[red]Error during confirmation: {e}[/red]")
+        return ("cancelled", None)
 
 async def request_confirmation(
-    prompt_message: str,
-    console: RichConsole,
-    content_to_display: Optional[RenderableType] = None,
-    allow_modify: bool = False,
-    current_value_for_modification: Optional[str] = None,
+    prompt_message: str, console: RichConsole, content_to_display: Optional[RenderableType] = None,
+    allow_modify: bool = False, current_value_for_modification: Optional[str] = None,
+    default_choice_key: str = "n"
 ) -> Tuple[ApprovalDecisionStatus, Optional[str]]:
-    """
-    Requests user confirmation with optional content display and modification.
-    Automatically detects Textual environment and uses appropriate UI.
-    """
     if _is_textual_environment(console):
         return await _request_confirmation_textual(
-            prompt_message, console, content_to_display, allow_modify, current_value_for_modification
+            prompt_message, console, content_to_display, allow_modify, 
+            current_value_for_modification, default_choice_key=default_choice_key
         )
     else:
         return await _request_confirmation_terminal(
-            prompt_message, console, content_to_display, allow_modify, current_value_for_modification
+            prompt_message, console, content_to_display, allow_modify, 
+            current_value_for_modification, default_choice_key=default_choice_key
         )

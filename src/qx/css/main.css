@@ -123,16 +123,3 @@ OptionSelector Label.selected {
     /* text-style: bold; */
 }
 
-/* Styling for the bold part (typically the selection key) within an OptionSelector Label */
-OptionSelector Label b {
-    /* Example: Customize color or style of the bolded key character */
-    /* color: $warning; */
-    /* text-style: italic; */
-}
-
-/* Styling for the underlined part (typically the selection key) within an OptionSelector Label */
-OptionSelector Label u {
-    /* Example: Customize color or style of the underlined key character */
-    /* text-decoration-color: $warning; */
-    /* No direct color property for underline, but can affect text if needed */
-}
