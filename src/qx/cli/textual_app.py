@@ -148,6 +148,7 @@ class QXTextArea(TextArea):
             if self.app.is_awaiting_text_input or not self.is_multiline_mode:
                 text_content = str(self.text)
                 self.post_message(UserInputSubmitted(text_content))
+                event.prevent_default() # Prevent newline insertion
                 event.stop()
                 return
         # Other keys are handled by their respective handlers (key_up, key_down, etc.)
