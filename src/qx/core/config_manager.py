@@ -22,6 +22,8 @@ MINIMAL_CONFIG_EXAMPLE = """
 
 QX_MODEL_NAME=openrouter/openai/gpt-4o
 OPENROUTER_API_KEY=sk-your_openrouter_api_key_here
+QX_MODEL_PROVIDER=Together # Optional: Specify preferred provider(s), comma-separated
+QX_ALLOW_PROVIDER_FALLBACK=False # Optional: Set to true/false to allow/disallow fallbacks
 """
 
 CONFIG_LOCATIONS = """
