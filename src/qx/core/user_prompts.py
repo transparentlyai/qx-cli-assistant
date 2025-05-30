@@ -72,7 +72,8 @@ def _is_textual_environment(console: RichConsole) -> bool:
 
 async def _request_confirmation_textual(
     prompt_message: str, console: RichConsole, content_to_display: Optional[RenderableType] = None,
-    allow_modify: bool = False, current_value_for_modification: Optional[str] = None,
+    # allow_modify: bool = False, # Removed allow_modify
+    current_value_for_modification: Optional[str] = None,
     default_choice_key: str = "n"
 ) -> Tuple[ApprovalDecisionStatus, Optional[str]]:
     if await is_approve_all_active():
@@ -97,32 +98,20 @@ async def _request_confirmation_textual(
         console.print("[yellow]⚠️ AUTO-APPROVED (UI limitation - app methods missing).[/yellow]")
         return ("approved", current_value_for_modification)
 
-    textual_choices_param = "ync" 
-    if allow_modify: textual_choices_param += "m"
-    textual_choices_param += "a" 
+    textual_choices_param = "ynac" # Removed 'm' from choices
 
     try:
         user_selected_key = await app.request_confirmation(
             message=prompt_message, choices=textual_choices_param, 
-            default=default_choice_key, allow_modify=allow_modify
+            default=default_choice_key # Removed allow_modify argument
         )
         if user_selected_key is None: 
             console.print("[info]Operation cancelled or timed out.[/info]")
             return ("cancelled", None)
         if user_selected_key == "y": return ("approved", current_value_for_modification)
         elif user_selected_key == "n": console.print("[info]Operation denied by user.[/info]"); return ("denied", None)
-        elif user_selected_key == "m" and allow_modify:
-            console.print("[info]Modification requested.[/info]")
-            modified_value = await app.prompt_for_text_input(
-                prompt_message=f"Enter new value (current: '{current_value_for_modification or ""}')",
-                default_value=current_value_for_modification
-            )
-            if modified_value is not None: 
-                console.print(f"[info]Value modified to: '{modified_value}'[/info]")
-                return ("modified", modified_value)
-            else: 
-                console.print("[info]Modification cancelled. No changes made.[/info]")
-                return ("cancelled", None)
+        # Modification logic removed as allow_modify is always False
+        # elif user_selected_key == "m" and allow_modify: ...
         elif user_selected_key == "a":
             global _approve_all_active # Corrected: global on its own line
             async with _approve_all_lock:
@@ -141,7 +130,8 @@ async def _request_confirmation_textual(
 
 async def _request_confirmation_terminal(
     prompt_message: str, console: RichConsole, content_to_display: Optional[RenderableType] = None,
-    allow_modify: bool = False, current_value_for_modification: Optional[str] = None,
+    # allow_modify: bool = False, # Removed allow_modify
+    current_value_for_modification: Optional[str] = None,
     default_choice_key: str = "n"
 ) -> Tuple[ApprovalDecisionStatus, Optional[str]]:
     if await is_approve_all_active():
@@ -153,24 +143,15 @@ async def _request_confirmation_terminal(
         return ("approved", current_value_for_modification)
     if content_to_display: console.print(f"\n--- Content Preview ---\n{content_to_display}\n--- End Preview ---\n")
     choices_map = [CHOICE_YES, CHOICE_NO]
-    if allow_modify: choices_map.append(CHOICE_MODIFY)
+    # Modification logic removed as allow_modify is always False
+    # if allow_modify: choices_map.append(CHOICE_MODIFY)
     choices_map.extend([CHOICE_APPROVE_ALL, CHOICE_CANCEL])
     try:
         user_choice_key = await _ask_basic_confirmation(console=console, choices=choices_map, prompt_message_text=prompt_message)
         if user_choice_key == "y": return ("approved", current_value_for_modification)
         elif user_choice_key == "n": console.print("[info]Operation denied by user.[/info]"); return ("denied", None)
-        elif user_choice_key == "m" and allow_modify:
-            modify_prompt = f"Enter new value (current: {current_value_for_modification or ''}): "
-            try:
-                new_value = await _execute_prompt_with_live_suspend(console, modify_prompt)
-                if new_value is not None and new_value.strip():
-                    console.print(f"[info]Value modified to: {new_value.strip()}[/info]")
-                    return ("modified", new_value.strip())
-                else:
-                    if new_value == 'c': console.print("[info]Modification cancelled.[/info]"); return ("cancelled", None)
-                    console.print("[warning]No modification entered. Defaulting to cancel modification.[/warning]")
-                    return ("cancelled", None)
-            except (EOFError, KeyboardInterrupt): console.print("\n[warning]Modification cancelled.[/warning]"); return ("cancelled", None)
+        # Modification logic removed
+        # elif user_choice_key == "m" and allow_modify: ...
         elif user_choice_key == "a":
             global _approve_all_active # Corrected: global on its own line
             async with _approve_all_lock:
@@ -186,16 +167,19 @@ async def _request_confirmation_terminal(
 
 async def request_confirmation(
     prompt_message: str, console: RichConsole, content_to_display: Optional[RenderableType] = None,
-    allow_modify: bool = False, current_value_for_modification: Optional[str] = None,
+    # allow_modify: bool = False, # Removed allow_modify
+    current_value_for_modification: Optional[str] = None,
     default_choice_key: str = "n"
 ) -> Tuple[ApprovalDecisionStatus, Optional[str]]:
+    # The allow_modify parameter is removed from the function signature and all internal calls.
+    # The logic related to 'm' (Modify) option is also removed or commented out.
     if _is_textual_environment(console):
         return await _request_confirmation_textual(
-            prompt_message, console, content_to_display, allow_modify, 
+            prompt_message, console, content_to_display, 
             current_value_for_modification, default_choice_key=default_choice_key
         )
     else:
         return await _request_confirmation_terminal(
-            prompt_message, console, content_to_display, allow_modify, 
+            prompt_message, console, content_to_display, 
             current_value_for_modification, default_choice_key=default_choice_key
         )

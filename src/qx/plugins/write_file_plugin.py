@@ -168,7 +168,7 @@ async def write_file_tool(  # Made async
     Features:
     - Creates parent directories automatically if needed
     - Shows preview/diff before writing (for existing files)
-    - User can modify the target path during approval
+    - User can modify the target path during approval (REMOVED)
     - Raw content expected (no escaping needed)
     
     File access permissions:
@@ -177,7 +177,7 @@ async def write_file_tool(  # Made async
     - Files outside user home: Access denied by policy
     
     Returns structured output with:
-    - path: Final path written to (may differ if user modified)
+    - path: Final path written to
     - success: Boolean success indicator
     - message: Result description or error details
     """
@@ -223,41 +223,15 @@ async def write_file_tool(  # Made async
         prompt_message=prompt_msg,
         console=console,
         content_to_display=preview_renderable,
-        allow_modify=True,  # Allow path modification
+        # allow_modify=True,  # Allow path modification - REMOVED
         current_value_for_modification=path_to_consider,
     )
 
     path_to_write: str
-    if decision_status == "modified" and final_value is not None:
-        path_to_write = final_value
-        logger.info(
-            f"Write path modified by user from '{path_to_consider}' to '{path_to_write}'."
-        )
-        console.print(
-            f"[info]Path modified by user to:[/info] [blue]'{path_to_write}'[/blue]"
-        )
-        # Re-check is_path_allowed for the new path
-        absolute_modified_path = Path(os.path.expanduser(path_to_write))
-        if not absolute_modified_path.is_absolute():
-            absolute_modified_path = current_working_dir.joinpath(
-                path_to_write
-            ).resolve()
-        else:
-            absolute_modified_path = absolute_modified_path.resolve()
-
-        if not is_path_allowed(absolute_modified_path, project_root, USER_HOME_DIR):
-            err_msg = (
-                f"Error: Access denied by policy for modified path: {path_to_write}"
-            )
-            logger.error(f"Write access denied for modified path: {path_to_write}")
-            console.print(
-                f"[red]Access denied by policy for modified path:[/red] [yellow]'{path_to_write}'[/yellow]"
-            )
-            return WriteFilePluginOutput(
-                path=path_to_write, success=False, message=err_msg
-            )
-    elif decision_status in ["approved", "session_approved"]:
-        path_to_write = path_to_consider
+    # Modification logic is removed as allow_modify is no longer passed and handled
+    # if decision_status == "modified" and final_value is not None: ...
+    if decision_status in ["approved", "session_approved"]:
+        path_to_write = path_to_consider # final_value is path_to_consider if not modified
         if (
             decision_status == "approved"
         ):  # Only print if not session_approved (which prints its own message)
