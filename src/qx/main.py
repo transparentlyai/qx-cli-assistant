@@ -338,13 +338,15 @@ async def _async_main(
             # Handle session recovery
             if recover_session_path:
                 if recover_session_path == "LATEST":
-                    qx_console.print("[info]Attempting to recover latest session...[/info]")
+                    qx_console.print("Attempting to recover latest session...")
                     loaded_history = load_latest_session()
                     if loaded_history:
                         current_message_history = loaded_history
-                        qx_console.print("[info]Latest session recovered successfully![/info]")
+                        qx_console.print("Latest session recovered successfully!")
                     else:
-                        qx_console.print("[red]No previous sessions found. Starting new session.[/red]")
+                        qx_console.print(
+                            "[red]No previous sessions found. Starting new session.[/red]"
+                        )
                 else:
                     qx_console.print(
                         f"[info]Attempting to recover session from: {recover_session_path}[/info]"
@@ -376,6 +378,8 @@ async def _async_main(
                 app.set_version_info(
                     QX_VERSION, llm_agent.model_name
                 )  # Pass version info
+                if current_message_history:
+                    app.set_message_history(current_message_history)
 
                 # Remove the temporary stream handler before running Textual app
                 if temp_stream_handler and temp_stream_handler in logger.handlers:
@@ -411,15 +415,13 @@ async def _async_main(
                         await config_manager.mcp_manager.disconnect_all()
                     except Exception as e:
                         logger.error(f"Error during MCP cleanup: {e}", exc_info=True)
-                    
+
                     # Clean up LLM agent resources
                     try:
                         if llm_agent:
                             await llm_agent.cleanup()
                     except Exception as e:
                         logger.error(f"Error during LLM cleanup: {e}", exc_info=True)
-                    
-                    
 
     except Exception as e:
         logger.critical(f"Critical error in _async_main: {e}", exc_info=True)
@@ -504,7 +506,11 @@ def main():
         )
         sys.exit(1)
 
-    recover_path = Path(args.recover_session) if args.recover_session else None
+    recover_path = (
+        args.recover_session
+        if args.recover_session == "LATEST"
+        else (Path(args.recover_session) if args.recover_session else None)
+    )
 
     try:
         asyncio.run(
