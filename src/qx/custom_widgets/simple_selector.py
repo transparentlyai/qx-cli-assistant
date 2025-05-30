@@ -13,6 +13,9 @@ class SimpleSelector(Static):
         width: auto;
         border: none; /* No borders as requested */
     }
+    SimpleSelector:focus { /* Added focus style */
+        border: round blue;
+    }
     SimpleSelector .item {
         padding: 0 1;
         height: 1;
@@ -37,7 +40,6 @@ class SimpleSelector(Static):
     CSS_PATH = "" # This will be set by the user if they want to load external CSS
 
     can_focus = True
-    can_tab = True
 
     class Selected(Message):
         """Posted when a new item is selected."""
@@ -86,19 +88,21 @@ class SimpleSelector(Static):
 
     def on_key(self, event) -> None:
         """Handle key presses for navigation."""
+        print(f"DEBUG: SimpleSelector on_key received event: {event}") # Added for debugging
         if not self.items:
             return
 
         if event.key == "up":
-            self.selected_index = (self.selected_index - 1) % len(self.items)
+            self.selected_index = (self.selected_index - 1 + len(self.items)) % len(self.items)
             event.stop()
         elif event.key == "down":
             self.selected_index = (self.selected_index + 1) % len(self.items)
             event.stop()
         elif event.key == "tab":
-            # Tab cycles forward, Shift+Tab cycles backward
-            if event.shift:
-                self.selected_index = (self.selected_index - 1) % len(self.items)
+            # Safely check for shift key, default to False if attribute doesn't exist
+            is_shift_pressed = getattr(event, 'shift', False) or getattr(event, 'shift_key', False)
+            if is_shift_pressed:
+                self.selected_index = (self.selected_index - 1 + len(self.items)) % len(self.items)
             else:
                 self.selected_index = (self.selected_index + 1) % len(self.items)
-            event.stop() # Stop event propagation to prevent default tab behavior
+            event.stop()
