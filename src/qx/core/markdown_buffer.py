@@ -14,12 +14,13 @@ class MarkdownStreamBuffer:
     """
 
     def __init__(
-        self, max_buffer_size: int = 65000
+        self, max_buffer_size: int = 65000,
+        max_list_buffer_size: int = 8000
     ):  # Increased default max_buffer_size
         self.buffer: str = ""
         self.max_buffer_size: int = max_buffer_size
+        self.max_list_buffer_size: int = max_list_buffer_size  # Separate limit for lists
         self.md_parser: MarkdownIt = MarkdownIt()
-        self._in_code_block: bool = False  # Track code block state manually
         self._has_rendered_once: bool = False  # Track if we've rendered anything yet
         # Common Markdown block-level elements that have distinct open/close tokens
         # and affect nesting levels directly.
@@ -55,9 +56,6 @@ class MarkdownStreamBuffer:
         
         with self._lock:
             self.buffer += content
-            
-            # Update code block state based on newly added content
-            self._update_code_block_state(content)
 
             if self._should_render():
                 content_to_render = self.buffer
@@ -69,9 +67,6 @@ class MarkdownStreamBuffer:
                 self.buffer = ""
                 # Mark that we've rendered at least once
                 self._has_rendered_once = True
-                # Reset code block state after rendering
-                # Since we never force-render inside code blocks now, just check the rendered content
-                self._in_code_block = content_to_render.count('```') % 2 == 1
                 return content_to_render
 
             return None
@@ -87,18 +82,8 @@ class MarkdownStreamBuffer:
         with self._lock:
             content_to_render = self.buffer
             self.buffer = ""
-            self._in_code_block = False  # Reset state
             return content_to_render
 
-    def _update_code_block_state(self, new_content: str) -> None:
-        """Update the code block state based on newly added content.
-        Must be called within a lock."""
-        # Count ``` in the new content
-        fence_count = new_content.count('```')
-        
-        # Toggle state for each ``` found
-        for _ in range(fence_count):
-            self._in_code_block = not self._in_code_block
 
     def _is_in_open_fenced_code_block(self) -> bool:
         """Checks if the buffer is currently inside an open fenced code block."""
@@ -111,28 +96,32 @@ class MarkdownStreamBuffer:
         if not self.buffer:
             return False
 
-        # 1. Emergency fallback: render if buffer gets too large, but respect markdown boundaries
+        # 1. Check if we're in a list context with its own threshold
+        if self._is_in_list_context() and len(self.buffer) > self.max_list_buffer_size:
+            # For lists, use the smaller threshold to ensure more frequent rendering
+            # But still check if we're at a safe breakpoint (end of line)
+            if self.buffer.endswith('\n'):
+                return True
+            # If not at line end but way over limit, force render
+            elif len(self.buffer) > self.max_list_buffer_size * 1.5:
+                return True
+        
+        # 2. Emergency fallback: render if buffer gets too large, but respect markdown boundaries
         if len(self.buffer) > self.max_buffer_size:
             # If we're inside a fenced code block, NEVER force render
-            if self._in_code_block:
-                return False
-            # If we're in a list context, be more conservative
-            elif self._is_in_list_context():
-                # Allow lists to grow a bit larger before force rendering
-                if len(self.buffer) > self.max_buffer_size * 2:
-                    return True
+            if self._is_in_open_fenced_code_block():
                 return False
             else:
-                # Not in special context, safe to render immediately
+                # Not in code block, safe to render
                 # print(f"DEBUG: Rendering due to max_buffer_size ({len(self.buffer)} > {self.max_buffer_size})")
                 return True
 
-        # 2. If inside an open fenced code block, do not render.
-        if self._in_code_block:
+        # 3. If inside an open fenced code block, do not render.
+        if self._is_in_open_fenced_code_block():
             # print("DEBUG: Not rendering, inside open fenced code block.")
             return False
 
-        # 3. If a fenced code block just cleanly closed (and we're not in another one)
+        # 4. If a fenced code block just cleanly closed (and we're not in another one)
         #    A block is cleanly closed if ``` is at the end, possibly with whitespace.
         if (
             self.buffer.count("```") > 0 and self.buffer.count("```") % 2 == 0
@@ -143,7 +132,7 @@ class MarkdownStreamBuffer:
                 # print("DEBUG: Rendering, fenced code block cleanly closed.")
                 return True
 
-        # 4. Paragraph breaks (double newline) are generally safe if not in other constructs.
+        # 5. Paragraph breaks (double newline) are generally safe if not in other constructs.
         #    The _is_inside_markdown_construct will do a deeper check.
         #    If a double newline exists, and we are NOT inside a construct, it's a strong signal to render.
         #    Ensure buffer ends with \n\n or contains \n\n and then only whitespace
@@ -172,12 +161,12 @@ class MarkdownStreamBuffer:
                 # print("DEBUG: Rendering, double newline (buffer start) and not inside construct.")
                 return True
 
-        # 5. Check if we are inside any other Markdown construct. If so, don't render.
+        # 6. Check if we are inside any other Markdown construct. If so, don't render.
         if self._is_inside_markdown_construct():
             # print(f"DEBUG: Not rendering, _is_inside_markdown_construct returned True. Buffer: '{self.buffer}'")
             return False
 
-        # 6. Basic safe break points (e.g., end of sentence followed by a newline)
+        # 7. Basic safe break points (e.g., end of sentence followed by a newline)
         #    This is a weaker signal, apply if not inside constructs.
         #    BUT: Don't break on sentence endings if we're likely in a list context
         if (
@@ -417,18 +406,18 @@ class MarkdownStreamBuffer:
         return False
 
 
-def create_markdown_buffer(max_size: int = 4000) -> MarkdownStreamBuffer:
+def create_markdown_buffer(max_size: int = 65000, max_list_size: int = 8000) -> MarkdownStreamBuffer:
     """
     Factory function to create a new MarkdownStreamBuffer.
 
     Args:
-        max_size: Maximum buffer size before emergency flush. Increased default to 4000
-                  to allow more complete markdown constructs to form before rendering.
+        max_size: Maximum buffer size before emergency flush. Default 65000 to handle large code blocks.
+        max_list_size: Maximum buffer size for list content. Default 8000 for more responsive list rendering.
 
     Returns:
         MarkdownStreamBuffer: New buffer instance.
     """
-    return MarkdownStreamBuffer(max_size)
+    return MarkdownStreamBuffer(max_size, max_list_size)
 
 
 if __name__ == "__main__":
