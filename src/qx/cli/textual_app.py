@@ -30,6 +30,7 @@ from qx.custom_widgets.extended_input import (
     HideCompletionMenu
 )
 from qx.custom_widgets.completion_menu import CompletionMenu # For type hinting if needed
+from qx.core.llm_messages import RenderStreamContent, StreamingComplete
 
 logger = logging.getLogger(__name__)
 
@@ -407,6 +408,28 @@ class QXApp(App[None]):
             if self.user_input: 
                 self.user_input.can_focus = True
                 self.user_input.focus() # Return focus to input
+    
+    @on(RenderStreamContent)
+    def on_render_stream_content(self, message: RenderStreamContent) -> None:
+        """Handles LLM streaming content rendering in a thread-safe manner."""
+        if self.output_log:
+            try:
+                if message.is_markdown:
+                    from rich.markdown import Markdown
+                    markdown = Markdown(message.content, code_theme="rrt")
+                    self.output_log.write(markdown)
+                else:
+                    self.output_log.write(message.content, end=message.end)
+            except Exception as e:
+                logger.error(f"Error rendering stream content: {e}")
+                # Fallback to plain text
+                self.output_log.write(message.content, end=message.end)
+    
+    @on(StreamingComplete)
+    def on_streaming_complete(self, message: StreamingComplete) -> None:
+        """Handles LLM streaming completion."""
+        if self.output_log and message.add_newline:
+            self.output_log.write("")  # Add empty line for spacing
 
     async def cleanup_tasks(self):
         if self.approval_future and not self.approval_future.done(): self.approval_future.cancel()

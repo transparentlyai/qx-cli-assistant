@@ -329,11 +329,33 @@ class QXLLMAgent:
         accumulated_tool_calls = []
         current_tool_call = None
         has_tool_calls = False  # Track if we've seen any tool calls
+        has_rendered_content = False  # Track if we've rendered any content during streaming
+        total_rendered_content = ""  # Track all content that was rendered for validation
 
         # Use markdown-aware buffer for streaming
         from qx.core.markdown_buffer import create_markdown_buffer
 
         markdown_buffer = create_markdown_buffer()
+
+        # Helper function to render content via message posting
+        async def render_content(content: str) -> None:
+            nonlocal has_rendered_content, total_rendered_content
+            if content and content.strip():
+                has_rendered_content = True
+                total_rendered_content += content  # Track for validation
+                # Check if we have access to the Textual app for message posting
+                if hasattr(self.console, "_app") and self.console._app:
+                    try:
+                        from qx.core.llm_messages import RenderStreamContent
+                        # Post message to app for thread-safe rendering
+                        self.console._app.post_message(RenderStreamContent(content, is_markdown=True))
+                    except Exception as e:
+                        logger.error(f"Error posting render message: {e}")
+                        # Fallback to direct console print
+                        self.console.print(content, end="")
+                else:
+                    # Fallback if no app available
+                    self.console.print(content, end="")
 
         # Stream content directly to console
         stream = None
@@ -350,8 +372,12 @@ class QXLLMAgent:
                 # Handle content streaming
                 if delta.content:
                     accumulated_content += delta.content
-                    # Buffer content but don't render yet - we need to check for tool calls first
-                    markdown_buffer.add_content(delta.content)
+                    # Check if buffer returns content to render
+                    content_to_render = markdown_buffer.add_content(delta.content)
+                    
+                    # Only render during streaming if we haven't seen tool calls yet
+                    if content_to_render and not has_tool_calls:
+                        await render_content(content_to_render)
 
                 # Handle tool call streaming
                 if delta.tool_calls:
@@ -391,9 +417,27 @@ class QXLLMAgent:
                 # Check if stream is finished
                 if choice.finish_reason:
                     break
+            
+            # Stream completed successfully - it should auto-close when exhausted
+            # but we'll ensure cleanup just in case
+            if stream and hasattr(stream, 'aclose'):
+                try:
+                    await stream.aclose()
+                except Exception:
+                    pass  # Stream might already be closed
 
         except Exception as e:
             logger.error(f"Error during streaming: {e}", exc_info=True)
+            
+            # Clean up the stream in error case
+            if stream and hasattr(stream, 'aclose'):
+                try:
+                    # Small delay to allow any pending data to be processed
+                    await asyncio.sleep(0.1)
+                    await stream.aclose()
+                except Exception:
+                    pass  # Ignore errors closing stream
+            
             # Fall back to non-streaming
             chat_params["stream"] = False
             response = await self.client.chat.completions.create(**chat_params)
@@ -402,68 +446,54 @@ class QXLLMAgent:
 
             if response_message.tool_calls:
                 return await self._process_tool_calls_and_continue(
-                    response_message, messages, user_input
+                    response_message, messages, user_input, recursion_depth
                 )
             else:
                 return QXRunResult(response_message.content, messages)
-        finally:
-            # Clean up async generator if needed
-            if stream and hasattr(stream, 'aclose'):
-                try:
-                    await stream.aclose()
-                except Exception:
-                    pass  # Ignore errors closing stream
 
-        # Now decide what to display based on whether we have tool calls
-        if not has_tool_calls and accumulated_content:
-            # No tool calls, display all accumulated content
-            # Flush the buffer to get all content
-            all_content = markdown_buffer.flush()
-            if all_content:
-                if (
-                    hasattr(self.console, "_output_widget")
-                    and self.console._output_widget
-                ):
-                    try:
-                        from rich.markdown import Markdown
-                        markdown = Markdown(all_content, code_theme="rrt")
-                        self.console._output_widget.write(markdown)
-                    except Exception as e:
-                        logger.error(f"Error writing to output widget: {e}")
-                        self.console.print(all_content, end="")
-                else:
-                    self.console.print(all_content, end="")
+        # After streaming, flush any remaining content
+        remaining_content = markdown_buffer.flush()
+        
+        # Render remaining content if:
+        # 1. We have remaining content AND
+        # 2. Either we haven't rendered anything yet OR we have tool calls
+        if remaining_content and remaining_content.strip():
+            if not has_rendered_content or has_tool_calls:
+                await render_content(remaining_content)
+        
+        # Validate that all content was rendered
+        if accumulated_content:
+            # Compare lengths to detect content loss
+            accumulated_len = len(accumulated_content)
+            rendered_len = len(total_rendered_content)
+            
+            if accumulated_len != rendered_len:
+                logger.warning(
+                    f"Content validation mismatch: accumulated {accumulated_len} chars, "
+                    f"rendered {rendered_len} chars. Difference: {accumulated_len - rendered_len}"
+                )
                 
-                # Add newline after content
-                if all_content.strip():
-                    if hasattr(self.console, "_output_widget") and self.console._output_widget:
-                        self.console._output_widget.write("")  # Add empty line for spacing
-                    else:
-                        self.console.print("")
-        elif has_tool_calls:
-            # Display the content even when there are tool calls
-            # The user should see what the assistant is doing
-            all_content = markdown_buffer.flush()
-            if all_content and all_content.strip():
-                if (
-                    hasattr(self.console, "_output_widget")
-                    and self.console._output_widget
-                ):
-                    try:
-                        from rich.markdown import Markdown
-                        markdown = Markdown(all_content, code_theme="rrt")
-                        self.console._output_widget.write(markdown)
-                    except Exception as e:
-                        logger.error(f"Error writing to output widget: {e}")
-                        self.console.print(all_content, end="")
-                else:
-                    self.console.print(all_content, end="")
-                
-                # Add newline after content
-                if hasattr(self.console, "_output_widget") and self.console._output_widget:
-                    self.console._output_widget.write("")  # Add empty line for spacing
-                else:
+                # Log debug information if content was lost
+                if accumulated_len > rendered_len:
+                    logger.debug("Content may have been lost during streaming")
+                    if os.getenv("QX_DEBUG_STREAMING"):
+                        # Only log detailed info if debug flag is set
+                        logger.debug(f"Accumulated content: {repr(accumulated_content[:200])}...")
+                        logger.debug(f"Rendered content: {repr(total_rendered_content[:200])}...")
+            else:
+                logger.debug(f"Content validation passed: {accumulated_len} chars rendered successfully")
+        
+        # Add final newline if we rendered any content
+        if accumulated_content.strip() and (has_rendered_content or remaining_content):
+            if hasattr(self.console, "_app") and self.console._app:
+                try:
+                    from qx.core.llm_messages import StreamingComplete
+                    self.console._app.post_message(StreamingComplete(add_newline=True))
+                except Exception as e:
+                    logger.error(f"Error posting completion message: {e}")
                     self.console.print("")
+            else:
+                self.console.print("")
 
         # Create response message from accumulated data
         response_message_dict = {
