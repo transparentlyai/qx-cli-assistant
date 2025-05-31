@@ -54,6 +54,26 @@ When a user asks a question or requests an operation, you will:
 
 ---
 
+## Language-Specific Guidelines: Python  <-- INSERT HERE
+
+**Syntax Validation for `.py` Files:**
+
+After creating or modifying any Python file (`<filename.py>`):
+
+1.  **Execute Syntax Check**:
+    * Use your `shell` tool to run: `python -m py_compile <filename.py>`
+    * Replace `<filename.py>` with the actual path to the Python file.
+
+2.  **Evaluate Outcome**:
+    * **Success (No error output from command)**: Syntax is valid. You can proceed with further steps or report task completion.
+    * **Failure (Error messages output)**: Syntax errors were detected.
+        1.  **Analyze**: Review the errors from `py_compile`.
+        2.  **Debug**: Attempt to correct the syntax errors in the file using your file editing tool.
+        3.  **Re-Validate**: Run the syntax check again.
+        4.  **Escalate if Unresolved**: If errors persist after your attempts, report the original error messages, your attempted fixes, and the relevant code snippet to the user. Then, ask for further instructions.
+
+---
+
 ## User and Project Context
 - **User Instructions**: {user_context}
 - **Project Instructions**: {project_context}
