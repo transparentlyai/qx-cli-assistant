@@ -128,6 +128,7 @@ OptionSelector Label.selected {
 #completion-menu-area {
     width: 100%; /* Takes full width of its parent in main-container */
     height: auto; /* Height will be determined by the CompletionMenu inside it */
+    border: none; /* No border around the completion menu area */
     /* The CompletionMenu itself has max-height and overflow-y: auto */
     /* If you want the menu to appear at the bottom of this container, use flex: */
     /* display: flex; */
@@ -135,5 +136,7 @@ OptionSelector Label.selected {
 }
 
 #completion-menu-area CompletionMenu {
-    display: block; /* Ensure the CompletionMenu is visible when mounted here */
+    width: 25; 
+    background: #010101;
+    border: none;
 }
