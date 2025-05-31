@@ -11,6 +11,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, Container
 from textual.message import Message
 from textual.widgets import Input, RichLog, Static # Removed TextArea
+from textual import on # Import the 'on' decorator
 
 from qx.cli.commands import CommandCompleter
 from qx.cli.console import TextualRichLogHandler, qx_console
@@ -19,7 +20,16 @@ from qx.core.llm import query_llm
 from qx.core.paths import QX_HISTORY_FILE
 from qx.core.session_manager import clean_old_sessions, save_session, save_session_async
 from qx.custom_widgets.option_selector import OptionSelector
-from qx.custom_widgets.extended_input import ExtendedInput, UserInputSubmitted # Import ExtendedInput and UserInputSubmitted
+# Import ExtendedInput and its new messages
+from qx.custom_widgets.extended_input import (
+    ExtendedInput, 
+    UserInputSubmitted,
+    LogEmitted,
+    MultilineModeToggled,
+    DisplayCompletionMenu,
+    HideCompletionMenu
+)
+from qx.custom_widgets.completion_menu import CompletionMenu # For type hinting if needed
 
 logger = logging.getLogger(__name__)
 
@@ -59,15 +69,13 @@ class StatusFooter(Static):
         self.spinner_index = (self.spinner_index + 1) % len(self.spinner_chars)
 
 
-# QXTextArea class is now merged into ExtendedInput and removed from here.
-
-class QXApp(App[None]): # Changed App to App[None] for explicit void return on run
+class QXApp(App[None]): 
     CSS_PATH = Path(__file__).parent.parent / "css" / "main.css"
     BINDINGS = [
-        Binding("ctrl+c", "quit", "Quit", priority=True), # Ensure quit has priority
+        Binding("ctrl+c", "quit", "Quit", priority=True), 
         Binding("ctrl+d", "quit", "Quit", priority=True),
-        Binding("alt+enter", "toggle_multiline_or_submit", "Toggle Multiline/Submit", show=False),
-        Binding("escape", "handle_escape", "Handle Escape", show=False, priority=True), # For special input cancel
+        # Binding("alt+enter", "toggle_multiline_or_submit", "Toggle Multiline/Submit", show=False), # Handled by ExtendedInput
+        Binding("escape", "handle_escape", "Handle Escape", show=False, priority=True),
     ]
     enable_mouse_support = True
 
@@ -75,7 +83,7 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
         super().__init__(*args, **kwargs)
         self.prompt_handler = None
         self.output_log: Optional[RichLog] = None
-        self.user_input: Optional[ExtendedInput] = None # Changed type hint to ExtendedInput
+        self.user_input: Optional[ExtendedInput] = None 
         self.prompt_label: Optional[Static] = None
         self.status_footer: Optional[StatusFooter] = None
         self.mcp_manager = None
@@ -89,15 +97,18 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
         
         self.text_input_future: Optional[asyncio.Future] = None
         self.is_awaiting_text_input: bool = False
-        self._stored_original_prompt_label: str = "QX⏵ " # Store the actual original prompt
+        self._stored_original_prompt_label: str = "QX⏵ " 
+        self._multiline_prompt_label: str = "... " # Prompt for multiline input
         
         self._qx_version: str = ""
         self._llm_model_name: str = ""
         self.is_processing: bool = False
-        # self.original_prompt_label is now self._stored_original_prompt_label
         
-        # Task tracker for managing background tasks
         self._task_tracker = TaskTracker()
+        
+        # For managing the CompletionMenu
+        self._active_completion_menu: Optional[CompletionMenu] = None
+
 
     @property
     def original_prompt_label(self) -> str:
@@ -114,7 +125,6 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
         self._llm_model_name = llm_model_name
     
     def set_message_history(self, message_history):
-        """Set the message history (used when recovering a session)."""
         self.current_message_history = message_history
 
     async def request_confirmation(
@@ -122,7 +132,7 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
         message: str, 
         choices: str = "ynac", 
         default: str = "n", 
-    ) -> Optional[str]: # Return Optional[str] as None is possible for timeout/cancel
+    ) -> Optional[str]:
         option_map = { "y": "Yes", "n": "No", "a": "Approve All", "c": "Cancel", "s": "Skip", "o": "OK"}
         built_options: List[Tuple[str, str]] = []
         default_option_tuple: Optional[Tuple[str, str]] = None
@@ -134,34 +144,32 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
             if char_key in option_map: built_options.append((option_map[char_key], char_key))
         if not built_options: return default 
         selected_key = await self.request_approval_with_selector(prompt=message, options=built_options)
-        return selected_key if selected_key is not None else default # Ensure default on None
+        return selected_key if selected_key is not None else default
 
     async def prompt_for_text_input(self, prompt_message: str, default_value: Optional[str] = None) -> Optional[str]:
-        """Prompts the user for text input using the main input area."""
         if self.is_awaiting_text_input or (self.text_input_future and not self.text_input_future.done()):
             logger.warning("prompt_for_text_input called while another input is already pending.")
-            return None # Or raise an error
+            return None 
 
         if self.approval_container and self.approval_container.display:
-            await self._hide_approval_selector() # Hide OptionSelector if it was up
+            await self._hide_approval_selector() 
 
-        self._stored_original_prompt_label = str(self.prompt_label.renderable) # Save current
+        self._stored_original_prompt_label = str(self.prompt_label.renderable) 
         self.prompt_label.update(f"{prompt_message} (Esc to cancel) ")
         
         input_container = self.query_one("#input-container")
-        input_container.display = True # Ensure main input is visible
+        input_container.display = True
 
         self.user_input.text = default_value or ""
         self.user_input.disabled = False
         self.user_input.can_focus = True
         self.user_input.focus()
-        self.user_input.move_cursor_to_end_of_line() # Move cursor to end
+        self.user_input.move_cursor_to_end_of_line()
 
         self.is_awaiting_text_input = True
         self.text_input_future = asyncio.Future()
 
         try:
-            # Timeout for user input (e.g., 5 minutes)
             result = await asyncio.wait_for(self.text_input_future, timeout=300.0)
             return result
         except asyncio.TimeoutError:
@@ -170,27 +178,25 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
             return None
         except asyncio.CancelledError:
             logger.info("Text input cancelled.")
-            # Message already printed by handle_escape or similar
             return None
         finally:
             self.is_awaiting_text_input = False
-            self.prompt_label.update(self._stored_original_prompt_label) # Restore original prompt
-            # Do not clear self.user_input.text here, _handle_submitted_text will do it.
+            self.prompt_label.update(self._stored_original_prompt_label) 
             if self.text_input_future and not self.text_input_future.done():
-                 # This case should ideally not happen if await_for completed or was cancelled
                  self.text_input_future.cancel()
             self.text_input_future = None
-            # Ensure normal input state is restored
-            if self.user_input: self.user_input._update_prompt_label() 
+            # ExtendedInput's MultilineModeToggled message will handle prompt updates
 
     async def _handle_llm_query(self, input_text: str) -> None:
         if self.is_processing: return
         try:
             self.is_processing = True
             if self.user_input: self.user_input.disabled = True; self.user_input.can_focus = False
-            # self._stored_original_prompt_label is already set, use it for grey out
-            grey_prompt = f"[dim]{self._stored_original_prompt_label}[/dim]"
+            
+            current_prompt = self._multiline_prompt_label if self.user_input and self.user_input.is_multiline_mode else self._stored_original_prompt_label
+            grey_prompt = f"[dim]{current_prompt}[/dim]"
             if self.prompt_label: self.prompt_label.update(grey_prompt)
+
             if self.status_footer: self.status_footer.start_spinner("[#af00d7 bold]Thinking...[/]")
             run_result = await query_llm(agent=self.llm_agent, user_input=input_text, message_history=self.current_message_history, console=qx_console)
             if run_result and hasattr(run_result, "output"):
@@ -207,7 +213,9 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
         finally:
             self.is_processing = False
             if self.user_input: self.user_input.disabled = False; self.user_input.can_focus = True
-            if self.prompt_label: self.prompt_label.update(self._stored_original_prompt_label) # Restore original
+            # Prompt label updated by MultilineModeToggled or restored here
+            if self.prompt_label and self.user_input:
+                 self.prompt_label.update(self._multiline_prompt_label if self.user_input.is_multiline_mode else self._stored_original_prompt_label)
             if self.user_input: self.user_input.focus()
 
     def compose(self) -> ComposeResult:
@@ -215,10 +223,12 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
             yield RichLog(id="output-log", markup=True, wrap=True)
             self.approval_container = Container(id="approval-selector-container", classes="hidden")
             yield self.approval_container
+            # Completion menu container - will be mounted here by DisplayCompletionMenu handler
+            # yield Container(id="completion-menu-container", classes="hidden") 
             with Vertical(id="bottom-section"):
                 with Horizontal(id="input-container"):
-                    yield Static(self.original_prompt_label, id="prompt-label") # Use property
-                    yield ExtendedInput(id="user-input") # Changed to ExtendedInput
+                    yield Static(self.original_prompt_label, id="prompt-label")
+                    yield ExtendedInput(id="user-input", history_file_path=QX_HISTORY_FILE)
                 yield StatusFooter(id="status-footer")
 
     async def _show_approval_selector(self, options: list[tuple[str, str]], prompt: str):
@@ -226,7 +236,7 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
         if self.approval_selector_instance: await self.approval_selector_instance.remove(); self.approval_selector_instance = None
         self.approval_selector_instance = OptionSelector(options=options, border_title=prompt, id="approval-selector-active")
         try: self.query_one("#input-container").display = False
-        except: pass # Ignore if not found
+        except: pass 
         if self.user_input: self.user_input.can_focus = False
         await self.approval_container.mount(self.approval_selector_instance)
         self.approval_container.display = True
@@ -258,11 +268,10 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
         await self._hide_approval_selector()
     
     async def _process_user_input(self, input_text: str) -> None:
-        # This is called AFTER special input (like for modify) is handled by _handle_submitted_text
         if self.prompt_handler and self.prompt_handler._input_future and not self.prompt_handler._input_future.done():
             self.prompt_handler.handle_input(input_text); return
         self.output_log.write(f"[red]⏵ {input_text}[/]")
-        if self.user_input: self.user_input.add_to_history(input_text)
+        if self.user_input: self.user_input.add_to_history(input_text) 
         if input_text.lower() in ["exit", "quit"]: await self._async_quit(); return
         if input_text.startswith("/"): await self.handle_command(input_text); return
         if self.llm_agent: 
@@ -274,47 +283,48 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
 
     def on_mount(self) -> None:
         self.output_log = self.query_one("#output-log", RichLog)
-        self.output_log.can_focus = False # <--- MODIFIED HERE
-        self.user_input = self.query_one("#user-input", ExtendedInput) # Changed to ExtendedInput
+        self.output_log.can_focus = False
+        self.user_input = self.query_one("#user-input", ExtendedInput)
         self.prompt_label = self.query_one("#prompt-label", Static)
         self.status_footer = self.query_one("#status-footer", StatusFooter)
-        self._stored_original_prompt_label = str(self.prompt_label.renderable) # Store initial prompt
+        self._stored_original_prompt_label = str(self.prompt_label.renderable)
         qx_console.set_widgets(self.output_log, self.user_input); qx_console._app = self
         qx_console.set_logger(logging.getLogger("qx"))
         if self._qx_version and self._llm_model_name: self.output_log.write(f"[dim]QX ver:{self._qx_version} - {self._llm_model_name}[/dim]")
-        if self.mcp_manager and self.user_input: self.user_input.set_command_completer(CommandCompleter(mcp_manager=self.mcp_manager))
-        if self.user_input: self.user_input.load_history(); self.user_input.focus()
+        
+        if self.mcp_manager and self.user_input:
+            command_completer = CommandCompleter(mcp_manager=self.mcp_manager)
+            self.user_input.set_command_completer(command_completer)
+        
+        if self.user_input: self.user_input.focus()
 
-    def action_toggle_multiline_or_submit(self) -> None:
-        # Call the action directly on the ExtendedInput widget
-        if self.user_input: self.user_input.action_toggle_multiline_or_submit()
+    # Removed action_toggle_multiline_or_submit as ExtendedInput handles it internally
+    # and communicates via MultilineModeToggled message.
 
-    async def on_input_submitted(self, event: Input.Submitted) -> None: # Should not be used by QXTextArea
+    async def on_input_submitted(self, event: Input.Submitted) -> None: 
         if event.input.id == "user-input": await self._handle_submitted_text(str(event.value))
 
+    @on(UserInputSubmitted)
     async def on_user_input_submitted(self, event: UserInputSubmitted) -> None:
         await self._handle_submitted_text(event.input_text)
 
     async def _handle_submitted_text(self, text: str) -> None:
-        """Central handler for any text submitted from the main input area."""
         try:
             if self.is_awaiting_text_input and self.text_input_future and not self.text_input_future.done():
                 self.text_input_future.set_result(text)
-                # Input field will be cleared by prompt_for_text_input's finally block or here
-                if self.user_input: self.user_input.text = "" # Clear after successful special input
-                return # Input was for prompt_for_text_input
+                if self.user_input: self.user_input.text = "" 
+                return 
 
-            if self.is_processing: return # Ignore if LLM is busy
+            if self.is_processing: return 
             
             input_text = text
             if self.user_input:
-                self.user_input.text = "" # Clear main input after normal submission
-                if self.user_input.is_multiline_mode:
-                    self.user_input.is_multiline_mode = False
-                    self.user_input._update_prompt_label() # Reset to normal prompt
+                self.user_input.text = "" 
+                # If it was multiline, ExtendedInput will post MultilineModeToggled(False)
+                # which will be handled by on_multiline_mode_toggled to reset the prompt.
             
-            if not input_text.strip(): return # Skip empty input for LLM
-            await self._process_user_input(input_text) # Process for LLM or command
+            if not input_text.strip(): return 
+            await self._process_user_input(input_text)
         except Exception as e:
             import traceback; logger.critical(f"Critical error in input handling: {e}", exc_info=True)
             if self.output_log: self.output_log.write(f"[red]Critical Error in Input Handler:[/red] {e}\n[dim]{traceback.format_exc()}[/dim]")
@@ -342,15 +352,65 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
         else: self.output_log.write(f"[red]Unknown command: {command_name}[/red]")
 
     def update_prompt_label(self, new_label: str):
-        # This is a general utility; specific input modes manage their own prompt text.
         if self.prompt_label and not self.is_awaiting_text_input: 
             self.prompt_label.update(new_label)
-            self._stored_original_prompt_label = new_label # Update stored if changed externally
+            # Do not update _stored_original_prompt_label here if it's a temporary change like multiline
+
+    @on(LogEmitted)
+    def on_log_emitted(self, message: LogEmitted) -> None:
+        """Handles log messages from ExtendedInput."""
+        if self.output_log:
+            if message.level == "error":
+                self.output_log.write(f"[red]Input Log Error: {message.text}[/red]")
+                logger.error(f"ExtendedInput: {message.text}")
+            elif message.level == "warning":
+                self.output_log.write(f"[yellow]Input Log Warning: {message.text}[/yellow]")
+                logger.warning(f"ExtendedInput: {message.text}")
+            else:
+                self.output_log.write(f"[dim]Input Log: {message.text}[/dim]")
+                logger.info(f"ExtendedInput: {message.text}")
+
+    @on(MultilineModeToggled)
+    def on_multiline_mode_toggled(self, message: MultilineModeToggled) -> None:
+        """Handles multiline mode changes from ExtendedInput."""
+        if self.prompt_label and not self.is_awaiting_text_input:
+            if message.is_multiline:
+                self.prompt_label.update(self._multiline_prompt_label)
+            else:
+                self.prompt_label.update(self._stored_original_prompt_label)
+        if self.user_input: # Ensure input widget is focused after mode toggle
+            self.user_input.focus()
+
+    @on(DisplayCompletionMenu)
+    async def on_display_completion_menu(self, message: DisplayCompletionMenu) -> None:
+        """Handles request to display the completion menu."""
+        if self._active_completion_menu:
+            await self._active_completion_menu.remove()
+            self._active_completion_menu = None
+        
+        self._active_completion_menu = message.menu_widget
+        
+        # Mount the menu to the screen. ExtendedInput has already set styles.
+        # We assume ExtendedInput (message.anchor_widget) is within a known layout.
+        # For simplicity, mounting to screen for overlay effect.
+        await self.screen.mount(self._active_completion_menu)
+        self._active_completion_menu.focus() # Focus the menu
+        if self.user_input: self.user_input.can_focus = False # Prevent input from stealing focus
+
+    @on(HideCompletionMenu)
+    async def on_hide_completion_menu(self, message: HideCompletionMenu) -> None:
+        """Handles request to hide the completion menu."""
+        # Check if the menu to hide is the one we are currently managing
+        if self._active_completion_menu and self._active_completion_menu is message.menu_widget:
+            await self._active_completion_menu.remove()
+            self._active_completion_menu = None
+            if self.user_input: 
+                self.user_input.can_focus = True
+                self.user_input.focus() # Return focus to input
 
     async def cleanup_tasks(self):
         if self.approval_future and not self.approval_future.done(): self.approval_future.cancel()
         if self.text_input_future and not self.text_input_future.done(): self.text_input_future.cancel()
-        # Cancel all tracked background tasks
         await self._task_tracker.cancel_all(timeout=2.0)
 
     def action_quit(self) -> None: 
@@ -360,6 +420,7 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
         try:
             if self.status_footer: self.status_footer.stop_spinner()
             if self.approval_container and self.approval_container.display: await self._hide_approval_selector()
+            if self._active_completion_menu: await self._active_completion_menu.remove(); self._active_completion_menu = None
             await self.cleanup_tasks()
         except Exception as e: logger.error(f"Error during pre-exit cleanup: {e}", exc_info=True)
         finally:
@@ -368,34 +429,25 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
             self.exit()
     
     async def action_handle_escape(self) -> None:
-        """Handle Escape key presses globally."""
-        # If awaiting special text input (e.g., for file path modification)
-        if self.is_awaiting_text_input and self.text_input_future and not self.text_input_future.done():
+        # ExtendedInput's escape handler will post HideCompletionMenu if a menu is active.
+        # That message is handled by on_hide_completion_menu.
+        # If no menu is active, and we are awaiting text input, cancel it.
+        if self._active_completion_menu: # This check might be redundant if ExtendedInput handles it
+            # ExtendedInput should have already posted HideCompletionMenu
+            pass 
+        elif self.is_awaiting_text_input and self.text_input_future and not self.text_input_future.done():
             logger.info("Escape pressed during text input. Cancelling.")
             self.output_log.write("[yellow]Input cancelled.[/yellow]")
-            self.text_input_future.set_result(None) # Resolve with None to indicate cancellation
-            # The finally block in prompt_for_text_input will restore the UI
+            self.text_input_future.set_result(None) 
             return
-
-        # If OptionSelector is active, it should handle Escape itself to close or post a cancel message.
-        # If we want Escape to globally cancel OptionSelector, we might need to post a message to it
-        # or call its cancellation logic if it doesn't handle Escape by default for closing.
-        # For now, assuming OptionSelector handles its own Escape if needed for deselection/cancel.
-
-        # If no specific modal/input is active, Escape doesn't have a default global action here.
-        # Could be used to unfocus input, clear input, etc. if desired.
-        # self.user_input.text = "" # Example: clear input on escape
-        # self.screen.set_focus(None) # Example: unfocus input
+        # If neither of the above, and user_input is focused, clear its text (Textual's default for escape on Input)
+        elif self.user_input and self.user_input.has_focus and self.user_input.text:
+            self.user_input.text = ""
+            self.user_input.action_delete_left_all() # Ensure text is cleared
 
 
 async def run_textual_app(mcp_manager=None, initial_prompt: Optional[str] = None) -> QXApp:
     app = QXApp()
     if mcp_manager: app.set_mcp_manager(mcp_manager)
-    # Pass initial_prompt to app if needed, e.g., app.initial_prompt = initial_prompt
-    # The original code had `await app._startup()`. This is internal.
-    # For a typical app run, you'd use `app.run()` or `app.run_async()`.
-    # If this function is meant to set up and return the app instance for later running,
-    # then `_startup` might be part of that, but it's unusual.
-    # For now, I will keep it as it was in the provided file.
-    await app._startup() 
+    # await app._startup() # _startup is a private Textual method, app.run() handles this.
     return app
