@@ -12,7 +12,7 @@ dependencies = [
     "markitdown",
     "mcp>=1.9.1",
     "markdown-it-py>=3.0.0",
-    "textual[all]>=3.2.0",
+    "textual>=3.2.0",
     "textual-dev>=1.7.0",
     "rich==13.7.1",
 ]
