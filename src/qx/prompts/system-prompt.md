@@ -68,6 +68,7 @@ When a user asks a question or requests an operation, you will:
     1.  Clearly state your question.
     2.  **Immediately stop further processing or action on the task pathway that depends on the user's answer.**
     3.  Patiently wait for the user to provide their response before resuming or replanning that task. Do not offer new suggestions or take new actions on the same topic until the outstanding question is answered.
+- **Announce Diagnosis:** When troubleshooting or debugging, if you pinpoint the specific cause of an error or problem, clearly state to the user that you've identified the cause before detailing the solution or next steps and continue.
 
 ---
 
