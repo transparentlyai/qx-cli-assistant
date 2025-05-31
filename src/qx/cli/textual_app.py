@@ -516,8 +516,11 @@ class QXApp(App[None]):
                 self.prompt_label.update(self._multiline_prompt_label)
             else:
                 self.prompt_label.update(self._stored_original_prompt_label)
-        if self.user_input:  # Ensure input widget is focused after mode toggle
-            self.user_input.focus()
+        # ExtendedInput will manage its own focus after operations that might trigger this.
+        # For instance, after fzf selection, ExtendedInput calls self.focus().
+        # For manual Alt+Enter toggle, ExtendedInput also handles its focus.
+        # if self.user_input:
+        #     self.user_input.focus()
 
     @on(DisplayCompletionMenu)
     async def on_display_completion_menu(self, message: DisplayCompletionMenu) -> None:

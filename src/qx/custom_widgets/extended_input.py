@@ -375,70 +375,95 @@ class ExtendedInput(TextArea):
         if not self.is_input_globally_active:
             return
         if not self.history_file_path or not self.history_load_fn:
-            self.post_message(LogEmitted("History path or load function not configured for fzf search.", "warning"))
+            self.post_message(LogEmitted("fzf: History path or load function not configured.", "warning"))
             return
         if not shutil.which("fzf"):
-            self.post_message(LogEmitted("fzf not found. Ctrl-R history search disabled.", "warning"))
+            self.post_message(LogEmitted("fzf: fzf command not found. Please ensure it's installed and in your PATH.", "warning"))
             return
 
-        history_commands = self.history_load_fn(self.history_file_path)
-        if not history_commands:
-            self.post_message(LogEmitted("No history found for fzf search.", "info"))
+        original_history_commands = self.history_load_fn(self.history_file_path)
+        if not original_history_commands:
+            self.post_message(LogEmitted("fzf: No history found for fzf search.", "info"))
             return
 
-        history_commands.reverse()  # fzf typically shows newest first
+        fzf_display_entries: List[str] = []
+        for i, command in reversed(list(enumerate(original_history_commands))):
+            display_line = command.replace("\n", " ↵ ")
+            fzf_display_entries.append(f"{i}\t{display_line}")
 
         selected_command_str: Optional[str] = None
         
-        # Use the App.suspend() context manager to handle terminal suspension and resumption
-        with self.app.suspend():
-            try:
-                process = await asyncio.create_subprocess_exec(
-                    "fzf",
-                    "--height=40%",
-                    "--header=[History Search]",
-                    "--prompt=Search> ",
-                    "--select-1",  # Automatically select the highlighted item on Enter
-                    "--exit-0",    # Exit with 0 if an item is selected, 1 if no match/Esc
-                    "--no-sort",   # Use the input order (we've reversed it)
-                    stdin=asyncio.subprocess.PIPE,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                fzf_input = "\n".join(history_commands).encode("utf-8")
-                stdout, stderr = await asyncio.wait_for(
-                    process.communicate(input=fzf_input),
-                    timeout=300.0  # Generous timeout for user interaction
-                )
-                
-                fzf_return_code = process.returncode
+        if not (hasattr(self.app, 'suspend') and callable(getattr(self.app, 'suspend'))):
+            self.post_message(LogEmitted("fzf: CRITICAL - self.app does not support suspend context manager!", "error"))
+            return
 
-                if fzf_return_code == 0 and stdout:
-                    selected_command_str = stdout.decode("utf-8").strip()
-                elif fzf_return_code == 1: # User pressed Esc or no match
-                    self.post_message(LogEmitted("fzf: No selection made or Esc pressed.", "info"))
-                elif fzf_return_code == 130: # User pressed Ctrl+C
-                    self.post_message(LogEmitted("fzf: Cancelled by user (Ctrl+C).", "info"))
-                elif fzf_return_code is not None and fzf_return_code > 1 : # Other fzf errors
-                    error_output = stderr.decode('utf-8').strip() if stderr else "Unknown fzf error"
-                    self.post_message(LogEmitted(f"fzf error (code {fzf_return_code}): {error_output}", "error"))
+        try:
+            with self.app.suspend():
+                try:
+                    process = await asyncio.create_subprocess_exec(
+                        "fzf",
+                        "--height=40%",
+                        "--header=[History Search]",
+                        "--prompt=Search> ",
+                        "--select-1",
+                        "--exit-0",
+                        "--with-nth=2..",
+                        stdin=asyncio.subprocess.PIPE,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    fzf_input = "\n".join(fzf_display_entries).encode("utf-8")
+                    stdout, stderr = await asyncio.wait_for(
+                        process.communicate(input=fzf_input),
+                        timeout=300.0
+                    )
+                    
+                    fzf_return_code = process.returncode
 
-            except asyncio.TimeoutError:
-                self.post_message(LogEmitted("fzf search timed out.", "error"))
-            except FileNotFoundError:
-                self.post_message(LogEmitted("fzf command not found. Please ensure it's installed and in your PATH.", "error"))
-            except Exception as e:
-                self.post_message(LogEmitted(f"An unexpected error occurred with fzf: {e}", "error"))
+                    if fzf_return_code == 0 and stdout:
+                        selected_fzf_line = stdout.decode("utf-8").strip()
+                        try:
+                            original_index_str = selected_fzf_line.split("\t", 1)[0]
+                            original_index = int(original_index_str)
+                            if 0 <= original_index < len(original_history_commands):
+                                selected_command_str = original_history_commands[original_index]
+                            else:
+                                self.post_message(LogEmitted(f"fzf: Invalid index {original_index} from selection '{selected_fzf_line!r}'.", "error"))
+                        except (ValueError, IndexError) as e:
+                            self.post_message(LogEmitted(f"fzf: Error parsing selection '{selected_fzf_line!r}': {e}", "error"))
+                    elif fzf_return_code == 1:
+                        self.post_message(LogEmitted("fzf: No selection made or Esc pressed (exit code 1).", "info"))
+                        selected_command_str = None 
+                    elif fzf_return_code == 130:
+                        self.post_message(LogEmitted("fzf: Cancelled by user (Ctrl+C).", "info"))
+                        selected_command_str = None
+                    elif fzf_return_code is not None and fzf_return_code > 1:
+                        error_output = stderr.decode('utf-8', errors='replace').strip() if stderr else "Unknown fzf error"
+                        self.post_message(LogEmitted(f"fzf error (code {fzf_return_code}): {error_output}", "error"))
+                        selected_command_str = None
+
+                except asyncio.TimeoutError:
+                    self.post_message(LogEmitted("fzf: Search timed out.", "error"))
+                except FileNotFoundError:
+                    self.post_message(LogEmitted("fzf: Command not found. Ensure 'fzf' is installed and in PATH.", "error"))
+                except Exception as e:
+                    self.post_message(LogEmitted(f"fzf: Unexpected error during fzf execution: {e}", "error"))
+        except AttributeError as e:
+            self.post_message(LogEmitted(f"fzf: App suspend/resume failed: {e}. Check app capabilities.", "error"))
+        except Exception as e:
+            self.post_message(LogEmitted(f"fzf: General error during suspend/resume or fzf: {e}", "error"))
         
-        # Textual automatically resumes after the 'with self.app.suspend():' block.
-
-        if selected_command_str:
+        if selected_command_str is not None:
             self.text = selected_command_str
-            self._adjust_multiline_mode_for_text(self.text)
-            self.move_cursor(self.document.end)
-            self.scroll_cursor_visible()
+            self._adjust_multiline_mode_for_text(self.text) # This will post MultilineModeToggled if mode changes
+        else:
+            if self.text: 
+                self.text = ""
+                self._adjust_multiline_mode_for_text(self.text) # This will post MultilineModeToggled if mode changes
         
-        self.focus() # Re-focus the input field after fzf interaction
+        self.move_cursor(self.document.end)
+        self.scroll_cursor_visible()
+        self.focus()
 
     async def action_handle_escape(self) -> None:
         if self._selector_widget and self._selector_widget.display:
