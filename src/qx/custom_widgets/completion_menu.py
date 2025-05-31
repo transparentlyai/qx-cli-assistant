@@ -17,7 +17,7 @@ class CompletionMenu(VerticalScroll):
         height: auto;
         max-height: 10;
         overflow-y: auto;
-        width: 100%; /* Changed from auto to 100% */
+        width: 100%;
         background: #1e1e1e;
         border: round #0087ff;
         padding: 0;
@@ -60,80 +60,101 @@ class CompletionMenu(VerticalScroll):
             self.owner_widget = owner_widget
     
     items = reactive([]) 
-    selected_index = reactive(0)
+    selected_index = reactive(0) # Default to 0
     
     def __init__(self, items: List[Tuple[str, str]], owner: Optional[Widget] = None, **kwargs):
         super().__init__(**kwargs)
         self.items = items
-        self.owner = owner # This is the ExtendedInput instance
+        self.owner = owner
         self.can_focus = True
         
-    def on_mount(self) -> None:
-        self.focus()
-        self._update_item_styles() # Apply initial styling
-        self._scroll_selected_to_view() # Scroll to initially selected item
-        
-    def watch_selected_index(self, old_index: int, new_index: int) -> None:
-        if not self.is_mounted:
-            return # Don't try to query or scroll if not mounted
+    def _apply_selection_styles_and_scroll(self) -> None:
+        """Helper to apply styles and scroll, ensuring widget is mounted and items exist."""
+        if not self.is_mounted or not self.items:
+            # If no items, still call _update_item_styles to clear any previous selection visuals
+            if self.is_mounted:
+                self._update_item_styles()
+            return
         self._update_item_styles()
         self._scroll_selected_to_view()
 
+    def on_mount(self) -> None:
+        self.focus()
+        # Defer the initial styling and scrolling until after the next refresh
+        # This ensures that the DOM is fully updated and styles can be applied correctly.
+        if self.items: # Only schedule if there are items to potentially select
+            self.app.call_after_refresh(self._apply_selection_styles_and_scroll)
+        else:
+            # If no items on mount, ensure any residual styling is cleared
+            self.app.call_after_refresh(self._update_item_styles)
+        
+    def watch_selected_index(self, old_index: int, new_index: int) -> None:
+        # Called when selected_index changes. Apply styles directly.
+        self._apply_selection_styles_and_scroll()
+    
+    def watch_items(self, old_items: list, new_items: list) -> None:
+        """Called when items list changes."""
+        # When items change (e.g., populated after mount or cleared),
+        # reset selected_index to 0 if there are new items, and update styles.
+        if new_items:
+            if self.selected_index != 0:
+                self.selected_index = 0 # This will trigger watch_selected_index
+            else:
+                # If selected_index is already 0, watch_selected_index won't fire, so call directly
+                self._apply_selection_styles_and_scroll()
+        else:
+            # No items, clear selection visuals
+            self.selected_index = -1 # Or some other indicator for no selection if 0 is valid for empty
+            self._apply_selection_styles_and_scroll()
+
     def _scroll_selected_to_view(self) -> None:
-        """Scrolls the currently selected item into view."""
-        if not self.items: # No items, nothing to scroll to
+        if not self.items or not self.is_mounted or self.selected_index < 0 or self.selected_index >= len(self.children):
             return
         try:
-            selected_widget = self.query(f".item-{self.selected_index}").first()
-            if selected_widget:
-                self.scroll_to_widget(selected_widget, animate=False, top=False) # top=False to center if possible
+            if self.selected_index < len(self.children):
+                 selected_widget = self.children[self.selected_index]
+                 if isinstance(selected_widget, Static) and selected_widget.has_class("item"):
+                    self.scroll_to_widget(selected_widget, animate=False, top=False)
         except Exception as e:
             self.log(f"Error scrolling to widget: {e}")
 
     def _update_item_styles(self) -> None:
-        """Updates the styles of items based on selection."""
-        if not self.is_mounted: # Ensure children are available
+        if not self.is_mounted: 
             return
         for i, child in enumerate(self.children):
-            # Check if child is a Static widget and has the item-i class
             if isinstance(child, Static) and child.has_class(f"item-{i}"):
-                if i == self.selected_index:
+                if self.items and i == self.selected_index:
                     child.add_class("selected")
                 else:
                     child.remove_class("selected")
 
     def compose(self) -> ComposeResult:
         for i, (name, type_) in enumerate(self.items):
-            item_classes = f"item item-{i}" # Assign item-i class here
-            # Initial selection style is handled by _update_item_styles in on_mount
+            item_classes = f"item item-{i}" 
             yield Static(f"{name} [dim]{type_}[/dim]", classes=item_classes)
                 
     def on_key(self, event: Key) -> None:
         self.log(f"CompletionMenu on_key received: {event.key}")
 
     def action_move_up(self):
-        self.log("CompletionMenu Action: move_up")
         if self.items:
             self.selected_index = (self.selected_index - 1 + len(self.items)) % len(self.items)
 
     def action_move_down(self):
-        self.log("CompletionMenu Action: move_down")
         if self.items:
             self.selected_index = (self.selected_index + 1) % len(self.items)
 
     def action_select_item(self):
-        self.log("CompletionMenu Action: select_item")
         if self.items and 0 <= self.selected_index < len(self.items):
             message = self.ItemSelected(self.selected_index, self.items[self.selected_index][0], owner_widget=self.owner)
-            if self.owner: # If owner (ExtendedInput) is set, post message via owner
+            if self.owner: 
                 self.owner.post_message(message)
-            else: # Fallback if no owner (should not happen in normal QXApp flow)
+            else: 
                 self.post_message(message)
 
     def action_cancel_selection(self):
-        self.log("CompletionMenu Action: cancel_selection")
         message = self.Cancelled(owner_widget=self.owner)
-        if self.owner: # If owner (ExtendedInput) is set, post message via owner
+        if self.owner: 
             self.owner.post_message(message)
-        else: # Fallback
+        else: 
             self.post_message(message)
