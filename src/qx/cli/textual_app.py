@@ -10,7 +10,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, Container
 from textual.message import Message
-from textual.widgets import Input, RichLog, Static, TextArea
+from textual.widgets import Input, RichLog, Static # Removed TextArea
 
 from qx.cli.commands import CommandCompleter
 from qx.cli.console import TextualRichLogHandler, qx_console
@@ -19,6 +19,7 @@ from qx.core.llm import query_llm
 from qx.core.paths import QX_HISTORY_FILE
 from qx.core.session_manager import clean_old_sessions, save_session, save_session_async
 from qx.custom_widgets.option_selector import OptionSelector
+from qx.custom_widgets.extended_input import ExtendedInput, UserInputSubmitted # Import ExtendedInput and UserInputSubmitted
 
 logger = logging.getLogger(__name__)
 
@@ -58,170 +59,7 @@ class StatusFooter(Static):
         self.spinner_index = (self.spinner_index + 1) % len(self.spinner_chars)
 
 
-class QXTextArea(TextArea):
-    """Custom TextArea widget for both single-line and multiline input."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.command_completer: Optional[CommandCompleter] = None
-        self.completions: list[str] = []
-        self.completion_index = -1
-        self._history: list[str] = []
-        self._history_index: int = -1
-        self.is_multiline_mode: bool = False
-
-    def set_command_completer(self, completer: CommandCompleter):
-        self.command_completer = completer
-
-    def load_history(self) -> None:
-        from qx.core.history_utils import parse_history_file
-        self._history = parse_history_file(QX_HISTORY_FILE)
-        self._history_index = len(self._history)
-        if not QX_HISTORY_FILE.exists():
-            QX_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
-
-    def add_to_history(self, command: str) -> None:
-        from qx.core.history_utils import save_command_to_history
-        command = command.strip()
-        if command and (not self._history or self._history[-1] != command):
-            self._history.append(command)
-            self._history_index = len(self._history)
-            save_command_to_history(QX_HISTORY_FILE, command)
-
-    async def key_tab(self) -> None:
-        if self.command_completer:
-            current_text = str(self.text)
-            completions = self.command_completer.get_completions(current_text)
-            if completions:
-                if len(completions) == 1:
-                    self.text = completions[0]
-                    lines = self.text.splitlines()
-                    if lines:
-                        row = len(lines) - 1
-                        col = len(lines[-1])
-                        self.move_cursor((row, col))
-                else:
-                    if self.completions != completions:
-                        self.completions = completions
-                        self.completion_index = 0
-                    else:
-                        self.completion_index = (self.completion_index + 1) % len(completions)
-                    self.text = self.completions[self.completion_index]
-                    lines = self.text.splitlines()
-                    if lines:
-                        row = len(lines) - 1
-                        col = len(lines[-1])
-                        self.move_cursor((row, col))
-
-    async def key_up(self) -> None:
-        if self.app.is_awaiting_text_input: # Prevent history navigation during special input
-            return 
-        if self._history:
-            if self._history_index > 0:
-                self._history_index -= 1
-            self.text = self._history[self._history_index]
-            lines = self.text.splitlines()
-            if lines:
-                row = len(lines) - 1
-                col = len(lines[-1])
-                self.move_cursor((row, col))
-
-    async def key_down(self) -> None:
-        if self.app.is_awaiting_text_input: # Prevent history navigation during special input
-            return
-        if self._history:
-            if self._history_index < len(self._history) - 1:
-                self._history_index += 1
-                self.text = self._history[self._history_index]
-            else:
-                self._history_index = len(self._history)
-                self.text = ""
-            lines = self.text.splitlines()
-            if lines:
-                row = len(lines) - 1
-                col = len(lines[-1])
-                self.move_cursor((row, col))
-
-    async def on_key(self, event: events.Key) -> None:
-        # If app is awaiting special text input, Enter submits it.
-        # Otherwise, normal Enter (non-multiline) submits for LLM.
-        if event.key == "enter":
-            if self.app.is_awaiting_text_input or not self.is_multiline_mode:
-                text_content = str(self.text)
-                self.post_message(UserInputSubmitted(text_content))
-                event.prevent_default() # Prevent newline insertion
-                event.stop()
-                return
-        # Other keys are handled by their respective handlers (key_up, key_down, etc.)
-        # or by the base TextArea class.
-
-    def key_escape_enter(self) -> None: # Alt+Enter
-        if self.app.is_awaiting_text_input: # Alt+Enter should not toggle multiline during special input
-            return
-        if self.is_multiline_mode:
-            self.post_message(UserInputSubmitted(str(self.text)))
-            self.is_multiline_mode = False
-            self._update_prompt_label()
-        else:
-            self.is_multiline_mode = True
-            self._update_prompt_label()
-            if str(self.text).strip():
-                self.insert("\n")
-
-    def _update_prompt_label(self):
-        app = self.app
-        # Only update if not in special text input mode, which sets its own prompt
-        if hasattr(app, 'prompt_label') and not app.is_awaiting_text_input:
-            if self.is_multiline_mode:
-                app.prompt_label.update("[#005fff]QM⏵ [/]")
-            else:
-                app.prompt_label.update(app.original_prompt_label) # Use stored original
-
-    async def key_ctrl_r(self) -> None:
-        if self.app.is_awaiting_text_input: # Disable fzf during special input
-            return
-        if not shutil.which("fzf"):
-            self.app.query_one("#output-log").write(
-                "[warning]fzf not found. Ctrl-R history search disabled.[/warning]"
-            )
-            return
-        if not QX_HISTORY_FILE.exists() or QX_HISTORY_FILE.stat().st_size == 0:
-            return
-        try:
-            from qx.core.history_utils import parse_history_file
-            history_commands = parse_history_file(QX_HISTORY_FILE)
-            if not history_commands: return
-            history_commands.reverse()
-            process = await asyncio.create_subprocess_exec(
-                "fzf", "--height", "40%", "--header=[QX History Search]",
-                "--prompt=Search> ", "--select-1", "--exit-0", "--no-sort",
-                stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            # Add timeout to subprocess communication to prevent hanging
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(input="\n".join(history_commands).encode("utf-8")),
-                timeout=10.0
-            )
-            if process.returncode == 0:
-                selected_command = stdout.decode("utf-8").strip()
-                if selected_command: self.text = selected_command; self.move_cursor_to_end_of_line()
-            elif process.returncode == 130: pass
-            else:
-                error_msg = stderr.decode("utf-8").strip()
-                self.app.query_one("#output-log").write(f"[red]Error running fzf: {error_msg}[/red]")
-        except asyncio.TimeoutError:
-            self.app.query_one("#output-log").write("[red]fzf search timed out[/red]")
-            if process and process.returncode is None:
-                process.terminate()
-                await process.wait()
-        except Exception as e:
-            self.app.query_one("#output-log").write(f"[red]Error running fzf: {e}[/red]")
-
-class UserInputSubmitted(Message):
-    def __init__(self, input_text: str):
-        self.input_text = input_text
-        super().__init__()
+# QXTextArea class is now merged into ExtendedInput and removed from here.
 
 class QXApp(App[None]): # Changed App to App[None] for explicit void return on run
     CSS_PATH = Path(__file__).parent.parent / "css" / "main.css"
@@ -237,7 +75,7 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
         super().__init__(*args, **kwargs)
         self.prompt_handler = None
         self.output_log: Optional[RichLog] = None
-        self.user_input: Optional[QXTextArea] = None
+        self.user_input: Optional[ExtendedInput] = None # Changed type hint to ExtendedInput
         self.prompt_label: Optional[Static] = None
         self.status_footer: Optional[StatusFooter] = None
         self.mcp_manager = None
@@ -380,7 +218,7 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
             with Vertical(id="bottom-section"):
                 with Horizontal(id="input-container"):
                     yield Static(self.original_prompt_label, id="prompt-label") # Use property
-                    yield QXTextArea(id="user-input")
+                    yield ExtendedInput(id="user-input") # Changed to ExtendedInput
                 yield StatusFooter(id="status-footer")
 
     async def _show_approval_selector(self, options: list[tuple[str, str]], prompt: str):
@@ -437,7 +275,7 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
     def on_mount(self) -> None:
         self.output_log = self.query_one("#output-log", RichLog)
         self.output_log.can_focus = False # <--- MODIFIED HERE
-        self.user_input = self.query_one("#user-input", QXTextArea)
+        self.user_input = self.query_one("#user-input", ExtendedInput) # Changed to ExtendedInput
         self.prompt_label = self.query_one("#prompt-label", Static)
         self.status_footer = self.query_one("#status-footer", StatusFooter)
         self._stored_original_prompt_label = str(self.prompt_label.renderable) # Store initial prompt
@@ -448,7 +286,8 @@ class QXApp(App[None]): # Changed App to App[None] for explicit void return on r
         if self.user_input: self.user_input.load_history(); self.user_input.focus()
 
     def action_toggle_multiline_or_submit(self) -> None:
-        if self.user_input: self.user_input.key_escape_enter()
+        # Call the action directly on the ExtendedInput widget
+        if self.user_input: self.user_input.action_toggle_multiline_or_submit()
 
     async def on_input_submitted(self, event: Input.Submitted) -> None: # Should not be used by QXTextArea
         if event.input.id == "user-input": await self._handle_submitted_text(str(event.value))

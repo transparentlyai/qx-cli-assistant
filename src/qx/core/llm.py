@@ -125,7 +125,7 @@ class QXLLMAgent:
 
         # Create HTTP client with proper configuration
         self._http_client = httpx.AsyncClient(
-            timeout=httpx.Timeout(60.0, connect=10.0),  # 60s total, 10s connect
+            timeout=httpx.Timeout(180.0, connect=10.0),  # 180s total, 10s connect
             limits=httpx.Limits(
                 max_connections=10,
                 max_keepalive_connections=5,
@@ -441,30 +441,29 @@ class QXLLMAgent:
                     else:
                         self.console.print("")
         elif has_tool_calls:
-            # Only suppress very specific git-related narration patterns
-            # We want to be conservative here to avoid suppressing legitimate responses
-            git_narration_patterns = [
-                "with a detailed summary message",
-                "changes with a detailed",
-                "Successfully committed",
-                "Adding files",
-                "Checking changes",
-                "Committing",
-            ]
-            
-            lower_content = accumulated_content.lower().strip()
-            
-            # Only suppress if it matches specific git patterns
-            is_git_narration = any(pattern.lower() in lower_content for pattern in git_narration_patterns)
-            
-            # If it's git narration, suppress it
-            if is_git_narration:
-                accumulated_content = ""
-                # Clear the markdown buffer too
-                markdown_buffer.flush()
-            
-            # Note: We're NOT suppressing general tool announcements anymore.
-            # The model should be smart enough to provide proper responses after tool use.
+            # Display the content even when there are tool calls
+            # The user should see what the assistant is doing
+            all_content = markdown_buffer.flush()
+            if all_content and all_content.strip():
+                if (
+                    hasattr(self.console, "_output_widget")
+                    and self.console._output_widget
+                ):
+                    try:
+                        from rich.markdown import Markdown
+                        markdown = Markdown(all_content, code_theme="rrt")
+                        self.console._output_widget.write(markdown)
+                    except Exception as e:
+                        logger.error(f"Error writing to output widget: {e}")
+                        self.console.print(all_content, end="")
+                else:
+                    self.console.print(all_content, end="")
+                
+                # Add newline after content
+                if hasattr(self.console, "_output_widget") and self.console._output_widget:
+                    self.console._output_widget.write("")  # Add empty line for spacing
+                else:
+                    self.console.print("")
 
         # Create response message from accumulated data
         response_message_dict = {
