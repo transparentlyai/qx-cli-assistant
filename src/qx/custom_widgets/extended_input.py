@@ -3,6 +3,7 @@ import shutil
 import subprocess
 from pathlib import Path
 from typing import Optional, List, Callable, Any, Protocol
+from datetime import datetime # Added for timestamping
 
 from textual import events, on
 from textual.binding import Binding
@@ -113,23 +114,53 @@ class ExtendedInput(TextArea):
             self.history_save_fn = self._default_save_history
             self.load_history()
 
-
     def _default_load_history(self, path: Path) -> List[str]:
         if not path.exists():
             return []
+        
+        history_entries = []
+        current_command_lines = []
         try:
             with open(path, "r", encoding="utf-8") as f:
-                # Basic parsing: one command per line, ignore empty lines
-                return [line.strip() for line in f if line.strip()]
+                lines = f.readlines()
+            
+            for line in lines:
+                stripped_line = line.strip()
+                if stripped_line.startswith("# "): # Timestamp line
+                    # If we were accumulating a command, save it before starting a new one
+                    if current_command_lines:
+                        history_entries.append("\n".join(current_command_lines))
+                        current_command_lines = []
+                    # We don't need to store the timestamp itself for in-memory history
+                elif stripped_line.startswith("+"):
+                    current_command_lines.append(stripped_line[1:]) # Remove '+' and add
+                elif not stripped_line and current_command_lines: # Blank line signifies end of entry
+                    history_entries.append("\n".join(current_command_lines))
+                    current_command_lines = []
+            
+            # Add any remaining command after loop (if file doesn't end with blank line)
+            if current_command_lines:
+                history_entries.append("\n".join(current_command_lines))
+
         except Exception as e:
             self.post_message(LogEmitted(f"Error loading history from {path}: {e}", "error"))
-            return []
+        return history_entries
 
     def _default_save_history(self, path: Path, command: str) -> None:
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             with open(path, "a", encoding="utf-8") as f:
-                f.write(command + "\\n")
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+                f.write(f"\n# {timestamp}\n") # Start with a newline for separation
+                command_lines = command.splitlines()
+                if not command_lines and command == "": # Handle truly empty command string
+                    f.write("+\n") # Save as an empty command line
+                elif not command_lines and command != "": # Command is not empty but has no newlines (e.g. "foo")
+                    f.write(f"+{command}\n")
+                else: # Command has newlines or is non-empty single line
+                    for line in command_lines:
+                        f.write(f"+{line}\n")
+                # The example shows a blank line after, which is achieved by the initial \n for the next entry
         except Exception as e:
             self.post_message(LogEmitted(f"Error saving history to {path}: {e}", "error"))
 
@@ -149,12 +180,14 @@ class ExtendedInput(TextArea):
 
 
     def add_to_history(self, command: str) -> None:
-        command = command.strip()
-        if command and (not self._history or self._history[-1] != command):
-            self._history.append(command)
+        # command here is expected to be the raw string, possibly multiline
+        processed_command_for_comparison = command.strip() # For duplicate check
+        # Avoid adding if it's the same as the last command (even if original had different whitespace)
+        if processed_command_for_comparison and (not self._history or self._history[-1].strip() != processed_command_for_comparison):
+            self._history.append(command) # Store the original command
             self._history_index = len(self._history)
             if self.history_file_path and self.history_save_fn:
-                self.history_save_fn(self.history_file_path, command)
+                self.history_save_fn(self.history_file_path, command) # Pass original command
 
     async def on_key(self, event: events.Key) -> None:
         if self._selector_widget and self._selector_widget.display:
@@ -188,7 +221,8 @@ class ExtendedInput(TextArea):
             if completions:
                 if len(completions) == 1:
                     self.replace(completions[0], start=(current_line_index, start_of_word), end=(current_line_index, current_column_index))
-                    self.action_go_to_end()
+                    self.move_cursor(self.document.end)
+                    self.scroll_cursor_visible()
                 else:
                     self.completion_candidates = completions
                     await self._show_completion_selector(completions, start_of_word, partial_input, is_command=True)
@@ -237,7 +271,8 @@ class ExtendedInput(TextArea):
         if self._history:
             if self._history_index > 0: self._history_index -= 1
             self.text = self._history[self._history_index]
-            self.action_go_to_end()
+            self.move_cursor(self.document.end)
+            self.scroll_cursor_visible()
 
     async def action_history_next(self) -> None:
         if self._selector_widget and self._selector_widget.display: return
@@ -249,7 +284,8 @@ class ExtendedInput(TextArea):
             else:
                 self._history_index = len(self._history)
                 self.text = ""
-            self.action_go_to_end()
+            self.move_cursor(self.document.end)
+            self.scroll_cursor_visible()
 
     def action_toggle_multiline_or_submit(self) -> None:
         if self._selector_widget and self._selector_widget.display: return
@@ -259,7 +295,7 @@ class ExtendedInput(TextArea):
             self.is_multiline_mode = False
         else:
             self.is_multiline_mode = True
-            if str(self.text).strip(): self.insert("\\n")
+            if str(self.text).strip(): self.insert("\n") # Corrected: was "\\n"
         self.post_message(MultilineModeToggled(self.is_multiline_mode))
 
 
@@ -285,14 +321,15 @@ class ExtendedInput(TextArea):
                 stderr=asyncio.subprocess.PIPE,
             )
             stdout, stderr = await asyncio.wait_for(
-                process.communicate(input="\\n".join(history_commands).encode("utf-8")),
+                process.communicate(input="\n".join(history_commands).encode("utf-8")),
                 timeout=10.0
             )
             if process.returncode == 0:
                 selected_command = stdout.decode("utf-8").strip()
                 if selected_command: 
                     self.text = selected_command
-                    self.action_go_to_end()
+                    self.move_cursor(self.document.end)
+                    self.scroll_cursor_visible()
             elif process.returncode == 130: pass # User exited fzf (e.g. Ctrl-C)
             else: self.post_message(LogEmitted(f"Error running fzf: {stderr.decode('utf-8').strip()}", "error"))
         except asyncio.TimeoutError: self.post_message(LogEmitted("fzf search timed out", "error"))
