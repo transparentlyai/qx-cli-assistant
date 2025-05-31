@@ -70,7 +70,7 @@ When a user asks a question or requests an operation, you will:
 
 ---
 
-## Language-Specific Guidelines: Python  <-- INSERT HERE
+## Language-Specific Guidelines
 
 **Syntax Validation for `.py` Files:**
 
