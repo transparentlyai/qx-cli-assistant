@@ -22,7 +22,7 @@ from qx.core.paths import QX_HISTORY_FILE
 from qx.core.session_manager import clean_old_sessions, save_session, save_session_async
 from qx.custom_widgets.completion_menu import (
     CompletionMenu,
-)  # For type hinting if needed; For type hinting if needed
+)  # For type hinting if needed
 
 # Import ExtendedInput and its new messages
 from qx.custom_widgets.extended_input import (
@@ -78,7 +78,6 @@ class QXApp(App[None]):
     BINDINGS = [
         Binding("ctrl+c", "quit", "Quit", priority=True),
         Binding("ctrl+d", "quit", "Quit", priority=True),
-        # Binding("alt+enter", "toggle_multiline_or_submit", "Toggle Multiline/Submit", show=False), # Handled by ExtendedInput
         Binding("escape", "handle_escape", "Handle Escape", show=False, priority=True),
     ]
     enable_mouse_support = True
@@ -103,7 +102,7 @@ class QXApp(App[None]):
         self.is_awaiting_text_input: bool = False
         self._stored_original_prompt_label: str = "QX⏵ "
         self._multiline_prompt_label: str = (
-            "[#0087ff]MUTILINE⏵[/] "  # Prompt for multiline input
+            "[#0087ff]MUTILINE⏵[/] "
         )
 
         self._qx_version: str = ""
@@ -112,8 +111,8 @@ class QXApp(App[None]):
 
         self._task_tracker = TaskTracker()
 
-        # For managing the CompletionMenu
         self._active_completion_menu: Optional[CompletionMenu] = None
+        self.completion_menu_area: Optional[Container] = None # Added for the menu container
 
     @property
     def original_prompt_label(self) -> str:
@@ -208,7 +207,6 @@ class QXApp(App[None]):
             if self.text_input_future and not self.text_input_future.done():
                 self.text_input_future.cancel()
             self.text_input_future = None
-            # ExtendedInput's MultilineModeToggled message will handle prompt updates
 
     async def _handle_llm_query(self, input_text: str) -> None:
         if self.is_processing:
@@ -270,7 +268,6 @@ class QXApp(App[None]):
             if self.user_input:
                 self.user_input.disabled = False
                 self.user_input.can_focus = True
-            # Prompt label updated by MultilineModeToggled or restored here
             if self.prompt_label and self.user_input:
                 self.prompt_label.update(
                     self._multiline_prompt_label
@@ -287,8 +284,11 @@ class QXApp(App[None]):
                 id="approval-selector-container", classes="hidden"
             )
             yield self.approval_container
-            # Completion menu container - will be mounted here by DisplayCompletionMenu handler
-            # yield Container(id="completion-menu-container", classes="hidden")
+            
+            # Container for the completion menu, positioned above the bottom section
+            self.completion_menu_area = Container(id="completion-menu-area", classes="hidden")
+            yield self.completion_menu_area
+            
             with Vertical(id="bottom-section"):
                 with Horizontal(id="input-container"):
                     yield Static(self.original_prompt_label, id="prompt-label")
@@ -395,6 +395,7 @@ class QXApp(App[None]):
         self.user_input = self.query_one("#user-input", ExtendedInput)
         self.prompt_label = self.query_one("#prompt-label", Static)
         self.status_footer = self.query_one("#status-footer", StatusFooter)
+        # self.completion_menu_area is assigned in compose
         self._stored_original_prompt_label = str(self.prompt_label.renderable)
         qx_console.set_widgets(self.output_log, self.user_input)
         qx_console._app = self
@@ -410,9 +411,6 @@ class QXApp(App[None]):
 
         if self.user_input:
             self.user_input.focus()
-
-    # Removed action_toggle_multiline_or_submit as ExtendedInput handles it internally
-    # and communicates via MultilineModeToggled message.
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id == "user-input":
@@ -440,8 +438,6 @@ class QXApp(App[None]):
             input_text = text
             if self.user_input:
                 self.user_input.text = ""
-                # If it was multiline, ExtendedInput will post MultilineModeToggled(False)
-                # which will be handled by on_multiline_mode_toggled to reset the prompt.
 
             if not input_text.strip():
                 return
@@ -458,7 +454,6 @@ class QXApp(App[None]):
     async def handle_command(self, command_input: str):
         parts = command_input.strip().split(maxsplit=1)
         command_name = parts[0].lower()
-        # ... (rest of handle_command remains the same)
         if command_name == "/model" and self.llm_agent:
             info = f"[bold]Current LLM Model Configuration:[/bold]\n"
             info += f"  Model Name: [green]{self.llm_agent.model_name}[/green]\n"
@@ -491,11 +486,9 @@ class QXApp(App[None]):
     def update_prompt_label(self, new_label: str):
         if self.prompt_label and not self.is_awaiting_text_input:
             self.prompt_label.update(new_label)
-            # Do not update _stored_original_prompt_label here if it's a temporary change like multiline
 
     @on(LogEmitted)
     def on_log_emitted(self, message: LogEmitted) -> None:
-        """Handles log messages from ExtendedInput."""
         if self.output_log:
             if message.level == "error":
                 self.output_log.write(f"[red]Input Log Error: {message.text}[/red]")
@@ -511,52 +504,54 @@ class QXApp(App[None]):
 
     @on(MultilineModeToggled)
     def on_multiline_mode_toggled(self, message: MultilineModeToggled) -> None:
-        """Handles multiline mode changes from ExtendedInput."""
         if self.prompt_label and not self.is_awaiting_text_input:
             if message.is_multiline:
                 self.prompt_label.update(self._multiline_prompt_label)
             else:
                 self.prompt_label.update(self._stored_original_prompt_label)
-        # ExtendedInput will manage its own focus after operations that might trigger this.
-        # For instance, after fzf selection, ExtendedInput calls self.focus().
-        # For manual Alt+Enter toggle, ExtendedInput also handles its focus.
-        # if self.user_input:
-        #     self.user_input.focus()
 
     @on(DisplayCompletionMenu)
     async def on_display_completion_menu(self, message: DisplayCompletionMenu) -> None:
-        """Handles request to display the completion menu."""
+        if not self.completion_menu_area:
+            logger.error("Completion menu area not initialized!")
+            return
+
         if self._active_completion_menu:
-            await self._active_completion_menu.remove()
+            try:
+                await self._active_completion_menu.remove()
+            except Exception as e:
+                logger.warning(f"Error removing previous completion menu: {e}")
             self._active_completion_menu = None
 
         self._active_completion_menu = message.menu_widget
-
-        # Mount the menu to the screen. ExtendedInput has already set styles.
-        # We assume ExtendedInput (message.anchor_widget) is within a known layout.
-        # For simplicity, mounting to screen for overlay effect.
-        await self.screen.mount(self._active_completion_menu)
-        self._active_completion_menu.focus()  # Focus the menu
+        
+        self.completion_menu_area.display = True # Ensure the container is visible
+        await self.completion_menu_area.mount(self._active_completion_menu)
+        self._active_completion_menu.focus()
         if self.user_input:
-            self.user_input.can_focus = False  # Prevent input from stealing focus
+            self.user_input.can_focus = False
 
     @on(HideCompletionMenu)
     async def on_hide_completion_menu(self, message: HideCompletionMenu) -> None:
-        """Handles request to hide the completion menu."""
-        # Check if the menu to hide is the one we are currently managing
+        if not self.completion_menu_area:
+            return
+
         if (
             self._active_completion_menu
             and self._active_completion_menu is message.menu_widget
         ):
-            await self._active_completion_menu.remove()
+            try:
+                await self._active_completion_menu.remove()
+            except Exception as e:
+                logger.warning(f"Error removing completion menu: {e}")
             self._active_completion_menu = None
+            self.completion_menu_area.display = False # Hide container if empty
             if self.user_input:
                 self.user_input.can_focus = True
-                self.user_input.focus()  # Return focus to input
+                self.user_input.focus()
 
     @on(RenderStreamContent)
     def on_render_stream_content(self, message: RenderStreamContent) -> None:
-        """Handles LLM streaming content rendering in a thread-safe manner."""
         if self.output_log:
             try:
                 if message.is_markdown:
@@ -568,15 +563,13 @@ class QXApp(App[None]):
                     self.output_log.write(message.content, end=message.end)
             except Exception as e:
                 logger.error(f"Error rendering stream content: {e}")
-                # Fallback to plain text
                 self.output_log.write(message.content, end=message.end)
 
     @on(StreamingComplete)
     def on_streaming_complete(self, message: StreamingComplete) -> None:
-        """Handles LLM streaming completion."""
         if self.output_log and message.add_newline:
-            self.output_log.write("")  # Add empty line for spacing
-            self.user_input.focus()  # Return focus to input
+            self.output_log.write("")
+            self.user_input.focus()
 
     async def cleanup_tasks(self):
         if self.approval_future and not self.approval_future.done():
@@ -597,6 +590,8 @@ class QXApp(App[None]):
             if self._active_completion_menu:
                 await self._active_completion_menu.remove()
                 self._active_completion_menu = None
+            if self.completion_menu_area:
+                 self.completion_menu_area.display = False
             await self.cleanup_tasks()
         except Exception as e:
             logger.error(f"Error during pre-exit cleanup: {e}", exc_info=True)
@@ -610,14 +605,10 @@ class QXApp(App[None]):
             self.exit()
 
     async def action_handle_escape(self) -> None:
-        # ExtendedInput's escape handler will post HideCompletionMenu if a menu is active.
-        # That message is handled by on_hide_completion_menu.
-        # If no menu is active, and we are awaiting text input, cancel it.
-        if (
-            self._active_completion_menu
-        ):  # This check might be redundant if ExtendedInput handles it
-            # ExtendedInput should have already posted HideCompletionMenu
-            pass
+        if self._active_completion_menu:
+            # ExtendedInput should post HideCompletionMenu, which will be handled.
+            # If ExtendedInput doesn't, we might need to call self.post_message(HideCompletionMenu(self._active_completion_menu))
+            pass 
         elif (
             self.is_awaiting_text_input
             and self.text_input_future
@@ -627,10 +618,9 @@ class QXApp(App[None]):
             self.output_log.write("[yellow]Input cancelled.[/yellow]")
             self.text_input_future.set_result(None)
             return
-        # If neither of the above, and user_input is focused, clear its text (Textual's default for escape on Input)
         elif self.user_input and self.user_input.has_focus and self.user_input.text:
             self.user_input.text = ""
-            self.user_input.action_delete_left_all()  # Ensure text is cleared
+            self.user_input.action_delete_left_all()
 
 
 async def run_textual_app(
@@ -639,5 +629,4 @@ async def run_textual_app(
     app = QXApp()
     if mcp_manager:
         app.set_mcp_manager(mcp_manager)
-    # await app._startup() # _startup is a private Textual method, app.run() handles this.
     return app
