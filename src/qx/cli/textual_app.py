@@ -19,16 +19,20 @@ from qx.core.async_utils import TaskTracker
 from qx.core.llm import query_llm
 from qx.core.llm_messages import RenderStreamContent, StreamingComplete
 from qx.core.paths import QX_HISTORY_FILE
-from qx.core.session_manager import (clean_old_sessions, save_session,
-                                     save_session_async)
-from qx.custom_widgets.completion_menu import \
-    CompletionMenu  # For type hinting if needed; For type hinting if needed
+from qx.core.session_manager import clean_old_sessions, save_session, save_session_async
+from qx.custom_widgets.completion_menu import (
+    CompletionMenu,
+)  # For type hinting if needed; For type hinting if needed
+
 # Import ExtendedInput and its new messages
-from qx.custom_widgets.extended_input import (DisplayCompletionMenu,
-                                              ExtendedInput,
-                                              HideCompletionMenu, LogEmitted,
-                                              MultilineModeToggled,
-                                              UserInputSubmitted)
+from qx.custom_widgets.extended_input import (
+    DisplayCompletionMenu,
+    ExtendedInput,
+    HideCompletionMenu,
+    LogEmitted,
+    MultilineModeToggled,
+    UserInputSubmitted,
+)
 from qx.custom_widgets.option_selector import OptionSelector
 
 logger = logging.getLogger(__name__)
@@ -548,8 +552,8 @@ class QXApp(App[None]):
             self._active_completion_menu = None
             if self.user_input:
                 self.user_input.can_focus = True
-                self.user_input.focus() # Return focus to input
-    
+                self.user_input.focus()  # Return focus to input
+
     @on(RenderStreamContent)
     def on_render_stream_content(self, message: RenderStreamContent) -> None:
         """Handles LLM streaming content rendering in a thread-safe manner."""
@@ -557,6 +561,7 @@ class QXApp(App[None]):
             try:
                 if message.is_markdown:
                     from rich.markdown import Markdown
+
                     markdown = Markdown(message.content, code_theme="rrt")
                     self.output_log.write(markdown)
                 else:
@@ -565,13 +570,13 @@ class QXApp(App[None]):
                 logger.error(f"Error rendering stream content: {e}")
                 # Fallback to plain text
                 self.output_log.write(message.content, end=message.end)
-    
+
     @on(StreamingComplete)
     def on_streaming_complete(self, message: StreamingComplete) -> None:
         """Handles LLM streaming completion."""
         if self.output_log and message.add_newline:
             self.output_log.write("")  # Add empty line for spacing
-                self.user_input.focus()  # Return focus to input
+            self.user_input.focus()  # Return focus to input
 
     async def cleanup_tasks(self):
         if self.approval_future and not self.approval_future.done():
