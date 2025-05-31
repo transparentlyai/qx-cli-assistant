@@ -1,5 +1,5 @@
 from textual.widgets import Static
-from textual.widget import Widget # Corrected import for Widget
+from textual.widget import Widget
 from textual.containers import Vertical
 from textual.reactive import reactive
 from textual.app import ComposeResult
@@ -54,13 +54,16 @@ class CompletionMenu(Static):
     ]
     
     class ItemSelected(Message):
-        def __init__(self, index: int, item: str):
+        def __init__(self, index: int, item: str, owner_widget: Optional[Widget] = None):
             super().__init__()
             self.index = index
             self.item = item
+            self.owner_widget = owner_widget # Added owner_widget
     
     class Cancelled(Message):
-        pass
+        def __init__(self, owner_widget: Optional[Widget] = None):
+            super().__init__()
+            self.owner_widget = owner_widget # Added owner_widget
     
     items = reactive([])
     selected_index = reactive(0, recompose=True)
@@ -99,16 +102,18 @@ class CompletionMenu(Static):
     def action_select_item(self):
         self.log("CompletionMenu Action: select_item")
         if self.items and 0 <= self.selected_index < len(self.items):
-            message = self.ItemSelected(self.selected_index, self.items[self.selected_index][0])
+            # Pass self.owner as owner_widget when creating the message
+            message = self.ItemSelected(self.selected_index, self.items[self.selected_index][0], owner_widget=self.owner)
             if self.owner:
-                self.owner.post_message(message)
+                self.owner.post_message(message) # ExtendedInput will receive it
             else:
-                self.post_message(message)
+                self.post_message(message) # Fallback if no owner, though ExtendedInput expects to be owner
 
     def action_cancel_selection(self):
         self.log("CompletionMenu Action: cancel_selection")
-        message = self.Cancelled()
+        # Pass self.owner as owner_widget when creating the message
+        message = self.Cancelled(owner_widget=self.owner)
         if self.owner:
-            self.owner.post_message(message)
+            self.owner.post_message(message) # ExtendedInput will receive it
         else:
-            self.post_message(message)
+            self.post_message(message) # Fallback

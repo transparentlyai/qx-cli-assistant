@@ -133,6 +133,10 @@ class ExtendedInput(TextArea):
         except Exception as e:
             self.post_message(LogEmitted(f"Error saving history to {path}: {e}", "error"))
 
+    def set_command_completer(self, completer: CommandCompleterProtocol) -> None:
+        """Set the command completer after initialization."""
+        self.command_completer = completer
+
     def load_history(self) -> None:
         if self.history_file_path and self.history_load_fn:
             self._history = self.history_load_fn(self.history_file_path)
@@ -213,8 +217,8 @@ class ExtendedInput(TextArea):
             if len(candidates) == 1:
                 completed_text = candidates[0]
                 self.replace(completed_text, start=(current_line_index, start_of_word), end=(current_line_index, current_column_index))
-                if await self._is_directory(completed_text) and not completed_text.endswith(\'/\'):
-                    self.insert(\'/\')
+                if await self._is_directory(completed_text) and not completed_text.endswith('/'):
+                    self.insert('/')
                 self.post_message(self.PathCompletion(candidates, completed_text))
             elif len(candidates) > 1:
                 common_prefix = self._get_common_prefix(candidates)
@@ -290,7 +294,7 @@ class ExtendedInput(TextArea):
                     self.text = selected_command
                     self.action_go_to_end()
             elif process.returncode == 130: pass # User exited fzf (e.g. Ctrl-C)
-            else: self.post_message(LogEmitted(f"Error running fzf: {stderr.decode(\'utf-8\').strip()}", "error"))
+            else: self.post_message(LogEmitted(f"Error running fzf: {stderr.decode('utf-8').strip()}", "error"))
         except asyncio.TimeoutError: self.post_message(LogEmitted("fzf search timed out", "error"))
         except FileNotFoundError: self.post_message(LogEmitted("fzf command not found.", "error"))
         except Exception as e: self.post_message(LogEmitted(f"Error running fzf: {e}", "error"))
@@ -320,12 +324,12 @@ class ExtendedInput(TextArea):
 
         items_for_menu = []
         for candidate in candidates:
-            display_name = candidate.split(\'/\')[-1] if \'/\' in candidate and not is_command else candidate
+            display_name = candidate.split('/')[-1] if '/' in candidate and not is_command else candidate
             # Basic type detection, can be enhanced
             item_type = "cmd" if is_command else ("dir" if Path(candidate).is_dir() else "file")
             items_for_menu.append((display_name, item_type))
         
-        self._selector_widget = CompletionMenu(items_for_menu, owner=self, id=f"{self.id or \'ext_input\'}_completion_menu")
+        self._selector_widget = CompletionMenu(items_for_menu, owner=self, id=f"{self.id or 'ext_input'}_completion_menu")
         # Styling and positioning should ideally be handled by the parent via DisplayCompletionMenu
         # For now, keeping basic positioning logic, but parent should override/manage
         self._selector_widget.styles.position = "absolute"
@@ -370,9 +374,9 @@ class ExtendedInput(TextArea):
 
             self.replace(selected_full_candidate, start=start_replace_coords, end=end_replace_coords)
             
-            is_path_completion = \'/\' in selected_full_candidate or Path(selected_full_candidate).exists()
-            if is_path_completion and Path(selected_full_candidate).is_dir() and not selected_full_candidate.endswith(\'/\'):
-                self.insert(\'/\')
+            is_path_completion = '/' in selected_full_candidate or Path(selected_full_candidate).exists()
+            if is_path_completion and Path(selected_full_candidate).is_dir() and not selected_full_candidate.endswith('/'):
+                self.insert('/')
             
             await self._hide_completion_selector()
             message.stop()
