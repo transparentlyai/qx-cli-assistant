@@ -522,6 +522,82 @@ class QXHistory:
         return len(self._entries)
 
 
+class QXCompleter:
+    """Custom completer that handles both commands and path completion."""
+    
+    def __init__(self):
+        self.commands = ['/model', '/reset', '/approve-all', '/help']
+    
+    def get_completions(self, document, complete_event):
+        from prompt_toolkit.completion import Completion
+        import subprocess
+        from pathlib import Path
+        
+        # Get the current text and cursor position
+        text = document.text
+        cursor_position = document.cursor_position
+        
+        # Find the start of the current word
+        current_word_start = cursor_position
+        while current_word_start > 0 and not text[current_word_start - 1].isspace():
+            current_word_start -= 1
+        
+        current_word = text[current_word_start:cursor_position]
+        
+        # Command completion for slash commands
+        if current_word.startswith('/'):
+            for command in self.commands:
+                if command.startswith(current_word):
+                    yield Completion(
+                        command,
+                        start_position=-len(current_word),
+                        display=f"{command}  [cmd]"
+                    )
+            return
+        
+        # Path completion using bash compgen (like ExtendedInput)
+        if current_word:
+            try:
+                cmd = ["bash", "-c", f"compgen -f -- '{current_word}'"]
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True, 
+                    text=True, 
+                    timeout=1, 
+                    check=False 
+                )
+                
+                if result.returncode == 0:
+                    candidates = result.stdout.strip().splitlines()
+                    for candidate in candidates:
+                        try:
+                            # Check if it's a directory
+                            is_dir = Path(candidate).is_dir()
+                            display_suffix = "/" if is_dir else ""
+                            completion_text = candidate + ("/" if is_dir and not candidate.endswith("/") else "")
+                            
+                            yield Completion(
+                                completion_text,
+                                start_position=-len(current_word),
+                                display=f"{candidate}{display_suffix}  [{'dir' if is_dir else 'file'}]"
+                            )
+                        except OSError:
+                            # Handle permission errors or other OS errors
+                            yield Completion(
+                                candidate,
+                                start_position=-len(current_word),
+                                display=f"{candidate}  [file]"
+                            )
+            except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+                # Fall back to no completions on error
+                pass
+    
+    async def get_completions_async(self, document, complete_event):
+        """Async version for prompt_toolkit compatibility."""
+        for completion in self.get_completions(document, complete_event):
+            yield completion
+
+
 async def _run_inline_mode(
     llm_agent: QXLLMAgent,
     current_message_history: Optional[List[ChatCompletionMessageParam]],
@@ -532,7 +608,6 @@ async def _run_inline_mode(
     from prompt_toolkit import PromptSession
     from prompt_toolkit.formatted_text import HTML
     from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
-    from prompt_toolkit.completion import WordCompleter
     from prompt_toolkit.key_binding import KeyBindings
     
     rich_console = Console()
@@ -540,10 +615,8 @@ async def _run_inline_mode(
     # Create custom history that handles QX format
     qx_history = QXHistory(QX_HISTORY_FILE)
     
-    # Create command completer for slash commands
-    command_completer = WordCompleter([
-        '/model', '/reset', '/approve-all', '/help'
-    ], ignore_case=True)
+    # Create custom completer that handles both commands and paths
+    qx_completer = QXCompleter()
     
     # Create key bindings for enhanced functionality
     bindings = KeyBindings()
@@ -563,7 +636,7 @@ async def _run_inline_mode(
         history=qx_history,
         auto_suggest=AutoSuggestFromHistory(),
         enable_history_search=True,
-        completer=command_completer,
+        completer=qx_completer,
         complete_style='multi-column',
         key_bindings=bindings,
         mouse_support=True,
