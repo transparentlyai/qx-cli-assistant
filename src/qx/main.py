@@ -656,15 +656,41 @@ async def _run_inline_mode(
                     raise ValidationError(message="")
             # In multiline mode, allow empty submissions (for mode switching)
 
-    # Create custom style for input text
+    # Create custom style for input text and bottom toolbar
     input_style = Style.from_dict(
         {
             # Style for the text as user types
             "": "fg:#ff005f bg:#050505",
             # Style for selected text
             "selected": "fg:#ff005f bg:#050505 reverse",
+            # Style for the bottom toolbar
+            "bottom-toolbar": "bg:#222222 fg:#888888",
+            "bottom-toolbar.text": "bg:#222222 fg:#cccccc",
+            "bottom-toolbar.key": "bg:#222222 fg:#ff5f00 bold",
         }
     )
+    
+    # Create bottom toolbar function
+    def get_bottom_toolbar():
+        """Return formatted text for the bottom toolbar."""
+        from prompt_toolkit.formatted_text import HTML
+        
+        # Get current mode
+        mode = "MULTILINE" if is_multiline_mode[0] else "SINGLE"
+        
+        # Build toolbar content
+        toolbar_content = [
+            ("class:bottom-toolbar.key", " Ctrl+R "),
+            ("class:bottom-toolbar.text", "fzf search  "),
+            ("class:bottom-toolbar.key", " Alt+Enter "),
+            ("class:bottom-toolbar.text", f"toggle mode  "),
+            ("class:bottom-toolbar.key", " Tab "),
+            ("class:bottom-toolbar.text", "complete  "),
+            ("class:bottom-toolbar.text", f"Mode: {mode}  "),
+            ("class:bottom-toolbar.text", f"History: {len(qx_history._entries)} entries"),
+        ]
+        
+        return toolbar_content
 
     # Create key bindings for enhanced functionality
     bindings = KeyBindings()
@@ -761,6 +787,7 @@ async def _run_inline_mode(
         validator=SingleLineNonEmptyValidator(),
         validate_while_typing=False,  # Only validate on submit attempt
         style=input_style,  # Apply custom input text styling
+        bottom_toolbar=get_bottom_toolbar,  # Add status footer
     )
 
     while True:
