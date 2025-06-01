@@ -679,6 +679,52 @@ async def _run_inline_mode(
         """Handle Ctrl+D"""
         event.app.exit(exception=EOFError, style="class:exiting")
 
+    @bindings.add("c-r")
+    def _(event):
+        """Handle Ctrl+R for fzf history search"""
+        try:
+            from qx.core.history_utils import parse_history_for_fzf
+            from qx.core.paths import QX_HISTORY_FILE
+            import subprocess
+            
+            # Get history entries for fzf
+            history_entries = parse_history_for_fzf(QX_HISTORY_FILE)
+            if not history_entries:
+                return
+            
+            # Prepare fzf input (display strings)
+            fzf_input = "\n".join([display for display, _ in reversed(history_entries)])
+            
+            # Run fzf for selection with terminal restoration
+            fzf_process = subprocess.run(
+                ["fzf", "--ansi", "--reverse", "--height", "40%", "--no-clear"],
+                input=fzf_input,
+                capture_output=True,
+                text=True
+            )
+            
+            # Always force redraw after fzf, regardless of selection
+            event.app.invalidate()
+            event.app.renderer.reset()
+            
+            if fzf_process.returncode == 0 and fzf_process.stdout.strip():
+                selected_display = fzf_process.stdout.strip()
+                
+                # Find the original command for the selected display
+                for display, original in history_entries:
+                    if display == selected_display:
+                        # Set the selected command as current buffer text
+                        event.current_buffer.text = original
+                        event.current_buffer.cursor_position = len(original)
+                        break
+        except Exception as e:
+            # Always try to restore terminal state on any error
+            try:
+                event.app.invalidate()
+                event.app.renderer.reset()
+            except:
+                pass
+
     @bindings.add("escape", "enter")  # Alt+Enter
     def _(event):
         """Handle Alt+Enter for multiline toggle/submit"""
@@ -705,7 +751,7 @@ async def _run_inline_mode(
     session = PromptSession(
         history=qx_history,
         auto_suggest=AutoSuggestFromHistory(),
-        enable_history_search=True,
+        enable_history_search=False,  # Disable built-in search, we use fzf
         completer=qx_completer,
         complete_style="multi-column",
         key_bindings=bindings,
@@ -870,7 +916,7 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
         )
         rich_console.print("\n[bold]Features:[/bold]")
         rich_console.print("  • [cyan]Tab completion[/cyan] for commands and paths")
-        rich_console.print("  • [cyan]History search[/cyan] with Ctrl+R")
+        rich_console.print("  • [cyan]Fuzzy history search[/cyan] with Ctrl+R (using fzf)")
         rich_console.print("  • [cyan]Auto-suggestions[/cyan] from history")
         rich_console.print("  • [cyan]Ctrl+C or Ctrl+D[/cyan] to exit")
     else:
