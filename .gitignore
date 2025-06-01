@@ -11,6 +11,6 @@ wheels/
 
 # Environment variables
 .env
-.Q/
+.Q/sessions/
 .claude/
 tmp/
