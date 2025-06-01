@@ -536,7 +536,7 @@ wheels = [
 
 [[package]]
 name = "qx"
-version = "0.3.3"
+version = "0.3.42"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
