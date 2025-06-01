@@ -25,7 +25,7 @@ from qx.core.session_manager import (
 )
 
 # QX Version
-QX_VERSION = "0.3.3"
+QX_VERSION = "0.3.42"
 
 # Configure logging for the application
 logger = logging.getLogger("qx")
@@ -493,7 +493,7 @@ class QXHistory:
         if command and (not self._entries or self._entries[-1] != command):
             self._entries.append(command)
             self.save_to_file(command)
-    
+
     def store_string(self, command: str):
         """Store a string in the history (alternative prompt_toolkit interface)."""
         self.append_string(command)
@@ -669,15 +669,15 @@ async def _run_inline_mode(
             "bottom-toolbar.key": "bg:#222222 fg:#ff5f00 bold",
         }
     )
-    
+
     # Create bottom toolbar function
     def get_bottom_toolbar():
         """Return formatted text for the bottom toolbar."""
         from prompt_toolkit.formatted_text import HTML
-        
+
         # Get current mode
         mode = "MULTILINE" if is_multiline_mode[0] else "SINGLE"
-        
+
         # Build toolbar content
         toolbar_content = [
             ("class:bottom-toolbar.key", " Ctrl+R "),
@@ -687,9 +687,12 @@ async def _run_inline_mode(
             ("class:bottom-toolbar.key", " Tab "),
             ("class:bottom-toolbar.text", "complete  "),
             ("class:bottom-toolbar.text", f"Mode: {mode}  "),
-            ("class:bottom-toolbar.text", f"History: {len(qx_history._entries)} entries"),
+            (
+                "class:bottom-toolbar.text",
+                f"History: {len(qx_history._entries)} entries",
+            ),
         ]
-        
+
         return toolbar_content
 
     # Create key bindings for enhanced functionality
@@ -709,33 +712,34 @@ async def _run_inline_mode(
     def _(event):
         """Handle Ctrl+R for fzf history search"""
         try:
+            import subprocess
+
             from qx.core.history_utils import parse_history_for_fzf
             from qx.core.paths import QX_HISTORY_FILE
-            import subprocess
-            
+
             # Get history entries for fzf
             history_entries = parse_history_for_fzf(QX_HISTORY_FILE)
             if not history_entries:
                 return
-            
+
             # Prepare fzf input (display strings)
             fzf_input = "\n".join([display for display, _ in reversed(history_entries)])
-            
+
             # Run fzf for selection with terminal restoration
             fzf_process = subprocess.run(
                 ["fzf", "--ansi", "--reverse", "--height", "40%", "--no-clear"],
                 input=fzf_input,
                 capture_output=True,
-                text=True
+                text=True,
             )
-            
+
             # Always force redraw after fzf, regardless of selection
             event.app.invalidate()
             event.app.renderer.reset()
-            
+
             if fzf_process.returncode == 0 and fzf_process.stdout.strip():
                 selected_display = fzf_process.stdout.strip()
-                
+
                 # Find the original command for the selected display
                 for display, original in history_entries:
                     if display == selected_display:
@@ -943,7 +947,9 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
         )
         rich_console.print("\n[bold]Features:[/bold]")
         rich_console.print("  • [cyan]Tab completion[/cyan] for commands and paths")
-        rich_console.print("  • [cyan]Fuzzy history search[/cyan] with Ctrl+R (using fzf)")
+        rich_console.print(
+            "  • [cyan]Fuzzy history search[/cyan] with Ctrl+R (using fzf)"
+        )
         rich_console.print("  • [cyan]Auto-suggestions[/cyan] from history")
         rich_console.print("  • [cyan]Ctrl+C or Ctrl+D[/cyan] to exit")
     else:
