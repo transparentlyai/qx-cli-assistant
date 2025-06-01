@@ -67,6 +67,8 @@ class ExtendedInput(TextArea):
         Binding("tab", "complete_path_or_command", "Complete Path/Command", show=False),
         Binding("up", "navigate_up_or_history", "Navigate Up / History Previous", show=False, priority=True),
         Binding("down", "navigate_down_or_history", "Navigate Down / History Next", show=False, priority=True),
+        Binding("pageup", "force_history_previous", "History Previous (Force)", show=False, priority=True),
+        Binding("pagedown", "force_history_next", "History Next (Force)", show=False, priority=True),
         Binding("alt+enter", "toggle_multiline_or_submit", "Toggle Multiline/Submit", show=False),
         Binding("ctrl+r", "search_history_fzf", "Search History (fzf)", show=False),
         Binding("escape", "handle_escape", "Handle Escape", show=False, priority=True),
@@ -198,10 +200,14 @@ class ExtendedInput(TextArea):
 
     async def on_key(self, event: events.Key) -> None:
         if self._selector_widget and self._selector_widget.display:
-            if event.key not in ("enter", "escape", "tab"):
-                pass # Allow selector to handle other keys like up/down
-            event.stop() # Stop further processing for enter, escape, tab if menu is up
-            return
+            # Allow selector to handle pgup/pgdn if it wants to, otherwise they fall through to our bindings
+            if event.key not in ("enter", "escape", "tab", "pageup", "pagedown"):
+                pass 
+            # Stop further processing for enter, escape, tab if menu is up
+            # For pageup/pagedown, if the menu is active, we let our bindings handle them if menu doesn't.
+            if event.key in ("enter", "escape", "tab"):
+                event.stop()
+                return
 
         if event.key == "enter":
             if not self.is_input_globally_active or not self.is_multiline_mode:
@@ -257,6 +263,30 @@ class ExtendedInput(TextArea):
                 self.action_cursor_down()
         else:
             await self.action_history_next()
+
+    async def action_force_history_previous(self) -> None:
+        """Forces navigation to the previous history entry, regardless of cursor position or mode."""
+        if self._selector_widget and self._selector_widget.display:
+            # If completion menu is active, let it handle the key if it has a binding for it (e.g. scroll menu)
+            # This assumes CompletionMenu might have its own pageup/pagedown handling.
+            # If not, or if it doesn't stop the event, history navigation will occur.
+            # For now, we assume the menu doesn't use pageup/pagedown for selection, so we proceed.
+            # If it did, we might need a more complex event handling or check if menu handled it.
+            pass # Let history navigation proceed unless menu explicitly consumes it.
+
+        if not self.is_input_globally_active:
+            return
+        await self.action_history_previous()
+
+    async def action_force_history_next(self) -> None:
+        """Forces navigation to the next history entry, regardless of cursor position or mode."""
+        if self._selector_widget and self._selector_widget.display:
+            # Similar to action_force_history_previous, let history navigation proceed.
+            pass
+
+        if not self.is_input_globally_active:
+            return
+        await self.action_history_next()
 
     async def action_complete_path_or_command(self) -> None:
         if self._selector_widget and self._selector_widget.display:
@@ -338,7 +368,7 @@ class ExtendedInput(TextArea):
         if self._history:
             if self._history_index > 0: 
                 self._history_index -= 1
-                self.text = self._history[self._history_index]
+                self.load_text(self._history[self._history_index]) # Changed from self.text
                 self._adjust_multiline_mode_for_text(self.text)
                 self.move_cursor(self.document.end)
                 self.scroll_cursor_visible()
@@ -349,10 +379,10 @@ class ExtendedInput(TextArea):
         if self._history:
             if self._history_index < len(self._history) - 1:
                 self._history_index += 1
-                self.text = self._history[self._history_index]
+                self.load_text(self._history[self._history_index]) # Changed from self.text
             else: # At the newest history item or beyond
                 self._history_index = len(self._history) # Point to one past the end (for new input)
-                self.text = ""
+                self.load_text("") # Changed from self.text
             self._adjust_multiline_mode_for_text(self.text)
             self.move_cursor(self.document.end)
             self.scroll_cursor_visible()
@@ -454,12 +484,13 @@ class ExtendedInput(TextArea):
             self.post_message(LogEmitted(f"fzf: General error during suspend/resume or fzf: {e}", "error"))
         
         if selected_command_str is not None:
-            self.text = selected_command_str
+            self.load_text(selected_command_str) # Changed from self.text
             self._adjust_multiline_mode_for_text(self.text) # This will post MultilineModeToggled if mode changes
         else:
-            if self.text: 
-                self.text = ""
-                self._adjust_multiline_mode_for_text(self.text) # This will post MultilineModeToggled if mode changes
+            current_text = self.text # Read current text before clearing
+            if current_text: 
+                self.load_text("") # Changed from self.text
+                self._adjust_multiline_mode_for_text("") # Pass empty string to ensure mode is adjusted
         
         self.move_cursor(self.document.end)
         self.scroll_cursor_visible()

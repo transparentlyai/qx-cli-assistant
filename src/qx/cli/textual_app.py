@@ -429,7 +429,8 @@ class QXApp(App[None]):
             ):
                 self.text_input_future.set_result(text)
                 if self.user_input:
-                    self.user_input.text = ""
+                    self.user_input.load_text("") # Use load_text
+                    self.user_input._adjust_multiline_mode_for_text("")
                 return
 
             if self.is_processing:
@@ -437,7 +438,8 @@ class QXApp(App[None]):
 
             input_text = text
             if self.user_input:
-                self.user_input.text = ""
+                self.user_input.load_text("") # Use load_text
+                self.user_input._adjust_multiline_mode_for_text("")
 
             if not input_text.strip():
                 return
@@ -608,6 +610,7 @@ class QXApp(App[None]):
         if self._active_completion_menu:
             # ExtendedInput should post HideCompletionMenu, which will be handled.
             # If ExtendedInput doesn't, we might need to call self.post_message(HideCompletionMenu(self._active_completion_menu))
+            # This part is handled by ExtendedInput's own escape binding if menu is active.
             pass 
         elif (
             self.is_awaiting_text_input
@@ -616,11 +619,15 @@ class QXApp(App[None]):
         ):
             logger.info("Escape pressed during text input. Cancelling.")
             self.output_log.write("[yellow]Input cancelled.[/yellow]")
-            self.text_input_future.set_result(None)
+            self.text_input_future.set_result(None) # Signal cancellation/no input
+            # Ensure input is cleared and mode reset
+            if self.user_input:
+                self.user_input.load_text("")
+                self.user_input._adjust_multiline_mode_for_text("")
             return
         elif self.user_input and self.user_input.has_focus and self.user_input.text:
-            self.user_input.text = ""
-            self.user_input.action_delete_left_all()
+            self.user_input.load_text("")
+            self.user_input._adjust_multiline_mode_for_text("") # Ensure multiline mode is reset
 
 
 async def run_textual_app(
