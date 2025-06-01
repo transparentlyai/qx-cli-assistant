@@ -69,7 +69,7 @@ async def _write_file_core_logic(path_str: str, content: str) -> Optional[str]:
         def _write_file_sync():
             absolute_path.parent.mkdir(parents=True, exist_ok=True)
             absolute_path.write_text(content, encoding="utf-8")
-        
+
         await asyncio.to_thread(_write_file_sync)
         logger.info(f"Successfully wrote to file: {absolute_path}")
         return None
@@ -148,21 +148,22 @@ class WriteFilePluginInput(BaseModel):
     """Input model for the WriteFilePluginTool."""
 
     path: str = Field(
-        ..., description="Path to the file to write. Can be relative (from CWD), absolute, or start with '~'. Parent directories will be created if needed."
+        ...,
+        description="Path to the file to write. Can be relative (from CWD), absolute, or start with '~'. Parent directories will be created if needed.",
     )
-    content: str = Field(
-        ..., description="Raw content to write to the file. Must NOT be escaped or double-escaped. Pass content exactly as it should appear in the file."
-    )
+    content: str = Field(..., description="Raw content to write to the file.")
 
 
 class WriteFilePluginOutput(BaseModel):
     """Output model for the WriteFilePluginTool."""
 
-    path: str = Field(
-        description="The path where content was written."
+    path: str = Field(description="The path where content was written.")
+    success: bool = Field(
+        description="True if the write operation completed successfully, False otherwise."
     )
-    success: bool = Field(description="True if the write operation completed successfully, False otherwise.")
-    message: str = Field(description="Descriptive message about the operation result. Contains success confirmation or error details.")
+    message: str = Field(
+        description="Descriptive message about the operation result. Contains success confirmation or error details."
+    )
 
 
 async def write_file_tool(  # Made async
@@ -170,17 +171,11 @@ async def write_file_tool(  # Made async
 ) -> WriteFilePluginOutput:
     """
     Tool to write content to a file.
-    
+
     Features:
     - Creates parent directories automatically if needed
-    - Shows preview/diff before writing (for existing files)
     - Raw content expected (no escaping needed)
-    
-    File access permissions:
-    - Files within project directory: Requires approval
-    - Files outside project but within user home: Requires approval
-    - Files outside user home: Access denied by policy
-    
+
     Returns structured output with:
     - path: Final path written to
     - success: Boolean success indicator
@@ -227,7 +222,7 @@ async def write_file_tool(  # Made async
     decision_status, _ = await request_confirmation(  # Await
         prompt_message=prompt_msg,
         console=console,
-        content_to_display=preview_renderable
+        content_to_display=preview_renderable,
     )
 
     path_to_write: str
