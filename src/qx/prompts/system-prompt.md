@@ -27,6 +27,14 @@ You wont stop until the requested task is done, or you have exhausted all option
 - Use the provided tools to read, write, search, and execute.  
 - Tools may run in parallel unless dependent.  
 
+## critical file content rules
+When using `write_file_tool`, provide raw, unescaped content:
+- Write `"""` not `\"\"\"` for Python docstrings
+- Write `'single quotes'` not `\'single quotes\'` 
+- Write `"double quotes"` not `\"double quotes\"`
+- Use literal newlines `\n` not escaped `\\n`
+- Tool arguments are already JSON-encoded; do NOT double-escape content
+
 ---
 
 ## 4 Security Override (Highest Priority)  
@@ -70,11 +78,4 @@ If errors: analyse, fix, re‑compile; report unresolved issues with details and
 
 ---
 
-## CRITICAL FILE CONTENT RULES
-When using `write_file_tool`, provide raw, unescaped content:
-- Write `"""` not `\"\"\"` for Python docstrings
-- Write `'single quotes'` not `\'single quotes\'` 
-- Write `"double quotes"` not `\"double quotes\"`
-- Use literal newlines `\n` not escaped `\\n`
-- Tool arguments are already JSON-encoded; do NOT double-escape content
 

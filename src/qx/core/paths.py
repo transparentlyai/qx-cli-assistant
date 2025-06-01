@@ -55,7 +55,7 @@ def _find_project_root(cwd_str: str) -> Path | None:
         ):
             return None
 
-        path_to_check = path_to_check.to_parent() # Use to_parent() for clarity and robustness
+        path_to_check = path_to_check.parent # Move to parent directory
 
 
 if __name__ == "__main__":

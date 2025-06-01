@@ -609,6 +609,7 @@ async def _run_inline_mode(
     from prompt_toolkit.formatted_text import HTML
     from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
     from prompt_toolkit.key_binding import KeyBindings
+    from prompt_toolkit.filters import Condition
     
     rich_console = Console()
     
@@ -617,6 +618,10 @@ async def _run_inline_mode(
     
     # Create custom completer that handles both commands and paths
     qx_completer = QXCompleter()
+    
+    # State tracking for multiline mode and pending text
+    is_multiline_mode = [False]  # Use list for mutable reference in closures
+    pending_text = ['']  # Text to restore when toggling modes
     
     # Create key bindings for enhanced functionality
     bindings = KeyBindings()
@@ -631,6 +636,28 @@ async def _run_inline_mode(
         """Handle Ctrl+D"""
         event.app.exit(exception=EOFError, style='class:exiting')
     
+    @bindings.add('escape', 'enter')  # Alt+Enter
+    def _(event):
+        """Handle Alt+Enter for multiline toggle/submit"""
+        buffer = event.current_buffer
+        
+        if is_multiline_mode[0]:
+            # Submit if in multiline mode
+            buffer.validate_and_handle()
+        else:
+            # Toggle to multiline mode - we need to restart the prompt
+            is_multiline_mode[0] = True
+            # Store the current text 
+            current_text = buffer.text
+            # Add newline if there's existing text
+            if current_text.strip():
+                current_text += '\n'
+            # Store text for restoration
+            pending_text[0] = current_text
+            
+            # Exit current prompt and restart with multiline mode
+            event.app.exit(result='__TOGGLE_MULTILINE__')
+    
     # Create prompt session with enhanced features
     session = PromptSession(
         history=qx_history,
@@ -641,19 +668,48 @@ async def _run_inline_mode(
         key_bindings=bindings,
         mouse_support=True,
         wrap_lines=True,
+        multiline=Condition(lambda: is_multiline_mode[0]),
     )
     
     while True:
         try:
+            # Start with single-line mode for each new input
+            if not is_multiline_mode[0]:
+                is_multiline_mode[0] = False
+            
+            # Get the appropriate prompt based on current mode
+            current_prompt = HTML('<blue>MULTILINE⏵</blue> ') if is_multiline_mode[0] else HTML('<red>QX⏵</red> ')
+            
             # Show prompt and get user input with prompt_toolkit
-            user_input = await session.prompt_async(
-                HTML('<red>QX⏵</red> '),
+            default_text = pending_text[0] if pending_text[0] else ''
+            result = await session.prompt_async(
+                current_prompt,
                 wrap_lines=True,
-                multiline=False,
+                default=default_text,  # Restore text after mode toggle
             )
-            user_input = user_input.strip()
+            
+            # Clear any pending text after successful prompt
+            if result != '__TOGGLE_MULTILINE__':
+                pending_text[0] = ''
+            
+            # Check if this was a mode toggle
+            if result == '__TOGGLE_MULTILINE__':
+                # Clear the previous prompt line before showing multiline prompt
+                from rich.console import Console
+                console = Console()
+                try:
+                    # Move cursor up and clear the line using Rich console
+                    print('\033[1A\r\033[K', end='', flush=True)  # More direct approach
+                except Exception:
+                    pass
+                # Continue loop to show multiline prompt with stored text
+                continue
+            
+            user_input = result.strip()
             
             if not user_input:
+                # Reset multiline mode if empty input
+                is_multiline_mode[0] = False
                 continue
                 
             if user_input.lower() in ["exit", "quit"]:
@@ -664,6 +720,9 @@ async def _run_inline_mode(
             
             # Add to history (prompt_toolkit automatically does this, but we need to save in QX format)
             qx_history.append_string(user_input)
+            
+            # Reset multiline mode after successful submission
+            is_multiline_mode[0] = False
             
             # Handle commands
             if user_input.startswith("/"):
@@ -721,8 +780,15 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
         rich_console.print("  [green]/reset[/green]      - Reset session and clear message history")
         rich_console.print("  [green]/approve-all[/green] - Activate 'approve all' mode for tool confirmations")
         rich_console.print("  [green]/help[/green]       - Show this help message")
+        rich_console.print("\n[bold]Input Modes:[/bold]")
+        rich_console.print("  • [yellow]Single-line mode[/yellow] (default): [red]QX⏵[/red] prompt")
+        rich_console.print("    - [cyan]Enter[/cyan]: Submit input")
+        rich_console.print("    - [cyan]Alt+Enter[/cyan]: Switch to multiline mode")
+        rich_console.print("  • [yellow]Multiline mode[/yellow]: [blue]MULTILINE⏵[/blue] prompt")
+        rich_console.print("    - [cyan]Enter[/cyan]: Add newline (continue editing)")
+        rich_console.print("    - [cyan]Alt+Enter[/cyan]: Submit input and return to single-line")
         rich_console.print("\n[bold]Features:[/bold]")
-        rich_console.print("  • [cyan]Tab completion[/cyan] for commands")
+        rich_console.print("  • [cyan]Tab completion[/cyan] for commands and paths")
         rich_console.print("  • [cyan]History search[/cyan] with Ctrl+R")
         rich_console.print("  • [cyan]Auto-suggestions[/cyan] from history")
         rich_console.print("  • [cyan]Ctrl+C or Ctrl+D[/cyan] to exit")
