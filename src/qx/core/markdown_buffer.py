@@ -58,15 +58,12 @@ class MarkdownStreamBuffer:
             self.buffer += content
 
             if self._should_render():
-                content_to_render = self.buffer
+                content_to_render = self.buffer  # Capture the buffer content
+                self.buffer = ""                  # Always clear the buffer
+                self._has_rendered_once = True    # Always mark as rendered attempt
                 
-                # Safety check: ensure we're not returning empty content
-                if not content_to_render.strip():
-                    return None
-                    
-                self.buffer = ""
-                # Mark that we've rendered at least once
-                self._has_rendered_once = True
+                # Always return the content unit identified by _should_render.
+                # The downstream Markdown renderer will handle its significance.
                 return content_to_render
 
             return None
@@ -555,4 +552,3 @@ if __name__ == "__main__":
     b14 = create_markdown_buffer(max_size=50)
     stream14 = ["- Item 1\n", "- "]  # Just a list marker
     process_stream(b14, stream14, "Test Case 14: List item just marker")
-
