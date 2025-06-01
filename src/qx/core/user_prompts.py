@@ -120,7 +120,7 @@ async def _request_confirmation_textual(
             console.print("[info]Operation denied by user (unexpected choice).[/info]")
             return ("denied", None)
     except Exception as e:
-        logger.error(f"Error in Textual confirmation: {e}", exc_info=True)
+        logger.error(f"Error in confirmation: {e}", exc_info=True)
         console.print(f"[red]Error during confirmation: {e}[/red]")
         return ("cancelled", None)
 

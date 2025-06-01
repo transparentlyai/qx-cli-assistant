@@ -16,6 +16,7 @@ from openai.types.chat import (
 )
 from openai.types.shared_params.function_definition import FunctionDefinition
 from pydantic import BaseModel, ValidationError
+from rich.console import Console as RichConsoleClass
 
 
 class ConsoleProtocol(Protocol):
@@ -118,7 +119,8 @@ class QXLLMAgent:
         """Initializes the OpenAI client for OpenRouter."""
         openrouter_api_key = os.environ.get("OPENROUTER_API_KEY")
         if not openrouter_api_key:
-            self.console.print(
+            from rich.console import Console
+            Console().print(
                 "[red]Error:[/red] OPENROUTER_API_KEY environment variable not set."
             )
             raise ValueError("OPENROUTER_API_KEY not set.")
@@ -265,13 +267,8 @@ class QXLLMAgent:
                 # Add streaming parameter
                 chat_params["stream"] = True
                 # Add an empty line before the streaming response starts
-                if (
-                    hasattr(self.console, "_output_widget")
-                    and self.console._output_widget
-                ):
-                    self.console._output_widget.write("")
-                else:
-                    self.console.print("")
+                from rich.console import Console
+                Console().print("")
                 return await self._handle_streaming_response(
                     chat_params, messages, user_input, _recursion_depth
                 )
@@ -311,7 +308,8 @@ class QXLLMAgent:
 
         except Exception as e:
             logger.error(f"Error during LLM chat completion: {e}", exc_info=True)
-            self.console.print(f"[red]Error:[/red] LLM chat completion: {e}")
+            from rich.console import Console
+            Console().print(f"[red]Error:[/red] LLM chat completion: {e}")
             return None
 
     async def _handle_streaming_response(
@@ -337,25 +335,16 @@ class QXLLMAgent:
 
         markdown_buffer = create_markdown_buffer()
 
-        # Helper function to render content via message posting
+        # Helper function to render content directly via rich console
         async def render_content(content: str) -> None:
             nonlocal has_rendered_content, total_rendered_content
             if content and content.strip():
                 has_rendered_content = True
                 total_rendered_content += content  # Track for validation
-                # Check if we have access to the Textual app for message posting
-                if hasattr(self.console, "_app") and self.console._app:
-                    try:
-                        from qx.core.llm_messages import RenderStreamContent
-                        # Post message to app for thread-safe rendering
-                        self.console._app.post_message(RenderStreamContent(content, is_markdown=True))
-                    except Exception as e:
-                        logger.error(f"Error posting render message: {e}")
-                        # Fallback to direct console print
-                        self.console.print(content, end="")
-                else:
-                    # Fallback if no app available
-                    self.console.print(content, end="")
+                # Output directly to rich console
+                from rich.console import Console
+                rich_console = Console()
+                rich_console.print(content, end="")
 
         # Stream content directly to console
         stream = None
@@ -485,15 +474,8 @@ class QXLLMAgent:
         
         # Add final newline if we rendered any content
         if accumulated_content.strip() and (has_rendered_content or remaining_content):
-            if hasattr(self.console, "_app") and self.console._app:
-                try:
-                    from qx.core.llm_messages import StreamingComplete
-                    self.console._app.post_message(StreamingComplete(add_newline=True))
-                except Exception as e:
-                    logger.error(f"Error posting completion message: {e}")
-                    self.console.print("")
-            else:
-                self.console.print("")
+            from rich.console import Console
+            Console().print()
 
         # Create response message from accumulated data
         response_message_dict = {
@@ -562,7 +544,8 @@ class QXLLMAgent:
             if function_name not in self._tool_functions:
                 error_msg = f"LLM attempted to call unknown tool: {function_name}"
                 logger.error(error_msg)
-                self.console.print(f"[red]{error_msg}[/red]")
+                from rich.console import Console
+                Console().print(f"[red]{error_msg}[/red]")
                 messages.append(
                     cast(
                         ChatCompletionToolMessageParam,
@@ -586,7 +569,8 @@ class QXLLMAgent:
                     except json.JSONDecodeError:
                         error_msg = f"LLM provided invalid JSON arguments for tool '{function_name}': {function_args}"
                         logger.error(error_msg)
-                        self.console.print(f"[red]{error_msg}[/red]")
+                        from rich.console import Console
+                        Console().print(f"[red]{error_msg}[/red]")
                         messages.append(
                             cast(
                                 ChatCompletionToolMessageParam,
@@ -604,7 +588,8 @@ class QXLLMAgent:
                 except ValidationError as ve:
                     error_msg = f"LLM provided invalid parameters for tool '{function_name}'. Validation errors: {ve}"
                     logger.error(error_msg, exc_info=True)
-                    self.console.print(f"[red]{error_msg}[/red]")
+                    from rich.console import Console
+                    Console().print(f"[red]{error_msg}[/red]")
                     messages.append(
                         cast(
                             ChatCompletionToolMessageParam,
@@ -623,7 +608,7 @@ class QXLLMAgent:
                         "tool_call_id": tool_call_id,
                         "function_name": function_name,
                         "coroutine": tool_func(
-                            console=self.console, args=tool_args_instance
+                            console=RichConsoleClass(), args=tool_args_instance
                         ),
                     }
                 )
@@ -632,7 +617,8 @@ class QXLLMAgent:
                 # This catch is for errors during parsing/validation, not tool execution
                 error_msg = f"Error preparing tool call '{function_name}': {e}"
                 logger.error(error_msg, exc_info=True)
-                self.console.print(f"[red]{error_msg}[/red]")
+                from rich.console import Console
+                Console().print(f"[red]{error_msg}[/red]")
                 messages.append(
                     cast(
                         ChatCompletionToolMessageParam,
@@ -671,7 +657,8 @@ class QXLLMAgent:
                 if isinstance(result, Exception):
                     error_msg = f"Error executing tool '{function_name}': {result}"
                     logger.error(error_msg, exc_info=True)
-                    self.console.print(f"[red]{error_msg}[/red]")
+                    from rich.console import Console
+                    Console().print(f"[red]{error_msg}[/red]")
                     tool_output_content = f"Error: Tool execution failed: {result}. This might be due to an internal tool error or an unexpected argument type."
                 else:
                     if hasattr(result, "model_dump_json"):

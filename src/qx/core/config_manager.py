@@ -68,7 +68,8 @@ class ConfigManager:
                             if not (line == ".Q" or line == "/.Q" or line == ".Q/" or line == "/.Q/" or line.startswith(".Q/") or line.startswith("/.Q/")):
                                 ignore_patterns.append(line)
             except Exception as e:
-                self.console.print(f"[yellow]Warning: Could not read or parse .gitignore file {gitignore_path}: {e}[/yellow]")
+                from rich.console import Console
+                Console().print(f"[yellow]Warning: Could not read or parse .gitignore file {gitignore_path}: {e}[/yellow]")
 
         # Deduplicate the final list
         return list(set(ignore_patterns))
@@ -93,9 +94,11 @@ class ConfigManager:
 
         # Check for minimal required variables
         if not os.getenv("QX_MODEL_NAME") or not os.getenv("OPENROUTER_API_KEY"):
-            self.console.print("[red]Error: Missing essential configuration variables.[/red]")
-            self.console.print(MINIMAL_CONFIG_EXAMPLE)
-            self.console.print(CONFIG_LOCATIONS)
+            from rich.console import Console
+            rich_console = Console()
+            rich_console.print("[red]Error: Missing essential configuration variables.[/red]")
+            rich_console.print(MINIMAL_CONFIG_EXAMPLE)
+            rich_console.print(CONFIG_LOCATIONS)
             sys.exit(1)
 
         # --- End Hierarchical qx.conf loading ---
@@ -107,7 +110,7 @@ class ConfigManager:
             try:
                 qx_user_context = user_context_path.read_text(encoding="utf-8")
             except Exception as e:
-                self.console.print(f"[yellow]Warning: Could not read user context file {user_context_path}: {e}[/yellow]")
+                Console().print(f"[yellow]Warning: Could not read user context file {user_context_path}: {e}[/yellow]")
         os.environ["QX_USER_CONTEXT"] = qx_user_context
 
         # Initialize project-specific variables
@@ -121,7 +124,7 @@ class ConfigManager:
                 try:
                     qx_project_context = project_context_file_path.read_text(encoding="utf-8")
                 except Exception as e:
-                    self.console.print(f"[yellow]Warning: Could not read project context file {project_context_file_path}: {e}[/yellow]")
+                    Console().print(f"[yellow]Warning: Could not read project context file {project_context_file_path}: {e}[/yellow]")
 
             # Load Project Files Tree using rg
             if cwd == USER_HOME_DIR:
@@ -159,13 +162,13 @@ class ConfigManager:
                         if process.stdout.strip():
                             qx_project_files = process.stdout.strip()
                         else:
-                            self.console.print(f"[yellow]Warning: rg command returned non-zero exit code {process.returncode}. Stderr: {process.stderr.strip()}[/yellow]")
+                            Console().print(f"[yellow]Warning: rg command returned non-zero exit code {process.returncode}. Stderr: {process.stderr.strip()}[/yellow]")
                             qx_project_files = f"Error generating project tree (code {process.returncode}): {process.stderr.strip()}"
                 except FileNotFoundError:
-                    self.console.print("[red]Error: 'rg' command not found. Please ensure it is installed and in PATH.[/red]")
+                    Console().print("[red]Error: 'rg' command not found. Please ensure it is installed and in PATH.[/red]")
                     qx_project_files = "Error: 'rg' command not found. Please ensure it is installed and in PATH."
                 except Exception as e:
-                    self.console.print(f"[red]Error executing 'rg' command: {e}[/red]")
+                    Console().print(f"[red]Error executing 'rg' command: {e}[/red]")
                     qx_project_files = f"Error executing 'rg' command: {e}"
                 finally:
                     if temp_ignore_file_path and temp_ignore_file_path.exists():

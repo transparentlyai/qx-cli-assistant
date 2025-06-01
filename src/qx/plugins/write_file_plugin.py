@@ -170,16 +170,9 @@ async def write_file_tool(  # Made async
     console: RichConsole, args: WriteFilePluginInput
 ) -> WriteFilePluginOutput:
     """
-    Tool to write content to a file.
-
-    Features:
-    - Creates parent directories automatically if needed
-    - Raw content expected (no escaping needed)
-
-    Returns structured output with:
-    - path: Final path written to
-    - success: Boolean success indicator
-    - message: Result description or error details
+    Use this tool to update and create files in the filesystem.
+    Directories will be created if they do not exist based on the provided path.
+    Permissions are manageged by this tool.
     """
     original_path_arg = args.path
     path_to_consider = os.path.expanduser(

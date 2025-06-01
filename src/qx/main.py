@@ -10,12 +10,12 @@ from typing import Any, List, Optional
 import anyio
 from openai.types.chat import ChatCompletionMessageParam
 
-from qx.cli.console import TextualRichLogHandler, qx_console, show_spinner
-from qx.cli.textual_app import QXApp
+# No console imports needed anymore
 from qx.core.config_manager import ConfigManager
 from qx.core.constants import DEFAULT_MODEL, DEFAULT_SYNTAX_HIGHLIGHT_THEME
 from qx.core.llm import QXLLMAgent, initialize_llm_agent, query_llm
 from qx.core.mcp_manager import MCPManager
+from qx.core.paths import QX_HISTORY_FILE
 from qx.core.session_manager import (
     clean_old_sessions,
     load_latest_session,
@@ -118,7 +118,8 @@ async def _initialize_agent_with_mcp(mcp_manager: MCPManager) -> QXLLMAgent:
     model_name_from_env = os.environ.get("QX_MODEL_NAME", DEFAULT_MODEL)
 
     if not model_name_from_env:
-        qx_console.print(
+        from rich.console import Console
+        Console().print(
             "[red]Critical Error:[/red] QX_MODEL_NAME environment variable not set. Please set it to an OpenRouter model string."
         )
         sys.exit(1)
@@ -131,13 +132,14 @@ async def _initialize_agent_with_mcp(mcp_manager: MCPManager) -> QXLLMAgent:
 
     agent: Optional[QXLLMAgent] = initialize_llm_agent(
         model_name_str=model_name_from_env,
-        console=qx_console,
+        console=None,
         mcp_manager=mcp_manager,
         enable_streaming=enable_streaming,
     )
 
     if agent is None:
-        qx_console.print(
+        from rich.console import Console
+        Console().print(
             "[red]Critical Error:[/red] Failed to initialize LLM agent. Exiting."
         )
         sys.exit(1)
@@ -148,6 +150,9 @@ def _handle_model_command(agent: QXLLMAgent):
     """
     Displays information about the current LLM model configuration.
     """
+    from rich.console import Console
+    rich_console = Console()
+    
     model_info_content = f"[bold]Current LLM Model Configuration:[/bold]\n"
     model_info_content += f"  Model Name: [green]{agent.model_name}[/green]\n"
     model_info_content += (
@@ -162,7 +167,7 @@ def _handle_model_command(agent: QXLLMAgent):
     model_info_content += f"  Max Output Tokens: [green]{max_tokens_val}[/green]\n"
     model_info_content += f"  Reasoning Effort: [green]{reasoning_effort_val if reasoning_effort_val else 'None'}[/green]\n"
 
-    qx_console.print(model_info_content)
+    rich_console.print(model_info_content)
 
 
 def _display_version_info():
@@ -170,17 +175,18 @@ def _display_version_info():
     Displays QX version, LLM model, and its parameters, then exits.
     """
     _configure_logging()
-    config_manager = ConfigManager(qx_console, parent_task_group=None)
+    config_manager = ConfigManager(None, parent_task_group=None)
     config_manager.load_configurations()
 
-    qx_console.print(f"[bold]QX Version:[/bold] [green]{QX_VERSION}[/green]")
+    from rich.console import Console
+    Console().print(f"[bold]QX Version:[/bold] [green]{QX_VERSION}[/green]")
 
     try:
-        temp_mcp_manager = MCPManager(qx_console, parent_task_group=None)
+        temp_mcp_manager = MCPManager(None, parent_task_group=None)
         agent = asyncio.run(_initialize_agent_with_mcp(temp_mcp_manager))
         _handle_model_command(agent)
     except SystemExit:
-        qx_console.print(
+        Console().print(
             "[yellow]Note:[/yellow] Could not display LLM model information as QX_MODEL_NAME is not configured."
         )
     sys.exit(0)
@@ -201,18 +207,20 @@ async def _handle_llm_interaction(
 
     # For streaming, we don't show spinner as content streams in real-time
     if not plain_text_output and not agent.enable_streaming:
-        show_spinner("QX is thinking...")
+        from rich.console import Console
+        Console().print("[dim]QX is thinking...[/dim]")
 
     try:
         run_result = await query_llm(
             agent,
             user_input,
             message_history=current_message_history,
-            console=qx_console,
+            console=None,  # No console needed for inline mode
         )
     except Exception as e:
         logger.error(f"Error during LLM interaction: {e}", exc_info=True)
-        qx_console.print(f"[red]Error:[/red] {e}")
+        from rich.console import Console
+        Console().print(f"[red]Error:[/red] {e}")
         return current_message_history
 
     if run_result:
@@ -225,8 +233,12 @@ async def _handle_llm_interaction(
             else:
                 # For streaming, content is already displayed during the stream
                 if not agent.enable_streaming and output_content.strip():
-                    qx_console.print(output_content)
-                    qx_console.print("")
+                    from rich.console import Console
+                    from rich.markdown import Markdown
+                    rich_console = Console()
+                    rich_console.print()
+                    rich_console.print(Markdown(output_content, code_theme="rrt"))
+                    rich_console.print()
             if hasattr(run_result, "all_messages"):
                 return run_result.all_messages()
             else:
@@ -239,7 +251,8 @@ async def _handle_llm_interaction(
             if plain_text_output:
                 sys.stderr.write("Error: Unexpected response structure from LLM.\n")
             else:
-                qx_console.print(
+                from rich.console import Console
+                Console().print(
                     "[red]Error:[/red] Unexpected response structure from LLM."
                 )
             return current_message_history
@@ -247,7 +260,8 @@ async def _handle_llm_interaction(
         if plain_text_output:
             sys.stdout.write("Info: No response generated or an error occurred.\n")
         else:
-            qx_console.print(
+            from rich.console import Console
+            Console().print(
                 "[yellow]Info:[/yellow] No response generated or an error occurred."
             )
         return current_message_history
@@ -285,7 +299,7 @@ async def _async_main(
 
     try:
         async with anyio.create_task_group() as tg:
-            config_manager = ConfigManager(qx_console, parent_task_group=tg)
+            config_manager = ConfigManager(None, parent_task_group=tg)
             config_manager.load_configurations()
 
             logger.debug("Using Textual interface.")
@@ -338,31 +352,33 @@ async def _async_main(
             # Handle session recovery
             if recover_session_path:
                 if recover_session_path == "LATEST":
-                    qx_console.print("Attempting to recover latest session...")
+                    from rich.console import Console
+                    Console().print("Attempting to recover latest session...")
                     loaded_history = load_latest_session()
                     if loaded_history:
                         current_message_history = loaded_history
-                        qx_console.print("Latest session recovered successfully!")
+                        Console().print("Latest session recovered successfully!")
                     else:
-                        qx_console.print(
+                        Console().print(
                             "[red]No previous sessions found. Starting new session.[/red]"
                         )
                 else:
-                    qx_console.print(
+                    Console().print(
                         f"[info]Attempting to recover session from: {recover_session_path}[/info]"
                     )
                     loaded_history = load_session_from_path(Path(recover_session_path))
                     if loaded_history:
                         current_message_history = loaded_history
-                        qx_console.print("[info]Session recovered successfully![/info]")
+                        Console().print("[info]Session recovered successfully![/info]")
                     else:
-                        qx_console.print(
+                        Console().print(
                             "[red]Failed to recover session. Starting new session.[/red]"
                         )
 
             # Handle initial prompt
             if initial_prompt and not exit_after_response:
-                qx_console.print(f"[bold]Initial Prompt:[/bold] {initial_prompt}")
+                from rich.console import Console
+                Console().print(f"[bold]Initial Prompt:[/bold] {initial_prompt}")
                 current_message_history = await _handle_llm_interaction(
                     llm_agent,
                     initial_prompt,
@@ -370,44 +386,31 @@ async def _async_main(
                     code_theme_to_use,
                 )
 
-            # Run Textual app (only if not in exit-after-response mode)
+            # Run inline interactive mode (only if not in exit-after-response mode)
             if not exit_after_response:
-                app = QXApp()
-                app.set_mcp_manager(config_manager.mcp_manager)
-                app.set_llm_agent(llm_agent)
-                app.set_version_info(
-                    QX_VERSION, llm_agent.model_name
-                )  # Pass version info
-                if current_message_history:
-                    app.set_message_history(current_message_history)
-
-                # Remove the temporary stream handler before running Textual app
+                # Remove the temporary stream handler for inline mode
                 if temp_stream_handler and temp_stream_handler in logger.handlers:
                     logger.removeHandler(temp_stream_handler)
-                    temp_stream_handler = None  # Clear the global reference
+                    temp_stream_handler = None
 
-                # Add TextualRichLogHandler to the logger
-                textual_handler = TextualRichLogHandler(qx_console)
-                textual_handler.setLevel(
-                    logger.level
-                )  # Set level to match logger's effective level
-                logger.addHandler(textual_handler)
-                qx_console.set_logger(logger)  # Set the logger in qx_console
+                # Print version info
+                from rich.console import Console
+                rich_console = Console()
+                rich_console.print(
+                    f"[dim]QX ver:{QX_VERSION} - {llm_agent.model_name}[/dim]"
+                )
 
                 try:
-                    # Enable console debugging if QX_DEBUG is set
-                    debug_mode = os.environ.get("QX_DEBUG", "false").lower() == "true"
-                    if debug_mode:
-                        # Run with console redirected for debugging
-                        await app.run_async(headless=False)
-                    else:
-                        await app.run_async()
+                    # Run inline interactive loop
+                    await _run_inline_mode(
+                        llm_agent, current_message_history, keep_sessions
+                    )
                 except KeyboardInterrupt:
                     logger.debug("QX terminated by user (Ctrl+C)")
-                    qx_console.print("\nQX terminated by user.")
+                    rich_console.print("\nQX terminated by user.")
                 except Exception as e:
-                    logger.error(f"Error running Textual app: {e}", exc_info=True)
-                    qx_console.print(f"[red]App Error:[/red] {e}")
+                    logger.error(f"Error running inline mode: {e}", exc_info=True)
+                    rich_console.print(f"[red]App Error:[/red] {e}")
                 finally:
                     # Cleanup: disconnect all active MCP servers
                     try:
@@ -429,6 +432,232 @@ async def _async_main(
         traceback.print_exc()
 
 
+class QXHistory:
+    """Custom history class that reads/writes QX's specific history file format."""
+    
+    def __init__(self, history_file_path: Path):
+        self.history_file_path = history_file_path
+        self._entries = []
+        self.load_history()
+    
+    def load_history(self):
+        """Load history from the QX format file."""
+        if not self.history_file_path.exists():
+            return
+        
+        history_entries = []
+        current_command_lines = []
+        
+        try:
+            with open(self.history_file_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+            
+            for line in lines:
+                stripped_line = line.strip()
+                if stripped_line.startswith("# "):  # Timestamp line
+                    # If we were accumulating a command, save it before starting a new one
+                    if current_command_lines:
+                        history_entries.append("\n".join(current_command_lines))
+                        current_command_lines = []
+                elif stripped_line.startswith("+"):
+                    current_command_lines.append(stripped_line[1:])  # Remove '+' and add
+                elif not stripped_line and current_command_lines:  # Blank line signifies end of entry
+                    history_entries.append("\n".join(current_command_lines))
+                    current_command_lines = []
+            
+            # Add any remaining command after loop (if file doesn't end with blank line)
+            if current_command_lines:
+                history_entries.append("\n".join(current_command_lines))
+                
+            self._entries = history_entries
+            
+        except Exception as e:
+            print(f"Error loading history from {self.history_file_path}: {e}")
+    
+    def append_string(self, command: str):
+        """Add a new command to history."""
+        command = command.strip()
+        if command and (not self._entries or self._entries[-1] != command):
+            self._entries.append(command)
+            self.save_to_file(command)
+    
+    def save_to_file(self, command: str):
+        """Save a command to the history file in QX format."""
+        try:
+            self.history_file_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.history_file_path, "a", encoding="utf-8") as f:
+                from datetime import datetime
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+                f.write(f"\n# {timestamp}\n")  # Start with a newline for separation
+                
+                command_lines = command.split('\n')
+                if len(command_lines) == 1 and not command_lines[0]:  # Empty command
+                    f.write("+\n")
+                else:  # Command has newlines or is non-empty single line
+                    for line in command_lines:
+                        f.write(f"+{line}\n")
+        except Exception as e:
+            print(f"Error saving history to {self.history_file_path}: {e}")
+    
+    # prompt_toolkit History interface methods
+    def get_strings(self):
+        """Return all history strings (prompt_toolkit interface)."""
+        return self._entries
+    
+    async def load(self):
+        """Async load method (prompt_toolkit interface)."""
+        for entry in self._entries:
+            yield entry
+    
+    def __iter__(self):
+        """Iterator for prompt_toolkit compatibility."""
+        return iter(self._entries)
+    
+    def __getitem__(self, index):
+        """Index access for prompt_toolkit compatibility."""
+        return self._entries[index]
+    
+    def __len__(self):
+        """Length for prompt_toolkit compatibility."""
+        return len(self._entries)
+
+
+async def _run_inline_mode(
+    llm_agent: QXLLMAgent,
+    current_message_history: Optional[List[ChatCompletionMessageParam]],
+    keep_sessions: int,
+):
+    """Run the interactive inline mode with prompt_toolkit input."""
+    from rich.console import Console
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.formatted_text import HTML
+    from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+    from prompt_toolkit.completion import WordCompleter
+    from prompt_toolkit.key_binding import KeyBindings
+    
+    rich_console = Console()
+    
+    # Create custom history that handles QX format
+    qx_history = QXHistory(QX_HISTORY_FILE)
+    
+    # Create command completer for slash commands
+    command_completer = WordCompleter([
+        '/model', '/reset', '/approve-all', '/help'
+    ], ignore_case=True)
+    
+    # Create key bindings for enhanced functionality
+    bindings = KeyBindings()
+    
+    @bindings.add('c-c')
+    def _(event):
+        """Handle Ctrl+C"""
+        event.app.exit(exception=KeyboardInterrupt, style='class:aborting')
+    
+    @bindings.add('c-d')
+    def _(event):
+        """Handle Ctrl+D"""
+        event.app.exit(exception=EOFError, style='class:exiting')
+    
+    # Create prompt session with enhanced features
+    session = PromptSession(
+        history=qx_history,
+        auto_suggest=AutoSuggestFromHistory(),
+        enable_history_search=True,
+        completer=command_completer,
+        complete_style='multi-column',
+        key_bindings=bindings,
+        mouse_support=True,
+        wrap_lines=True,
+    )
+    
+    while True:
+        try:
+            # Show prompt and get user input with prompt_toolkit
+            user_input = await session.prompt_async(
+                HTML('<red>QX⏵</red> '),
+                wrap_lines=True,
+                multiline=False,
+            )
+            user_input = user_input.strip()
+            
+            if not user_input:
+                continue
+                
+            if user_input.lower() in ["exit", "quit"]:
+                break
+                
+            # Echo user input
+            rich_console.print(f"[red]⏵ {user_input}[/]")
+            
+            # Add to history (prompt_toolkit automatically does this, but we need to save in QX format)
+            qx_history.append_string(user_input)
+            
+            # Handle commands
+            if user_input.startswith("/"):
+                await _handle_inline_command(user_input, llm_agent)
+                continue
+            
+            # Handle LLM query
+            current_message_history = await _handle_llm_interaction(
+                llm_agent,
+                user_input,
+                current_message_history,
+                "rrt",  # code theme
+                plain_text_output=False,
+            )
+            
+            # Save session
+            if current_message_history:
+                save_session(current_message_history)
+                clean_old_sessions(keep_sessions)
+                
+        except KeyboardInterrupt:
+            rich_console.print("\nQX terminated by user.")
+            break
+        except EOFError:
+            break
+        except Exception as e:
+            logger.error(f"Error in inline mode: {e}", exc_info=True)
+            rich_console.print(f"[red]Error:[/red] {e}")
+
+
+async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
+    """Handle slash commands in inline mode."""
+    from rich.console import Console
+    rich_console = Console()
+    
+    parts = command_input.strip().split(maxsplit=1)
+    command_name = parts[0].lower()
+
+    if command_name == "/model":
+        _handle_model_command(llm_agent)
+    elif command_name == "/reset":
+        # Just reset message history in inline mode
+        reset_session()
+        rich_console.print("[info]Session reset, system prompt reloaded.[/info]")
+    elif command_name == "/approve-all":
+        import qx.core.user_prompts
+        async with qx.core.user_prompts._approve_all_lock:
+            qx.core.user_prompts._approve_all_active = True
+        rich_console.print(
+            "[orange]✓ 'Approve All' mode activated for this session.[/orange]"
+        )
+    elif command_name == "/help":
+        rich_console.print("[bold]Available Commands:[/bold]")
+        rich_console.print("  [green]/model[/green]      - Show current LLM model configuration")
+        rich_console.print("  [green]/reset[/green]      - Reset session and clear message history")
+        rich_console.print("  [green]/approve-all[/green] - Activate 'approve all' mode for tool confirmations")
+        rich_console.print("  [green]/help[/green]       - Show this help message")
+        rich_console.print("\n[bold]Features:[/bold]")
+        rich_console.print("  • [cyan]Tab completion[/cyan] for commands")
+        rich_console.print("  • [cyan]History search[/cyan] with Ctrl+R")
+        rich_console.print("  • [cyan]Auto-suggestions[/cyan] from history")
+        rich_console.print("  • [cyan]Ctrl+C or Ctrl+D[/cyan] to exit")
+    else:
+        rich_console.print(f"[red]Unknown command: {command_name}[/red]")
+        rich_console.print("Available commands: /model, /reset, /approve-all, /help")
+
+
 async def handle_command(
     command_input: str,
     llm_agent: QXLLMAgent,
@@ -443,16 +672,18 @@ async def handle_command(
     if command_name == "/model":
         _handle_model_command(llm_agent)
     elif command_name == "/reset":
-        qx_console.clear()
+        # No console to clear in inline mode
         current_message_history = None
         reset_session()
         llm_agent = await _initialize_agent_with_mcp(config_manager.mcp_manager)
-        qx_console.print(
-            "[info]Session reset, system prompt reloaded, and terminal cleared.[/info]"
+        from rich.console import Console
+        Console().print(
+            "[info]Session reset, system prompt reloaded.[/info]"
         )
     else:
-        qx_console.print(f"[red]Unknown command: {command_name}[/red]")
-        qx_console.print("Available commands: /model, /reset")
+        from rich.console import Console
+        Console().print(f"[red]Unknown command: {command_name}[/red]")
+        Console().print("Available commands: /model, /reset")
 
 
 def main():
@@ -495,13 +726,14 @@ def main():
 
     # Handle mutually exclusive arguments
     if args.recover_session and initial_prompt_str:
-        qx_console.print(
+        from rich.console import Console
+        Console().print(
             "[red]Error:[/red] Cannot use --recover-session with an initial prompt. Please choose one."
         )
         sys.exit(1)
 
     if args.recover_session and args.exit_after_response:
-        qx_console.print(
+        Console().print(
             "[red]Error:[/red] Cannot use --recover-session with --exit-after-response. Recovery implies interactive mode."
         )
         sys.exit(1)
@@ -526,12 +758,13 @@ def main():
             sys.exit(0)
 
     except KeyboardInterrupt:
-        qx_console.print("\nQX terminated by user.")
+        from rich.console import Console
+        Console().print("\nQX terminated by user.")
         sys.exit(0)
     except Exception as e:
         fallback_logger = logging.getLogger("qx.critical")
         fallback_logger.critical(f"Critical error running QX: {e}", exc_info=True)
-        qx_console.print(f"[bold red]Critical error running QX:[/bold red] {e}")
+        Console().print(f"[bold red]Critical error running QX:[/bold red] {e}")
         sys.exit(1)
 
 
