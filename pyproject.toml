@@ -36,7 +36,11 @@ allow-direct-references = true
 [tool.hatch.build.targets.wheel]
 packages = ["src/qx"]
 
+[tool.uv.sources]
+qx = { workspace = true }
+
 [dependency-groups]
 dev = [
+    "qx",
     "textual-dev>=1.7.0",
 ]
