@@ -335,77 +335,93 @@ class QXLLMAgent:
 
         markdown_buffer = create_markdown_buffer()
 
-        # Helper function to render content directly via rich console
+        # Helper function to render content as markdown via rich console
         async def render_content(content: str) -> None:
             nonlocal has_rendered_content, total_rendered_content
             if content and content.strip():
                 has_rendered_content = True
                 total_rendered_content += content  # Track for validation
-                # Output directly to rich console
+                # Output as markdown to rich console
                 from rich.console import Console
+                from rich.markdown import Markdown
                 rich_console = Console()
-                rich_console.print(content, end="")
+                rich_console.print(Markdown(content, code_theme="rrt"), end="")
 
         # Stream content directly to console
         stream = None
+        spinner_stopped = False
         try:
-            stream = await self.client.chat.completions.create(**chat_params)
+            from rich.console import Console
+            console = Console()
+            
+            with console.status("Thinking...", spinner="dots") as status:
+                stream = await self.client.chat.completions.create(**chat_params)
+                
+                async for chunk in stream:
+                    if not chunk.choices:
+                        continue
 
-            async for chunk in stream:
-                if not chunk.choices:
-                    continue
+                    choice = chunk.choices[0]
+                    delta = choice.delta
 
-                choice = chunk.choices[0]
-                delta = choice.delta
+                    # Handle content streaming
+                    if delta.content:
+                        accumulated_content += delta.content
+                        # Check if buffer returns content to render
+                        content_to_render = markdown_buffer.add_content(delta.content)
+                        
+                        # Stop spinner when markdown buffer actually releases content to render
+                        if not spinner_stopped and content_to_render and content_to_render.strip():
+                            spinner_stopped = True
+                            status.stop()
+                        
+                        # Only render during streaming if we haven't seen tool calls yet
+                        if content_to_render and not has_tool_calls:
+                            await render_content(content_to_render)
 
-                # Handle content streaming
-                if delta.content:
-                    accumulated_content += delta.content
-                    # Check if buffer returns content to render
-                    content_to_render = markdown_buffer.add_content(delta.content)
-                    
-                    # Only render during streaming if we haven't seen tool calls yet
-                    if content_to_render and not has_tool_calls:
-                        await render_content(content_to_render)
-
-                # Handle tool call streaming
-                if delta.tool_calls:
-                    has_tool_calls = True  # Mark that we've seen tool calls
-                    if os.getenv("QX_LOG_RECEIVED"):
-                        logger.info(f"Received tool call delta: {delta.tool_calls}")
-                    for tool_call_delta in delta.tool_calls:
-                        # Start new tool call
-                        if tool_call_delta.index is not None:
-                            # Ensure we have enough space in the list
-                            while len(accumulated_tool_calls) <= tool_call_delta.index:
-                                accumulated_tool_calls.append(
-                                    {
-                                        "id": None,
-                                        "type": "function",
-                                        "function": {"name": "", "arguments": ""},
-                                    }
-                                )
-
-                            current_tool_call = accumulated_tool_calls[
-                                tool_call_delta.index
-                            ]
-
-                            if tool_call_delta.id:
-                                current_tool_call["id"] = tool_call_delta.id
-
-                            if tool_call_delta.function:
-                                if tool_call_delta.function.name:
-                                    current_tool_call["function"]["name"] = (
-                                        tool_call_delta.function.name
-                                    )
-                                if tool_call_delta.function.arguments:
-                                    current_tool_call["function"]["arguments"] += (
-                                        tool_call_delta.function.arguments
+                    # Handle tool call streaming
+                    if delta.tool_calls:
+                        # Stop spinner when we start processing tool calls
+                        if not spinner_stopped:
+                            spinner_stopped = True
+                            status.stop()
+                        
+                        has_tool_calls = True  # Mark that we've seen tool calls
+                        if os.getenv("QX_LOG_RECEIVED"):
+                            logger.info(f"Received tool call delta: {delta.tool_calls}")
+                        for tool_call_delta in delta.tool_calls:
+                            # Start new tool call
+                            if tool_call_delta.index is not None:
+                                # Ensure we have enough space in the list
+                                while len(accumulated_tool_calls) <= tool_call_delta.index:
+                                    accumulated_tool_calls.append(
+                                        {
+                                            "id": None,
+                                            "type": "function",
+                                            "function": {"name": "", "arguments": ""},
+                                        }
                                     )
 
-                # Check if stream is finished
-                if choice.finish_reason:
-                    break
+                                current_tool_call = accumulated_tool_calls[
+                                    tool_call_delta.index
+                                ]
+
+                                if tool_call_delta.id:
+                                    current_tool_call["id"] = tool_call_delta.id
+
+                                if tool_call_delta.function:
+                                    if tool_call_delta.function.name:
+                                        current_tool_call["function"]["name"] = (
+                                            tool_call_delta.function.name
+                                        )
+                                    if tool_call_delta.function.arguments:
+                                        current_tool_call["function"]["arguments"] += (
+                                            tool_call_delta.function.arguments
+                                        )
+
+                    # Check if stream is finished
+                    if choice.finish_reason:
+                        break
             
             # Stream completed successfully - it should auto-close when exhausted
             # but we'll ensure cleanup just in case

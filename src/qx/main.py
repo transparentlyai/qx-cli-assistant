@@ -119,6 +119,7 @@ async def _initialize_agent_with_mcp(mcp_manager: MCPManager) -> QXLLMAgent:
 
     if not model_name_from_env:
         from rich.console import Console
+
         Console().print(
             "[red]Critical Error:[/red] QX_MODEL_NAME environment variable not set. Please set it to an OpenRouter model string."
         )
@@ -139,6 +140,7 @@ async def _initialize_agent_with_mcp(mcp_manager: MCPManager) -> QXLLMAgent:
 
     if agent is None:
         from rich.console import Console
+
         Console().print(
             "[red]Critical Error:[/red] Failed to initialize LLM agent. Exiting."
         )
@@ -151,8 +153,9 @@ def _handle_model_command(agent: QXLLMAgent):
     Displays information about the current LLM model configuration.
     """
     from rich.console import Console
+
     rich_console = Console()
-    
+
     model_info_content = f"[bold]Current LLM Model Configuration:[/bold]\n"
     model_info_content += f"  Model Name: [green]{agent.model_name}[/green]\n"
     model_info_content += (
@@ -179,6 +182,7 @@ def _display_version_info():
     config_manager.load_configurations()
 
     from rich.console import Console
+
     Console().print(f"[bold]QX Version:[/bold] [green]{QX_VERSION}[/green]")
 
     try:
@@ -205,10 +209,7 @@ async def _handle_llm_interaction(
     """
     run_result: Optional[Any] = None
 
-    # For streaming, we don't show spinner as content streams in real-time
-    if not plain_text_output and not agent.enable_streaming:
-        from rich.console import Console
-        Console().print("[dim]QX is thinking...[/dim]")
+    # Spinner is now handled within the LLM agent itself
 
     try:
         run_result = await query_llm(
@@ -220,6 +221,7 @@ async def _handle_llm_interaction(
     except Exception as e:
         logger.error(f"Error during LLM interaction: {e}", exc_info=True)
         from rich.console import Console
+
         Console().print(f"[red]Error:[/red] {e}")
         return current_message_history
 
@@ -235,6 +237,7 @@ async def _handle_llm_interaction(
                 if not agent.enable_streaming and output_content.strip():
                     from rich.console import Console
                     from rich.markdown import Markdown
+
                     rich_console = Console()
                     rich_console.print()
                     rich_console.print(Markdown(output_content, code_theme="rrt"))
@@ -252,6 +255,7 @@ async def _handle_llm_interaction(
                 sys.stderr.write("Error: Unexpected response structure from LLM.\n")
             else:
                 from rich.console import Console
+
                 Console().print(
                     "[red]Error:[/red] Unexpected response structure from LLM."
                 )
@@ -261,6 +265,7 @@ async def _handle_llm_interaction(
             sys.stdout.write("Info: No response generated or an error occurred.\n")
         else:
             from rich.console import Console
+
             Console().print(
                 "[yellow]Info:[/yellow] No response generated or an error occurred."
             )
@@ -353,6 +358,7 @@ async def _async_main(
             if recover_session_path:
                 if recover_session_path == "LATEST":
                     from rich.console import Console
+
                     Console().print("Attempting to recover latest session...")
                     loaded_history = load_latest_session()
                     if loaded_history:
@@ -378,6 +384,7 @@ async def _async_main(
             # Handle initial prompt
             if initial_prompt and not exit_after_response:
                 from rich.console import Console
+
                 Console().print(f"[bold]Initial Prompt:[/bold] {initial_prompt}")
                 current_message_history = await _handle_llm_interaction(
                     llm_agent,
@@ -395,6 +402,7 @@ async def _async_main(
 
                 # Print version info
                 from rich.console import Console
+
                 rich_console = Console()
                 rich_console.print(
                     f"[dim]QX ver:{QX_VERSION} - {llm_agent.model_name}[/dim]"
@@ -434,24 +442,24 @@ async def _async_main(
 
 class QXHistory:
     """Custom history class that reads/writes QX's specific history file format."""
-    
+
     def __init__(self, history_file_path: Path):
         self.history_file_path = history_file_path
         self._entries = []
         self.load_history()
-    
+
     def load_history(self):
         """Load history from the QX format file."""
         if not self.history_file_path.exists():
             return
-        
+
         history_entries = []
         current_command_lines = []
-        
+
         try:
             with open(self.history_file_path, "r", encoding="utf-8") as f:
                 lines = f.readlines()
-            
+
             for line in lines:
                 stripped_line = line.strip()
                 if stripped_line.startswith("# "):  # Timestamp line
@@ -460,37 +468,47 @@ class QXHistory:
                         history_entries.append("\n".join(current_command_lines))
                         current_command_lines = []
                 elif stripped_line.startswith("+"):
-                    current_command_lines.append(stripped_line[1:])  # Remove '+' and add
-                elif not stripped_line and current_command_lines:  # Blank line signifies end of entry
+                    current_command_lines.append(
+                        stripped_line[1:]
+                    )  # Remove '+' and add
+                elif (
+                    not stripped_line and current_command_lines
+                ):  # Blank line signifies end of entry
                     history_entries.append("\n".join(current_command_lines))
                     current_command_lines = []
-            
+
             # Add any remaining command after loop (if file doesn't end with blank line)
             if current_command_lines:
                 history_entries.append("\n".join(current_command_lines))
-                
-            self._entries = history_entries
-            
+
+            # Reverse the order so newest entries come first (for arrow up navigation)
+            self._entries = list(reversed(history_entries))
+
         except Exception as e:
             print(f"Error loading history from {self.history_file_path}: {e}")
-    
+
     def append_string(self, command: str):
-        """Add a new command to history."""
+        """Add a new command to history (prompt_toolkit interface)."""
         command = command.strip()
         if command and (not self._entries or self._entries[-1] != command):
             self._entries.append(command)
             self.save_to_file(command)
     
+    def store_string(self, command: str):
+        """Store a string in the history (alternative prompt_toolkit interface)."""
+        self.append_string(command)
+
     def save_to_file(self, command: str):
         """Save a command to the history file in QX format."""
         try:
             self.history_file_path.parent.mkdir(parents=True, exist_ok=True)
             with open(self.history_file_path, "a", encoding="utf-8") as f:
                 from datetime import datetime
+
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
                 f.write(f"\n# {timestamp}\n")  # Start with a newline for separation
-                
-                command_lines = command.split('\n')
+
+                command_lines = command.split("\n")
                 if len(command_lines) == 1 and not command_lines[0]:  # Empty command
                     f.write("+\n")
                 else:  # Command has newlines or is non-empty single line
@@ -498,25 +516,25 @@ class QXHistory:
                         f.write(f"+{line}\n")
         except Exception as e:
             print(f"Error saving history to {self.history_file_path}: {e}")
-    
+
     # prompt_toolkit History interface methods
     def get_strings(self):
         """Return all history strings (prompt_toolkit interface)."""
         return self._entries
-    
+
     async def load(self):
         """Async load method (prompt_toolkit interface)."""
         for entry in self._entries:
             yield entry
-    
+
     def __iter__(self):
         """Iterator for prompt_toolkit compatibility."""
         return iter(self._entries)
-    
+
     def __getitem__(self, index):
         """Index access for prompt_toolkit compatibility."""
         return self._entries[index]
-    
+
     def __len__(self):
         """Length for prompt_toolkit compatibility."""
         return len(self._entries)
@@ -524,49 +542,46 @@ class QXHistory:
 
 class QXCompleter:
     """Custom completer that handles both commands and path completion."""
-    
+
     def __init__(self):
-        self.commands = ['/model', '/reset', '/approve-all', '/help']
-    
+        self.commands = ["/model", "/reset", "/approve-all", "/help"]
+
     def get_completions(self, document, complete_event):
-        from prompt_toolkit.completion import Completion
         import subprocess
         from pathlib import Path
-        
+
+        from prompt_toolkit.completion import Completion
+
         # Get the current text and cursor position
         text = document.text
         cursor_position = document.cursor_position
-        
+
         # Find the start of the current word
         current_word_start = cursor_position
         while current_word_start > 0 and not text[current_word_start - 1].isspace():
             current_word_start -= 1
-        
+
         current_word = text[current_word_start:cursor_position]
-        
+
         # Command completion for slash commands
-        if current_word.startswith('/'):
+        if current_word.startswith("/"):
             for command in self.commands:
                 if command.startswith(current_word):
                     yield Completion(
                         command,
                         start_position=-len(current_word),
-                        display=f"{command}  [cmd]"
+                        display=f"{command}  [cmd]",
                     )
             return
-        
+
         # Path completion using bash compgen (like ExtendedInput)
         if current_word:
             try:
                 cmd = ["bash", "-c", f"compgen -f -- '{current_word}'"]
                 result = subprocess.run(
-                    cmd,
-                    capture_output=True, 
-                    text=True, 
-                    timeout=1, 
-                    check=False 
+                    cmd, capture_output=True, text=True, timeout=1, check=False
                 )
-                
+
                 if result.returncode == 0:
                     candidates = result.stdout.strip().splitlines()
                     for candidate in candidates:
@@ -574,24 +589,26 @@ class QXCompleter:
                             # Check if it's a directory
                             is_dir = Path(candidate).is_dir()
                             display_suffix = "/" if is_dir else ""
-                            completion_text = candidate + ("/" if is_dir and not candidate.endswith("/") else "")
-                            
+                            completion_text = candidate + (
+                                "/" if is_dir and not candidate.endswith("/") else ""
+                            )
+
                             yield Completion(
                                 completion_text,
                                 start_position=-len(current_word),
-                                display=f"{candidate}{display_suffix}  [{'dir' if is_dir else 'file'}]"
+                                display=f"{candidate}{display_suffix}  [{'dir' if is_dir else 'file'}]",
                             )
                         except OSError:
                             # Handle permission errors or other OS errors
                             yield Completion(
                                 candidate,
                                 start_position=-len(current_word),
-                                display=f"{candidate}  [file]"
+                                display=f"{candidate}  [file]",
                             )
             except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
                 # Fall back to no completions on error
                 pass
-    
+
     async def get_completions_async(self, document, complete_event):
         """Async version for prompt_toolkit compatibility."""
         for completion in self.get_completions(document, complete_event):
@@ -604,131 +621,181 @@ async def _run_inline_mode(
     keep_sessions: int,
 ):
     """Run the interactive inline mode with prompt_toolkit input."""
-    from rich.console import Console
     from prompt_toolkit import PromptSession
-    from prompt_toolkit.formatted_text import HTML
     from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
-    from prompt_toolkit.key_binding import KeyBindings
     from prompt_toolkit.filters import Condition
-    
+    from prompt_toolkit.formatted_text import HTML
+    from prompt_toolkit.key_binding import KeyBindings
+    from prompt_toolkit.styles import Style
+    from prompt_toolkit.validation import ValidationError, Validator
+    from rich.console import Console
+
     rich_console = Console()
-    
+
     # Create custom history that handles QX format
     qx_history = QXHistory(QX_HISTORY_FILE)
-    
+
     # Create custom completer that handles both commands and paths
     qx_completer = QXCompleter()
-    
+
     # State tracking for multiline mode and pending text
     is_multiline_mode = [False]  # Use list for mutable reference in closures
-    pending_text = ['']  # Text to restore when toggling modes
-    
+    pending_text = [""]  # Text to restore when toggling modes
+
+    # Create validator to prevent empty submissions in single-line mode
+    class SingleLineNonEmptyValidator(Validator):
+        """Validator that prevents empty input submission only in single-line mode."""
+
+        def validate(self, document):
+            # Only validate (prevent empty) in single-line mode
+            if not is_multiline_mode[0]:  # Single-line mode
+                text = document.text.strip()
+                if not text:
+                    # Prevent submission by raising validation error
+                    # Using empty message to avoid showing error text
+                    raise ValidationError(message="")
+            # In multiline mode, allow empty submissions (for mode switching)
+
+    # Create custom style for input text
+    input_style = Style.from_dict(
+        {
+            # Style for the text as user types
+            "": "fg:#ff005f bg:#050505",
+            # Style for selected text
+            "selected": "fg:#ff005f bg:#050505 reverse",
+        }
+    )
+
     # Create key bindings for enhanced functionality
     bindings = KeyBindings()
-    
-    @bindings.add('c-c')
+
+    @bindings.add("c-c")
     def _(event):
         """Handle Ctrl+C"""
-        event.app.exit(exception=KeyboardInterrupt, style='class:aborting')
-    
-    @bindings.add('c-d')
+        event.app.exit(exception=KeyboardInterrupt, style="class:aborting")
+
+    @bindings.add("c-d")
     def _(event):
         """Handle Ctrl+D"""
-        event.app.exit(exception=EOFError, style='class:exiting')
-    
-    @bindings.add('escape', 'enter')  # Alt+Enter
+        event.app.exit(exception=EOFError, style="class:exiting")
+
+    @bindings.add("escape", "enter")  # Alt+Enter
     def _(event):
         """Handle Alt+Enter for multiline toggle/submit"""
         buffer = event.current_buffer
-        
+
         if is_multiline_mode[0]:
             # Submit if in multiline mode
             buffer.validate_and_handle()
         else:
             # Toggle to multiline mode - we need to restart the prompt
             is_multiline_mode[0] = True
-            # Store the current text 
+            # Store the current text
             current_text = buffer.text
             # Add newline if there's existing text
             if current_text.strip():
-                current_text += '\n'
+                current_text += "\n"
             # Store text for restoration
             pending_text[0] = current_text
-            
+
             # Exit current prompt and restart with multiline mode
-            event.app.exit(result='__TOGGLE_MULTILINE__')
-    
+            event.app.exit(result="__TOGGLE_MULTILINE__")
+
     # Create prompt session with enhanced features
     session = PromptSession(
         history=qx_history,
         auto_suggest=AutoSuggestFromHistory(),
         enable_history_search=True,
         completer=qx_completer,
-        complete_style='multi-column',
+        complete_style="multi-column",
         key_bindings=bindings,
         mouse_support=True,
         wrap_lines=True,
         multiline=Condition(lambda: is_multiline_mode[0]),
+        validator=SingleLineNonEmptyValidator(),
+        validate_while_typing=False,  # Only validate on submit attempt
+        style=input_style,  # Apply custom input text styling
     )
-    
+
     while True:
         try:
             # Start with single-line mode for each new input
             if not is_multiline_mode[0]:
                 is_multiline_mode[0] = False
-            
+
             # Get the appropriate prompt based on current mode
-            current_prompt = HTML('<blue>MULTILINE⏵</blue> ') if is_multiline_mode[0] else HTML('<red>QX⏵</red> ')
-            
+            current_prompt = (
+                HTML('<style fg="#0087ff">MULTILINE⏵</style> ')
+                if is_multiline_mode[0]
+                else HTML('<style fg="#ff5f00">QX⏵</style> ')
+            )
+
             # Show prompt and get user input with prompt_toolkit
-            default_text = pending_text[0] if pending_text[0] else ''
+            default_text = pending_text[0] if pending_text[0] else ""
             result = await session.prompt_async(
                 current_prompt,
                 wrap_lines=True,
                 default=default_text,  # Restore text after mode toggle
             )
-            
+
             # Clear any pending text after successful prompt
-            if result != '__TOGGLE_MULTILINE__':
-                pending_text[0] = ''
-            
+            if result != "__TOGGLE_MULTILINE__":
+                pending_text[0] = ""
+
             # Check if this was a mode toggle
-            if result == '__TOGGLE_MULTILINE__':
+            if result == "__TOGGLE_MULTILINE__":
                 # Clear the previous prompt line before showing multiline prompt
                 from rich.console import Console
+
                 console = Console()
                 try:
                     # Move cursor up and clear the line using Rich console
-                    print('\033[1A\r\033[K', end='', flush=True)  # More direct approach
+                    print("\033[1A\r\033[K", end="", flush=True)  # More direct approach
                 except Exception:
                     pass
                 # Continue loop to show multiline prompt with stored text
                 continue
-            
+
             user_input = result.strip()
-            
+
             if not user_input:
-                # Reset multiline mode if empty input
-                is_multiline_mode[0] = False
+                # Handle empty input differently based on current mode
+                was_multiline = is_multiline_mode[0]
+                if was_multiline:
+                    # Multiline mode: clear prompt and switch to single line mode
+                    try:
+                        # Move cursor up and clear the multiline prompt line
+                        print("\033[1A\r\033[K", end="", flush=True)
+                    except Exception:
+                        pass
+                    # Reset multiline mode and show new single line prompt
+                    is_multiline_mode[0] = False
+                # Continue to next prompt iteration (both modes need this)
                 continue
-                
+
             if user_input.lower() in ["exit", "quit"]:
                 break
-                
-            # Echo user input
-            rich_console.print(f"[red]⏵ {user_input}[/]")
-            
-            # Add to history (prompt_toolkit automatically does this, but we need to save in QX format)
+
+            # Clear multiline prompt if transitioning from multiline to normal mode
+            was_multiline = is_multiline_mode[0]
+            if was_multiline:
+                try:
+                    # Move cursor up and clear the multiline prompt line
+                    print("\033[1A\r\033[K", end="", flush=True)
+                except Exception:
+                    pass
+
+            # Add to history (both in-memory and to file)
             qx_history.append_string(user_input)
-            
+
             # Reset multiline mode after successful submission
             is_multiline_mode[0] = False
-            
+
             # Handle commands
             if user_input.startswith("/"):
                 await _handle_inline_command(user_input, llm_agent)
                 continue
-            
+
             # Handle LLM query
             current_message_history = await _handle_llm_interaction(
                 llm_agent,
@@ -737,12 +804,12 @@ async def _run_inline_mode(
                 "rrt",  # code theme
                 plain_text_output=False,
             )
-            
+
             # Save session
             if current_message_history:
                 save_session(current_message_history)
                 clean_old_sessions(keep_sessions)
-                
+
         except KeyboardInterrupt:
             rich_console.print("\nQX terminated by user.")
             break
@@ -756,8 +823,9 @@ async def _run_inline_mode(
 async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
     """Handle slash commands in inline mode."""
     from rich.console import Console
+
     rich_console = Console()
-    
+
     parts = command_input.strip().split(maxsplit=1)
     command_name = parts[0].lower()
 
@@ -769,6 +837,7 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
         rich_console.print("[info]Session reset, system prompt reloaded.[/info]")
     elif command_name == "/approve-all":
         import qx.core.user_prompts
+
         async with qx.core.user_prompts._approve_all_lock:
             qx.core.user_prompts._approve_all_active = True
         rich_console.print(
@@ -776,17 +845,29 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
         )
     elif command_name == "/help":
         rich_console.print("[bold]Available Commands:[/bold]")
-        rich_console.print("  [green]/model[/green]      - Show current LLM model configuration")
-        rich_console.print("  [green]/reset[/green]      - Reset session and clear message history")
-        rich_console.print("  [green]/approve-all[/green] - Activate 'approve all' mode for tool confirmations")
+        rich_console.print(
+            "  [green]/model[/green]      - Show current LLM model configuration"
+        )
+        rich_console.print(
+            "  [green]/reset[/green]      - Reset session and clear message history"
+        )
+        rich_console.print(
+            "  [green]/approve-all[/green] - Activate 'approve all' mode for tool confirmations"
+        )
         rich_console.print("  [green]/help[/green]       - Show this help message")
         rich_console.print("\n[bold]Input Modes:[/bold]")
-        rich_console.print("  • [yellow]Single-line mode[/yellow] (default): [red]QX⏵[/red] prompt")
+        rich_console.print(
+            "  • [yellow]Single-line mode[/yellow] (default): [#ff5f00]QX⏵[/#ff5f00] prompt"
+        )
         rich_console.print("    - [cyan]Enter[/cyan]: Submit input")
         rich_console.print("    - [cyan]Alt+Enter[/cyan]: Switch to multiline mode")
-        rich_console.print("  • [yellow]Multiline mode[/yellow]: [blue]MULTILINE⏵[/blue] prompt")
+        rich_console.print(
+            "  • [yellow]Multiline mode[/yellow]: [#0087ff]MULTILINE⏵[/#0087ff] prompt"
+        )
         rich_console.print("    - [cyan]Enter[/cyan]: Add newline (continue editing)")
-        rich_console.print("    - [cyan]Alt+Enter[/cyan]: Submit input and return to single-line")
+        rich_console.print(
+            "    - [cyan]Alt+Enter[/cyan]: Submit input and return to single-line"
+        )
         rich_console.print("\n[bold]Features:[/bold]")
         rich_console.print("  • [cyan]Tab completion[/cyan] for commands and paths")
         rich_console.print("  • [cyan]History search[/cyan] with Ctrl+R")
@@ -816,11 +897,11 @@ async def handle_command(
         reset_session()
         llm_agent = await _initialize_agent_with_mcp(config_manager.mcp_manager)
         from rich.console import Console
-        Console().print(
-            "[info]Session reset, system prompt reloaded.[/info]"
-        )
+
+        Console().print("[info]Session reset, system prompt reloaded.[/info]")
     else:
         from rich.console import Console
+
         Console().print(f"[red]Unknown command: {command_name}[/red]")
         Console().print("Available commands: /model, /reset")
 
@@ -866,6 +947,7 @@ def main():
     # Handle mutually exclusive arguments
     if args.recover_session and initial_prompt_str:
         from rich.console import Console
+
         Console().print(
             "[red]Error:[/red] Cannot use --recover-session with an initial prompt. Please choose one."
         )
@@ -898,6 +980,7 @@ def main():
 
     except KeyboardInterrupt:
         from rich.console import Console
+
         Console().print("\nQX terminated by user.")
         sys.exit(0)
     except Exception as e:
