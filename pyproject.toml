@@ -1,6 +1,6 @@
 [project]
 name = "qx"
-version = "0.3.3"
+version = "0.3.42"
 description = "QX is a coding cli agent built by Transparently.AI"
 authors = [{ name = "Transparently.AI", email = "mauro@transparently.ai" }]
 dependencies = [
