@@ -846,6 +846,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "qx" },
     { name = "textual-dev" },
 ]
 
@@ -865,7 +866,10 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "textual-dev", specifier = ">=1.7.0" }]
+dev = [
+    { name = "qx", editable = "." },
+    { name = "textual-dev", specifier = ">=1.7.0" },
+]
 
 [[package]]
 name = "requests"
