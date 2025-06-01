@@ -280,16 +280,15 @@ class QXApp(App[None]):
     def compose(self) -> ComposeResult:
         with Vertical(id="main-container"):
             yield RichLog(id="output-log", markup=True, wrap=True)
-            self.approval_container = Container(
-                id="approval-selector-container", classes="hidden"
-            )
-            yield self.approval_container
-            
-            # Container for the completion menu, positioned above the bottom section
-            self.completion_menu_area = Container(id="completion-menu-area", classes="hidden")
-            yield self.completion_menu_area
-            
+            # The completion_menu_area and approval_container are now part of bottom-section
+            # to be positioned above the input area.
             with Vertical(id="bottom-section"):
+                self.completion_menu_area = Container(id="completion-menu-area", classes="hidden")
+                yield self.completion_menu_area
+                self.approval_container = Container(
+                    id="approval-selector-container", classes="hidden"
+                )
+                yield self.approval_container
                 with Horizontal(id="input-container"):
                     yield Static(self.original_prompt_label, id="prompt-label")
                     yield ExtendedInput(
@@ -309,11 +308,12 @@ class QXApp(App[None]):
             options=options, border_title=prompt, id="approval-selector-active"
         )
         try:
+            # Hide input container when approval is shown
             self.query_one("#input-container").display = False
         except:
-            pass
+            pass # Input container might not be there in some edge cases
         if self.user_input:
-            self.user_input.can_focus = False
+            self.user_input.can_focus = False # Prevent focus on input when selector is active
         await self.approval_container.mount(self.approval_selector_instance)
         self.approval_container.display = True
         if self.approval_selector_instance:
@@ -326,11 +326,12 @@ class QXApp(App[None]):
             await self.approval_selector_instance.remove()
             self.approval_selector_instance = None
         try:
+            # Show input container when approval is hidden
             self.query_one("#input-container").display = True
         except:
-            pass
+            pass # Input container might not be there in some edge cases
         if self.user_input:
-            self.user_input.can_focus = True
+            self.user_input.can_focus = True # Restore focus to input
             self.user_input.focus()
         if self.approval_future and not self.approval_future.done():
             self.approval_future.cancel()
@@ -340,19 +341,26 @@ class QXApp(App[None]):
         self, prompt: str, options: list[tuple[str, str]]
     ) -> Optional[str]:
         if self.approval_future and not self.approval_future.done():
-            return None
+            return None # Another approval is already in progress
+
+        # If a completion menu is active, hide it first
+        if self._active_completion_menu and self.completion_menu_area and self.completion_menu_area.display:
+            await self.on_hide_completion_menu(HideCompletionMenu(self._active_completion_menu))
+
         self.approval_future = asyncio.Future()
         await self._show_approval_selector(options, prompt)
         try:
-            return await asyncio.wait_for(self.approval_future, timeout=300.0)
+            return await asyncio.wait_for(self.approval_future, timeout=300.0) # 5 minutes timeout
         except asyncio.TimeoutError:
             await self._hide_approval_selector()
-            return None
+            return None # Default to None or a specific timeout response if needed
         except asyncio.CancelledError:
+            # This can happen if the app is quitting or another part of the code cancels the future
             if self.approval_container and self.approval_container.display:
                 await self._hide_approval_selector()
             return None
         finally:
+            # Ensure cleanup even if an unexpected error occurs in the wait_for
             if self.approval_container and self.approval_container.display:
                 await self._hide_approval_selector()
 
@@ -361,7 +369,11 @@ class QXApp(App[None]):
     ) -> None:
         if self.approval_future and not self.approval_future.done():
             self.approval_future.set_result(message.key)
-        await self._hide_approval_selector()
+        # _hide_approval_selector is called in the finally block of request_approval_with_selector
+        # or if the future was set successfully.
+        # However, we might want to ensure it's hidden immediately after selection if not handled by future completion.
+        if self.approval_container and self.approval_container.display:
+            await self._hide_approval_selector()
 
     async def _process_user_input(self, input_text: str) -> None:
         if (
@@ -395,7 +407,7 @@ class QXApp(App[None]):
         self.user_input = self.query_one("#user-input", ExtendedInput)
         self.prompt_label = self.query_one("#prompt-label", Static)
         self.status_footer = self.query_one("#status-footer", StatusFooter)
-        # self.completion_menu_area is assigned in compose
+        # self.completion_menu_area and self.approval_container are assigned in compose
         self._stored_original_prompt_label = str(self.prompt_label.renderable)
         qx_console.set_widgets(self.output_log, self.user_input)
         qx_console._app = self
@@ -517,6 +529,10 @@ class QXApp(App[None]):
         if not self.completion_menu_area:
             logger.error("Completion menu area not initialized!")
             return
+
+        # If an approval selector is active, hide it first
+        if self.approval_container and self.approval_container.display:
+            await self._hide_approval_selector()
 
         if self._active_completion_menu:
             try:
