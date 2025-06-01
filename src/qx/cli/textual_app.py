@@ -350,8 +350,8 @@ class QXApp(App[None]):
         self.approval_future = asyncio.Future()
         await self._show_approval_selector(options, prompt)
         try:
-            return await asyncio.wait_for(self.approval_future, timeout=300.0) # 5 minutes timeout
-        except asyncio.TimeoutError:
+            return await asyncio.wait_for(self.approval_future, timeout=None) # Waits indefinitely
+        except asyncio.TimeoutError: # This block should ideally not be reached if timeout is None
             await self._hide_approval_selector()
             return None # Default to None or a specific timeout response if needed
         except asyncio.CancelledError:
