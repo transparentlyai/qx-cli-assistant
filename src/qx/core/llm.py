@@ -125,13 +125,13 @@ class QXLLMAgent:
             )
             raise ValueError("OPENROUTER_API_KEY not set.")
 
-        # Create HTTP client with proper configuration
+        # Create HTTP client with proper configuration for streaming
         self._http_client = httpx.AsyncClient(
-            timeout=httpx.Timeout(180.0, connect=10.0),  # 180s total, 10s connect
+            timeout=httpx.Timeout(300.0, connect=15.0, read=300.0, write=30.0),  # Longer timeouts for streaming
             limits=httpx.Limits(
                 max_connections=10,
                 max_keepalive_connections=5,
-                keepalive_expiry=30.0
+                keepalive_expiry=60.0  # Longer keepalive for streaming connections
             ),
             follow_redirects=True
         )
@@ -350,6 +350,7 @@ class QXLLMAgent:
         # Stream content directly to console
         stream = None
         spinner_stopped = False
+        stream_completed = False
         try:
             from rich.console import Console
             console = Console()
@@ -375,8 +376,9 @@ class QXLLMAgent:
                             spinner_stopped = True
                             status.stop()
                         
-                        # Only render during streaming if we haven't seen tool calls yet
-                        if content_to_render and not has_tool_calls:
+                        # Continue rendering content even if tool calls are detected
+                        # This prevents content loss when responses contain both text and tool calls
+                        if content_to_render:
                             await render_content(content_to_render)
 
                     # Handle tool call streaming
@@ -421,10 +423,11 @@ class QXLLMAgent:
 
                     # Check if stream is finished
                     if choice.finish_reason:
+                        stream_completed = True
                         break
             
-            # Stream completed successfully - it should auto-close when exhausted
-            # but we'll ensure cleanup just in case
+            # Mark stream as completed and attempt graceful close
+            stream_completed = True
             if stream and hasattr(stream, 'aclose'):
                 try:
                     await stream.aclose()
@@ -435,7 +438,7 @@ class QXLLMAgent:
             logger.error(f"Error during streaming: {e}", exc_info=True)
             
             # Clean up the stream in error case
-            if stream and hasattr(stream, 'aclose'):
+            if stream and hasattr(stream, 'aclose') and not stream_completed:
                 try:
                     # Small delay to allow any pending data to be processed
                     await asyncio.sleep(0.1)
@@ -443,48 +446,64 @@ class QXLLMAgent:
                 except Exception:
                     pass  # Ignore errors closing stream
             
-            # Fall back to non-streaming
-            chat_params["stream"] = False
-            response = await self.client.chat.completions.create(**chat_params)
-            response_message = response.choices[0].message
-            messages.append(response_message)
+            # Only fall back to non-streaming if we haven't accumulated any content
+            # This prevents losing partial responses that were already streamed
+            if not accumulated_content:
+                # Fall back to non-streaming
+                chat_params["stream"] = False
+                try:
+                    response = await self.client.chat.completions.create(**chat_params)
+                    response_message = response.choices[0].message
+                    messages.append(response_message)
 
-            if response_message.tool_calls:
-                return await self._process_tool_calls_and_continue(
-                    response_message, messages, user_input, recursion_depth
-                )
+                    if response_message.tool_calls:
+                        return await self._process_tool_calls_and_continue(
+                            response_message, messages, user_input, recursion_depth
+                        )
+                    else:
+                        return QXRunResult(response_message.content, messages)
+                except Exception as fallback_error:
+                    logger.error(f"Fallback non-streaming also failed: {fallback_error}", exc_info=True)
+                    return QXRunResult(f"Error: Both streaming and fallback failed", messages)
             else:
-                return QXRunResult(response_message.content, messages)
+                # We have partial content from streaming, continue with that
+                logger.warning(f"Streaming failed but recovered {len(accumulated_content)} characters of content")
 
         # After streaming, flush any remaining content
         remaining_content = markdown_buffer.flush()
         
-        # Render remaining content if:
-        # 1. We have remaining content AND
-        # 2. Either we haven't rendered anything yet OR we have tool calls
+        # Always render remaining content if present
         if remaining_content and remaining_content.strip():
-            if not has_rendered_content or has_tool_calls:
-                await render_content(remaining_content)
+            await render_content(remaining_content)
         
-        # Validate that all content was rendered
+        # Validate that all content was rendered and attempt recovery
         if accumulated_content:
             # Compare lengths to detect content loss
             accumulated_len = len(accumulated_content)
             rendered_len = len(total_rendered_content)
             
             if accumulated_len != rendered_len:
+                content_loss = accumulated_len - rendered_len
                 logger.warning(
                     f"Content validation mismatch: accumulated {accumulated_len} chars, "
-                    f"rendered {rendered_len} chars. Difference: {accumulated_len - rendered_len}"
+                    f"rendered {rendered_len} chars. Difference: {content_loss}"
                 )
                 
-                # Log debug information if content was lost
-                if accumulated_len > rendered_len:
-                    logger.debug("Content may have been lost during streaming")
+                # Attempt to recover lost content
+                if content_loss > 0:
+                    # Try to find and render the missing content
+                    if rendered_len < accumulated_len:
+                        missing_content = accumulated_content[rendered_len:]
+                        if missing_content.strip():
+                            logger.info(f"Attempting to recover {len(missing_content)} characters of lost content")
+                            await render_content(missing_content)
+                            total_rendered_content += missing_content
+                    
+                    # Log debug information if content was lost
                     if os.getenv("QX_DEBUG_STREAMING"):
                         # Only log detailed info if debug flag is set
                         logger.debug(f"Accumulated content: {repr(accumulated_content[:200])}...")
-                        logger.debug(f"Rendered content: {repr(total_rendered_content[:200])}...")
+                        logger.debug(f"Original rendered content: {repr(total_rendered_content[:200])}...")
             else:
                 logger.debug(f"Content validation passed: {accumulated_len} chars rendered successfully")
         
