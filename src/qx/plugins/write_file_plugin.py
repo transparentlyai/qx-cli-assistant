@@ -3,7 +3,7 @@ import difflib
 import logging
 import os
 from pathlib import Path
-from typing import Optional, Protocol
+from typing import Optional
 
 from pydantic import BaseModel, Field
 from rich.console import Console as RichConsole  # Import RichConsole directly

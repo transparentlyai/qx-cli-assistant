@@ -26,6 +26,10 @@ async def get_or_create_session_filename():
     global _current_session_file
     async with _session_lock:
         if _current_session_file is None:
+            # Only create the sessions directory if the .Q directory exists
+            if not QX_SESSIONS_DIR.parent.is_dir():
+                logger.info("'.Q' directory not found. Cannot create session directory.")
+                return None # Indicate that a session file cannot be created
             QX_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:23]  # Include microseconds
             _current_session_file = QX_SESSIONS_DIR / f"qx_session_{timestamp}.json"
@@ -41,7 +45,14 @@ async def save_session_async(message_history: List[ChatCompletionMessageParam]):
         logger.info("No message history to save. Skipping session save.")
         return
 
+    # Check if .Q directory exists before attempting to save
+    if not QX_SESSIONS_DIR.parent.is_dir():
+        logger.info("'.Q' directory not found. Skipping session save.")
+        return
+
     session_filename = await get_or_create_session_filename()
+    if session_filename is None: # get_or_create_session_filename returns None if .Q doesn't exist
+        return
 
     # Convert ChatCompletionMessageParam objects to dictionaries for JSON serialization
     serializable_history = [
@@ -79,12 +90,24 @@ def save_session_sync(message_history: List[ChatCompletionMessageParam]):
         if not message_history:
             return
         
+        # Check if .Q directory exists before attempting to save
+        if not QX_SESSIONS_DIR.parent.is_dir():
+            logger.info("'.Q' directory not found. Skipping session save.")
+            return
+
         with _session_lock_sync:
             if _current_session_file is None:
+                # Only create the sessions directory if the .Q directory exists
+                if not QX_SESSIONS_DIR.parent.is_dir():
+                    logger.info("'.Q' directory not found. Cannot create session directory.")
+                    return # Indicate that a session file cannot be created
                 QX_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:23]
                 _current_session_file = QX_SESSIONS_DIR / f"qx_session_{timestamp}.json"
             
+            if _current_session_file is None: # If it couldn't be created due to missing .Q
+                return
+
             serializable_history = [
                 msg.model_dump() if hasattr(msg, 'model_dump') else msg
                 for msg in message_history
@@ -139,9 +162,16 @@ async def clean_old_sessions_async(keep_sessions: int):
         logger.warning(f"Invalid QX_KEEP_SESSIONS value: {keep_sessions}. Must be non-negative. Skipping session cleanup.")
         return
 
+    # Only attempt cleanup if .Q directory exists
+    if not QX_SESSIONS_DIR.parent.is_dir():
+        logger.info("'.Q' directory not found. Skipping session cleanup.")
+        return
+
     try:
         # Run file operations in thread pool
         def _get_session_files():
+            if not QX_SESSIONS_DIR.is_dir(): # Check if sessions directory exists within .Q
+                return []
             return sorted(
                 [f for f in QX_SESSIONS_DIR.iterdir() if f.is_file() and f.name.startswith("qx_session_") and f.suffix == ".json"],
                 key=lambda f: f.name,
@@ -177,11 +207,19 @@ def clean_old_sessions(keep_sessions: int):
                 logger.warning(f"Invalid QX_KEEP_SESSIONS value: {keep_sessions}. Must be non-negative. Skipping session cleanup.")
                 return
 
+            # Only attempt cleanup if .Q directory exists
+            if not QX_SESSIONS_DIR.parent.is_dir():
+                logger.info("'.Q' directory not found. Skipping session cleanup.")
+                return
+
             try:
-                session_files = sorted(
-                    [f for f in QX_SESSIONS_DIR.iterdir() if f.is_file() and f.name.startswith("qx_session_") and f.suffix == ".json"],
-                    key=lambda f: f.name,
-                )
+                if not QX_SESSIONS_DIR.is_dir(): # Check if sessions directory exists within .Q
+                    session_files = []
+                else:
+                    session_files = sorted(
+                        [f for f in QX_SESSIONS_DIR.iterdir() if f.is_file() and f.name.startswith("qx_session_") and f.suffix == ".json"],
+                        key=lambda f: f.name,
+                    )
 
                 if len(session_files) > keep_sessions:
                     files_to_delete = session_files[: -(keep_sessions)]
@@ -201,11 +239,19 @@ def clean_old_sessions(keep_sessions: int):
             logger.warning(f"Invalid QX_KEEP_SESSIONS value: {keep_sessions}. Must be non-negative. Skipping session cleanup.")
             return
 
+        # Only attempt cleanup if .Q directory exists
+        if not QX_SESSIONS_DIR.parent.is_dir():
+            logger.info("'.Q' directory not found. Skipping session cleanup.")
+            return
+
         try:
-            session_files = sorted(
-                [f for f in QX_SESSIONS_DIR.iterdir() if f.is_file() and f.name.startswith("qx_session_") and f.suffix == ".json"],
-                key=lambda f: f.name,
-            )
+            if not QX_SESSIONS_DIR.is_dir(): # Check if sessions directory exists within .Q
+                session_files = []
+            else:
+                session_files = sorted(
+                    [f for f in QX_SESSIONS_DIR.iterdir() if f.is_file() and f.name.startswith("qx_session_") and f.suffix == ".json"],
+                    key=lambda f: f.name,
+                )
 
             if len(session_files) > keep_sessions:
                 files_to_delete = session_files[: -(keep_sessions)]
@@ -224,7 +270,16 @@ def load_latest_session() -> Optional[List[ChatCompletionMessageParam]]:
     """
     Loads the most recent session from the sessions directory.
     """
+    # Only attempt to load if .Q directory exists
+    if not QX_SESSIONS_DIR.parent.is_dir():
+        logger.info("'.Q' directory not found. Skipping session load.")
+        return None
+
     try:
+        if not QX_SESSIONS_DIR.is_dir(): # Check if sessions directory exists within .Q
+            logger.info("Session directory not found. No previous sessions to load.")
+            return None
+
         session_files = sorted(
             [f for f in QX_SESSIONS_DIR.iterdir() if f.is_file() and f.name.startswith("qx_session_") and f.suffix == ".json"],
             key=lambda f: f.name,
