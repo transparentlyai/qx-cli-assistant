@@ -367,7 +367,9 @@ class QXLLMAgent:
                     response_message = response.choices[0].message
                 except (asyncio.TimeoutError, httpx.TimeoutException):
                     # After retries failed, try "try again" message
-                    return await self._handle_timeout_fallback(messages, user_input, _recursion_depth)
+                    return await self._handle_timeout_fallback(
+                        messages, user_input, _recursion_depth
+                    )
                 except Exception as e:
                     logger.error(f"Non-streaming API call failed: {e}")
                     raise
@@ -469,7 +471,9 @@ class QXLLMAgent:
                     stream = await self._make_api_call_with_retry(chat_params)
                 except (asyncio.TimeoutError, httpx.TimeoutException):
                     status.stop()
-                    return await self._handle_timeout_fallback(messages, user_input, recursion_depth)
+                    return await self._handle_timeout_fallback(
+                        messages, user_input, recursion_depth
+                    )
 
                 async for chunk in stream:
                     # Check for cancellation
@@ -680,7 +684,9 @@ class QXLLMAgent:
                     else:
                         return QXRunResult(response_message.content, messages)
                 except (asyncio.TimeoutError, httpx.TimeoutException):
-                    return await self._handle_timeout_fallback(messages, user_input, recursion_depth)
+                    return await self._handle_timeout_fallback(
+                        messages, user_input, recursion_depth
+                    )
                 except Exception as fallback_error:
                     logger.error(
                         f"Fallback non-streaming also failed: {fallback_error}",
@@ -1005,32 +1011,44 @@ class QXLLMAgent:
         try:
             tool_count = 0
             for m in messages:
-                role = m.get('role') if isinstance(m, dict) else getattr(m, 'role', None)
-                if role == 'tool':
+                role = (
+                    m.get("role") if isinstance(m, dict) else getattr(m, "role", None)
+                )
+                if role == "tool":
                     tool_count += 1
             logger.debug(f"Sending {tool_count} tool responses to LLM")
-            result = await self.run("__CONTINUE_AFTER_TOOLS__", messages, recursion_depth + 1)
+            result = await self.run(
+                "__CONTINUE_AFTER_TOOLS__", messages, recursion_depth + 1
+            )
             logger.debug("Tool response continuation completed successfully")
             return result
         except Exception as e:
             logger.error(f"Error continuing after tool execution: {e}", exc_info=True)
-            self.console.print(f"[red]Error:[/red] Failed to continue after tool execution: {e}")
+            self.console.print(
+                f"[red]Error:[/red] Failed to continue after tool execution: {e}"
+            )
             # Return partial result with tool responses included
-            return QXRunResult("Tool execution completed but continuation failed", messages)
+            return QXRunResult(
+                "Tool execution completed but continuation failed", messages
+            )
 
-    async def _handle_timeout_fallback(self, messages: List[ChatCompletionMessageParam], user_input: str, recursion_depth: int) -> Any:
+    async def _handle_timeout_fallback(
+        self,
+        messages: List[ChatCompletionMessageParam],
+        user_input: str,
+        recursion_depth: int,
+    ) -> Any:
         """Handle timeout by trying 'try again' message as fallback."""
         logger.warning("Attempting timeout fallback with 'try again' message")
-        self.console.print("[yellow]Request timed out after retries. Asking model to try again...[/yellow]")
-        
+        self.console.print(
+            "[yellow]Request timed out after retries. Asking model to try again...[/yellow]"
+        )
+
         try:
             # Add "try again" as user message and retry once more
             fallback_messages = messages.copy()
-            fallback_messages.append({
-                "role": "user", 
-                "content": "try again"
-            })
-            
+            fallback_messages.append({"role": "user", "content": "try again"})
+
             fallback_params = {
                 "model": self.model_name,
                 "messages": [
@@ -1042,40 +1060,49 @@ class QXLLMAgent:
                 "tool_choice": "auto",
                 "stream": False,  # Use non-streaming for fallback
             }
-            
+
             if self.max_output_tokens is not None:
                 fallback_params["max_tokens"] = self.max_output_tokens
-                
-            response = await self.client.chat.completions.create(**fallback_params)
+
+            response = await self.client.chat.completions.create(**fallback_params)  # type: ignore
             response_message = response.choices[0].message
             fallback_messages.append(response_message)
-            
+
             if response_message.tool_calls:
                 return await self._process_tool_calls_and_continue(
                     response_message, fallback_messages, "try again", recursion_depth
                 )
             else:
-                return QXRunResult(response_message.content or "Request timed out", fallback_messages)
-                
+                return QXRunResult(
+                    response_message.content or "Request timed out", fallback_messages
+                )
+
         except Exception as e:
             logger.error(f"Timeout fallback also failed: {e}", exc_info=True)
-            self.console.print(f"[red]Error:[/red] Request timed out and fallback failed. Please try again.")
+            self.console.print(
+                "[red]Error:[/red] Request timed out and fallback failed. Please try again."
+            )
             return QXRunResult("Request timed out and retry failed", messages)
 
-    async def _make_api_call_with_retry(self, chat_params: Dict[str, Any], max_retries: int = 2) -> Any:
+    async def _make_api_call_with_retry(
+        self, chat_params: Dict[str, Any], max_retries: int = 2
+    ) -> Any:
         """Make API call with timeout retry logic."""
         for attempt in range(max_retries + 1):
             try:
-                if chat_params.get("stream", False):
-                    return await self.client.chat.completions.create(**chat_params)
-                else:
-                    return await self.client.chat.completions.create(**chat_params)
+                return await self.client.chat.completions.create(**chat_params)  # type: ignore
             except (asyncio.TimeoutError, httpx.TimeoutException):
-                logger.warning(f"API call timeout on attempt {attempt + 1}/{max_retries + 1}")
+                logger.warning(
+                    f"API call timeout on attempt {attempt + 1}/{max_retries + 1}"
+                )
                 if attempt == max_retries:
-                    logger.error(f"All {max_retries + 1} API call attempts failed due to timeout")
+                    logger.error(
+                        f"All {max_retries + 1} API call attempts failed due to timeout"
+                    )
                     raise
-                self.console.print(f"[yellow]Request timed out, retrying... (attempt {attempt + 2}/{max_retries + 1})[/yellow]")
+                self.console.print(
+                    f"[yellow]Request timed out, retrying... (attempt {attempt + 2}/{max_retries + 1})[/yellow]"
+                )
                 await asyncio.sleep(1)  # Brief delay before retry
             except Exception as e:
                 logger.error(f"API call failed on attempt {attempt + 1}: {e}")
