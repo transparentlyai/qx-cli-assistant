@@ -397,6 +397,12 @@ class QXLLMAgent:
         stream = None
         spinner_stopped = False
         stream_completed = False
+        last_chunk_content = ""
+        duplicate_chunk_count = 0
+        max_duplicate_chunks = 5
+        stream_start_time = time.time()
+        max_stream_time = 300  # 5 minutes timeout
+        
         try:
             from rich.console import Console
             console = Console()
@@ -405,6 +411,10 @@ class QXLLMAgent:
                 stream = await self.client.chat.completions.create(**chat_params)
                 
                 async for chunk in stream:
+                    # Check for stream timeout
+                    if time.time() - stream_start_time > max_stream_time:
+                        logger.warning("Stream timeout exceeded, breaking stream")
+                        break
                     # Log the complete response chunk object
                     logger.debug(f"LLM Response Chunk: {chunk}")
                     
@@ -413,6 +423,36 @@ class QXLLMAgent:
 
                     choice = chunk.choices[0]
                     delta = choice.delta
+                    
+                    # Detect duplicate chunks to prevent infinite loops
+                    current_chunk_content = ""
+                    if delta.content:
+                        current_chunk_content = delta.content
+                    elif hasattr(delta, 'reasoning') and delta.reasoning:
+                        current_chunk_content = delta.reasoning
+                    
+                    if current_chunk_content and current_chunk_content == last_chunk_content:
+                        duplicate_chunk_count += 1
+                        if duplicate_chunk_count >= max_duplicate_chunks:
+                            logger.warning(f"Detected {duplicate_chunk_count} duplicate chunks, terminating stream")
+                            break
+                    else:
+                        duplicate_chunk_count = 0
+                        last_chunk_content = current_chunk_content
+
+                    # Handle reasoning streaming (OpenRouter specific)
+                    if hasattr(delta, 'reasoning') and delta.reasoning:
+                        # Stop spinner when we start processing reasoning
+                        if not spinner_stopped:
+                            spinner_stopped = True
+                            status.stop()
+                        
+                        # Display reasoning content in faded color
+                        reasoning_text = delta.reasoning
+                        if reasoning_text and reasoning_text.strip():
+                            from rich.console import Console
+                            reasoning_console = Console()
+                            reasoning_console.print(f"[dim]{reasoning_text}[/dim]", end="")
 
                     # Handle content streaming
                     if delta.content:
@@ -474,6 +514,15 @@ class QXLLMAgent:
                     if choice.finish_reason:
                         stream_completed = True
                         break
+                    
+                    # Additional safeguard: if we get multiple consecutive empty chunks after content/reasoning
+                    # this might indicate the stream should end
+                    if not delta.content and not (hasattr(delta, 'reasoning') and delta.reasoning) and not delta.tool_calls:
+                        if accumulated_content or has_rendered_content:  # Only count empty chunks if we've seen content
+                            duplicate_chunk_count += 1
+                            if duplicate_chunk_count >= max_duplicate_chunks:
+                                logger.warning("Too many consecutive empty chunks, terminating stream")
+                                break
             
             # Mark stream as completed and attempt graceful close
             stream_completed = True
