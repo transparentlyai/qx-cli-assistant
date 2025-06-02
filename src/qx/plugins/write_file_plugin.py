@@ -3,10 +3,12 @@ import difflib
 import logging
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 from pydantic import BaseModel, Field
-from rich.console import Console as RichConsole  # Import RichConsole directly
+from rich.console import Console as RichConsole
+from rich.markdown import Markdown
+from rich.syntax import Syntax
 
 from qx.core.paths import USER_HOME_DIR, _find_project_root
 from qx.core.user_prompts import request_confirmation
@@ -91,17 +93,32 @@ async def _write_file_core_logic(path_str: str, content: str) -> Optional[str]:
 async def _generate_write_preview(
     file_path_str: str,
     new_content: str,
-    syntax_theme: str = "vim",  # Default theme
-) -> str:
-    """Generates a text preview for file write (diff or new content)."""
+    diff_theme: str = "vim",  # Theme for diffs
+    new_file_theme: str = "rrt",  # Theme for new files
+) -> Union[Syntax, Markdown]:
+    """
+    Generates a rich renderable preview for file write (diff or new content).
+    """
     file_path = Path(os.path.expanduser(file_path_str))
+
+    # Determine lexer based on file extension
+    lexer_name = file_path.suffix.lstrip(".")
+    if not lexer_name:  # Default to text if no extension
+        lexer_name = "text"
+    elif lexer_name == "py":  # Common case
+        lexer_name = "python"
+    elif lexer_name == "md":  # Markdown
+        lexer_name = "markdown"
+    # Add more specific mappings if needed
 
     if file_path.exists() and file_path.is_file():
         try:
             # Run blocking I/O in thread pool
             old_content = await asyncio.to_thread(file_path.read_text, encoding="utf-8")
             if old_content == new_content:
-                return "[bold yellow]No changes detected - file content is identical.[/bold yellow]"
+                return Markdown(
+                    "[bold yellow]No changes detected - file content is identical.[/bold yellow]"
+                )
 
             old_lines = old_content.splitlines(keepends=True)
             new_lines = new_content.splitlines(keepends=True)
@@ -109,15 +126,19 @@ async def _generate_write_preview(
                 difflib.unified_diff(
                     old_lines,
                     new_lines,
-                    fromfile=f"Current: {file_path_str}",
-                    tofile=f"New: {file_path_str}",
+                    fromfile=f"a/{file_path_str}",  # Standard diff format
+                    tofile=f"b/{file_path_str}",  # Standard diff format
                     lineterm="\n",
                     n=3,
                 )
             )
             if diff_lines:
-                return "".join(diff_lines)
-            return "[bold yellow]No textual changes detected in diff.[/bold yellow]"
+                # Use Syntax directly for diff highlighting
+                diff_text = "".join(diff_lines)
+                return Syntax(diff_text, "diff", theme=diff_theme, line_numbers=False)
+            return Markdown(
+                "[bold yellow]No textual changes detected in diff.[/bold yellow]"
+            )
         except Exception as e:
             logger.error(
                 f"Error generating diff for {file_path_str}: {e}", exc_info=True
@@ -136,9 +157,13 @@ async def _generate_write_preview(
             f"... {line_count - HEAD_LINES - TAIL_LINES} more lines ...\n\n"
             f"{tail_str}"
         )
-        return display_content_str
+        # Use Syntax for truncated new content
+        return Syntax(
+            display_content_str, lexer_name, theme=new_file_theme, line_numbers=True
+        )
     else:
-        return new_content
+        # Use Syntax for full new content
+        return Syntax(new_content, lexer_name, theme=new_file_theme, line_numbers=True)
 
 
 # --- End of _generate_write_preview ---
@@ -208,7 +233,7 @@ async def write_file_tool(  # Made async
 
     # Generate preview
     preview_renderable = await _generate_write_preview(
-        path_to_consider, args.content, syntax_theme="vim"
+        path_to_consider, args.content, diff_theme="vim", new_file_theme="rrt"
     )
 
     prompt_msg = f"Allow QX to write to file: '{path_to_consider}'?"
@@ -245,14 +270,14 @@ async def write_file_tool(  # Made async
             f"[error]Failed to write to '{path_to_write}':[/error] [red]{error_from_impl}[/red]"
         )
         return WriteFilePluginOutput(
-            path=path_to_write, success=False, message=error_from_impl
+            path=path_to_consider, success=False, message=error_from_impl
         )
     else:
         console.print(
             f"[success]Successfully wrote to:[/success] [green]'{path_to_write}'[/green]"
         )
         return WriteFilePluginOutput(
-            path=path_to_write,
+            path=path_to_consider,
             success=True,
             message=f"Successfully wrote to {path_to_write}",
         )
