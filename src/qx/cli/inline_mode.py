@@ -1,9 +1,11 @@
-import logging
 import asyncio
+import logging
 import subprocess
-from typing import List, Optional, Any
+from typing import Any, List, Optional
 
+from openai.types.chat import ChatCompletionMessageParam
 from prompt_toolkit import PromptSession
+from prompt_toolkit.application import run_in_terminal  # Import run_in_terminal
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.filters import Condition
 from prompt_toolkit.formatted_text import HTML
@@ -12,23 +14,25 @@ from prompt_toolkit.styles import Style
 from prompt_toolkit.validation import ValidationError, Validator
 from rich.console import Console
 from rich.markdown import Markdown
-from openai.types.chat import ChatCompletionMessageParam
 
-from qx.cli.history import QXHistory
-from qx.cli.completer import QXCompleter
 from qx.cli.commands import _handle_inline_command
-from qx.core.llm import QXLLMAgent, query_llm
-from qx.core.session_manager import save_session, clean_old_sessions
-from qx.core.paths import QX_HISTORY_FILE
+from qx.cli.completer import QXCompleter
+from qx.cli.history import QXHistory
 from qx.core.history_utils import parse_history_for_fzf
-from qx.core.user_prompts import _approve_all_active, _approve_all_lock # Import the flag and lock
-from prompt_toolkit.application import run_in_terminal # Import run_in_terminal
+from qx.core.llm import QXLLMAgent, query_llm
+from qx.core.paths import QX_HISTORY_FILE
+from qx.core.session_manager import clean_old_sessions, save_session
+from qx.core.user_prompts import (  # Import the flag and lock
+    _approve_all_active,
+    _approve_all_lock,
+)
 
 logger = logging.getLogger("qx")
 
 # State tracking for multiline mode and pending text
 is_multiline_mode = [False]  # Use list for mutable reference in closures
 pending_text = [""]  # Text to restore when toggling modes
+
 
 class SingleLineNonEmptyValidator(Validator):
     """Validator that prevents empty input submission only in single-line mode."""
@@ -43,11 +47,9 @@ class SingleLineNonEmptyValidator(Validator):
                 raise ValidationError(message="")
         # In multiline mode, allow empty submissions (for mode switching)
 
+
 def get_bottom_toolbar(qx_history: QXHistory):
     """Return formatted text for the bottom toolbar."""
-    # Get current mode
-    mode = "MULTILINE" if is_multiline_mode[0] else "SINGLE"
-
     # Build toolbar content
     toolbar_content = [
         ("class:bottom-toolbar.key", " Ctrl+R "),
@@ -56,16 +58,12 @@ def get_bottom_toolbar(qx_history: QXHistory):
         ("class:bottom-toolbar.text", f"toggle mode  "),
         ("class:bottom-toolbar.key", " Tab "),
         ("class:bottom-toolbar.text", "complete  "),
-        ("class:bottom-toolbar.key", " Shift+Tab "), # Add Shift+Tab to toolbar
-        ("class:bottom-toolbar.text", "toggle approve all  "), # Add description
-        ("class:bottom-toolbar.text", f"Mode: {mode}  "),
-        (
-            "class:bottom-toolbar.text",
-            f"History: {len(qx_history._loaded_strings)} entries",
-        ),
+        ("class:bottom-toolbar.key", " Shift+Tab "),  # Add Shift+Tab to toolbar
+        ("class:bottom-toolbar.text", "toggle approve all  "),  # Add description
     ]
 
     return toolbar_content
+
 
 async def _handle_llm_interaction(
     agent: QXLLMAgent,
@@ -130,6 +128,7 @@ async def _handle_llm_interaction(
                 "[yellow]Info:[/yellow] No response generated or an error occurred."
             )
         return current_message_history
+
 
 async def _run_inline_mode(
     llm_agent: QXLLMAgent,
@@ -237,23 +236,23 @@ async def _run_inline_mode(
             # Exit current prompt and restart with multiline mode
             event.app.exit(result="__TOGGLE_MULTILINE__")
 
-    @bindings.add("s-tab") # Shift+Tab
+    @bindings.add("s-tab")  # Shift+Tab
     async def _(event):
         """Toggle 'Approve All' mode."""
-        global _approve_all_active
+        import qx.core.user_prompts as user_prompts
+
         async with _approve_all_lock:
-            _approve_all_active = not _approve_all_active
-            
+            user_prompts._approve_all_active = not user_prompts._approve_all_active
+
             def print_status():
-                if _approve_all_active:
-                    rich_console.print("[orange]✓ 'Approve All' mode activated.[/orange]")
+                if user_prompts._approve_all_active:
+                    rich_console.print("[green]✓ 'Approve All' mode activated.[/]\n")
                 else:
-                    rich_console.print("[yellow]✗ 'Approve All' mode deactivated.[/yellow]")
-            
+                    rich_console.print("[yellow]✗ 'Approve All' mode deactivated.[/]\n")
+
             run_in_terminal(print_status)
         # Invalidate to redraw toolbar and reflect changes immediately
         event.app.invalidate()
-
 
     # Create prompt session with enhanced features
     session = PromptSession(
