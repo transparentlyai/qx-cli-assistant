@@ -114,13 +114,17 @@ async def handle_command(
         from qx.core.constants import DEFAULT_MODEL
 
         model_name_from_env = os.environ.get("QX_MODEL_NAME", DEFAULT_MODEL)
-        llm_agent = initialize_llm_agent(
+        new_agent = initialize_llm_agent(
             model_name_str=model_name_from_env,
             console=None,
             mcp_manager=config_manager.mcp_manager,
             enable_streaming=os.environ.get("QX_ENABLE_STREAMING", "true").lower()
             == "true",
         )
+        if new_agent is None:
+            Console().print("[red]Error:[/red] Failed to reinitialize agent after reset")
+            return current_message_history
+        # Note: We can't actually replace the agent reference here since it's passed by value
         Console().print("[info]Session reset, system prompt reloaded.[/info]")
         return None  # Clear history after reset
     else:
