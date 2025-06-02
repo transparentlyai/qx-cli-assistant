@@ -1,3 +1,4 @@
+from rich.console import Console
 from rich.theme import Theme
 
 # Define the application's Rich theme
@@ -7,64 +8,59 @@ from rich.theme import Theme
 # "warning": "magenta",
 # "danger": "bold red"
 
-custom_theme = Theme({
-    "primary": "bold blue",
-    "secondary": "dim green",
-    "highlight": "bold yellow on black",
-    "info": "cyan",
-    "warning": "yellow",
-    "error": "bold red",
-    "debug": "dim white",
-    "success": "bold green",
-
-    # UI elements
-    "app.title": "bold white on blue",
-    "app.header": "bold yellow",
-    "app.footer": "dim white",
-
-    # Text styles
-    "text.default": "white",
-    "text.muted": "dim white",
-    "text.important": "bold yellow",
-
-    # Log levels
-    "log.debug": "dim blue",
-    "log.info": "blue",
-    "log.warning": "yellow",
-    "log.error": "bold red",
-    "log.critical": "bold white on red",
-
-    # Table styles
-    "table.header": "bold magenta",
-    "table.footer": "dim magenta",
-    "table.cell": "white",
-    "table.odd_row": "on grey11",
-    "table.even_row": "none",
-
-    # Prompt toolkit styles (if you integrate with prompt_toolkit and Rich)
-    # These are just examples and might need adjustment based on usage
-    "prompt.default": "bold green",
-    "prompt.text": "white",
-    "prompt.arg": "cyan",
-    "prompt.value": "yellow",
-
-    # Markdown specific styles (if rendering markdown)
-    "markdown.h1": "bold blue",
-    "markdown.h2": "bold green",
-    "markdown.code": "dim cyan",
-    "markdown.link": "underline blue",
-
-    # Other common elements
-    "spinner": "bold blue",
-    "progress.bar": "blue",
-    "progress.percentage": "blue",
-    "rule.line": "dim blue",
-    "repr.str": "green",
-    "repr.number": "cyan",
-    "repr.bool_true": "bold green",
-    "repr.bool_false": "bold red",
-    "repr.none": "magenta",
-})
+custom_theme = Theme(
+    {
+        "primary": "bold blue",
+        "secondary": "dim green",
+        "highlight": "bold yellow on black",
+        "info": "cyan",
+        "warning": "yellow",
+        "error": "bold red",
+        "debug": "dim white",
+        "success": "bold green",
+        # UI elements
+        "app.title": "bold white on blue",
+        "app.header": "bold yellow",
+        "app.footer": "dim white",
+        # Text styles
+        "text.default": "white",
+        "text.muted": "dim white",
+        "text.important": "bold yellow",
+        # Log levels
+        "log.debug": "dim blue",
+        "log.info": "blue",
+        "log.warning": "yellow",
+        "log.error": "bold red",
+        "log.critical": "bold white on red",
+        # Table styles
+        "table.header": "bold magenta",
+        "table.footer": "dim magenta",
+        "table.cell": "white",
+        "table.odd_row": "on grey11",
+        "table.even_row": "none",
+        # Prompt toolkit styles (if you integrate with prompt_toolkit and Rich)
+        # These are just examples and might need adjustment based on usage
+        "prompt.default": "bold green",
+        "prompt.text": "white",
+        "prompt.arg": "cyan",
+        "prompt.value": "yellow",
+        # Markdown specific styles (if rendering markdown)
+        "markdown.h1": "bold blue",
+        "markdown.h2": "bold green",
+        "markdown.code": "dim cyan",
+        "markdown.link": "underline blue",
+        # Other common elements
+        "spinner": "bold blue",
+        "progress.bar": "blue",
+        "progress.percentage": "blue",
+        "rule.line": "dim blue",
+        "repr.str": "green",
+        "repr.number": "cyan",
+        "repr.bool_true": "bold green",
+        "repr.bool_false": "bold red",
+        "repr.none": "magenta",
+    }
+)
 
 # To use this theme in your Rich Console:
 # from rich.console import Console
@@ -74,8 +70,11 @@ custom_theme = Theme({
 # console.print("This is an [error]error[/] message.")
 # console.print("This is a [success]success[/] message.")
 
+# Global themed console instance
+themed_console = Console(theme=custom_theme)
+
+
 if __name__ == "__main__":
-    from rich.console import Console
     console = Console(theme=custom_theme)
 
     console.print("Demonstrating QX CLI Theme Styles", style="app.title")
@@ -99,11 +98,11 @@ if __name__ == "__main__":
     console.print("Important text.", style="text.important")
 
     console.print("\nLog Level Styles:", style="app.header")
-    console.log("This is a debug log.", level="debug")
-    console.log("This is an info log.", level="info")
-    console.log("This is a warning log.", level="warning")
-    console.log("This is an error log.", level="error")
-    console.log("This is a critical log.", level="critical")
+    console.print("This is a debug log.", style="log.debug")
+    console.print("This is an info log.", style="log.info")
+    console.print("This is a warning log.", style="log.warning")
+    console.print("This is an error log.", style="log.error")
+    console.print("This is a critical log.", style="log.critical")
 
     console.print("\nMarkdown Styles (example):", style="app.header")
     console.print("# Markdown H1", style="markdown.h1")
