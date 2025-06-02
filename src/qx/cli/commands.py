@@ -86,6 +86,7 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
             "  • [cyan]Fuzzy history search[/cyan] with Ctrl+R (using fzf)"
         )
         rich_console.print("  • [cyan]Auto-suggestions[/cyan] from history")
+        rich_console.print("  • [cyan]Shift+Tab[/cyan]: Toggle 'Approve All' mode") # Added Shift+Tab feature
         rich_console.print("  • [cyan]Ctrl+C or Ctrl+D[/cyan] to exit")
     else:
         rich_console.print(f"[red]Unknown command: {command_name}[/red]")

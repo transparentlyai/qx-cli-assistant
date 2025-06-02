@@ -21,6 +21,8 @@ from qx.core.llm import QXLLMAgent, query_llm
 from qx.core.session_manager import save_session, clean_old_sessions
 from qx.core.paths import QX_HISTORY_FILE
 from qx.core.history_utils import parse_history_for_fzf
+from qx.core.user_prompts import _approve_all_active, _approve_all_lock # Import the flag and lock
+from prompt_toolkit.application import run_in_terminal # Import run_in_terminal
 
 logger = logging.getLogger("qx")
 
@@ -54,6 +56,8 @@ def get_bottom_toolbar(qx_history: QXHistory):
         ("class:bottom-toolbar.text", f"toggle mode  "),
         ("class:bottom-toolbar.key", " Tab "),
         ("class:bottom-toolbar.text", "complete  "),
+        ("class:bottom-toolbar.key", " Shift+Tab "), # Add Shift+Tab to toolbar
+        ("class:bottom-toolbar.text", "toggle approve all  "), # Add description
         ("class:bottom-toolbar.text", f"Mode: {mode}  "),
         (
             "class:bottom-toolbar.text",
@@ -232,6 +236,24 @@ async def _run_inline_mode(
 
             # Exit current prompt and restart with multiline mode
             event.app.exit(result="__TOGGLE_MULTILINE__")
+
+    @bindings.add("s-tab") # Shift+Tab
+    async def _(event):
+        """Toggle 'Approve All' mode."""
+        global _approve_all_active
+        async with _approve_all_lock:
+            _approve_all_active = not _approve_all_active
+            
+            def print_status():
+                if _approve_all_active:
+                    rich_console.print("[orange]✓ 'Approve All' mode activated.[/orange]")
+                else:
+                    rich_console.print("[yellow]✗ 'Approve All' mode deactivated.[/yellow]")
+            
+            run_in_terminal(print_status)
+        # Invalidate to redraw toolbar and reflect changes immediately
+        event.app.invalidate()
+
 
     # Create prompt session with enhanced features
     session = PromptSession(

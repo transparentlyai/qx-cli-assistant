@@ -7,4 +7,3 @@
 - the environment is already inititalized with the latest version of uv. only add packages with uv add
 - if you need to create temporary scirpts, files, and other artifacts, use the ./tmp directory - remember to remove them after the task is done.
 - Do not use relative imports 
-- after writing or updating .py files, use mypy to check for type errors and fix any issues.
