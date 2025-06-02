@@ -37,16 +37,12 @@ async def _async_main(
     Asynchronous main function to handle the QX agent logic.
     """
     try:
-        configure_logging()
-    except Exception as e:
-        print(f"Failed to configure logging: {e}")
-        traceback.print_exc()
-        return
-
-    try:
         async with anyio.create_task_group() as tg:
             config_manager = ConfigManager(None, parent_task_group=tg)
             config_manager.load_configurations()
+            
+            # Configure logging after config is loaded so QX_LOG_LEVEL is available
+            configure_logging()
 
             logger.debug("Using Textual interface.")
 
