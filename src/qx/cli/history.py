@@ -60,10 +60,11 @@ class QXHistory(History): # Inherit from History
     def append_string(self, command: str):
         """Add a new command to history (prompt_toolkit interface)."""
         command = command.strip()
-        logger.debug(f"Attempting to append command: '{command}'")
+        logger.debug(f"append_string() called with: '{command}'")
         if command and (not self._loaded_strings or self._loaded_strings[-1] != command):
             self._loaded_strings.append(command)
             logger.debug(f"Command appended. Current in-memory entries count: {len(self._loaded_strings)}")
+            logger.debug(f"Current history: {self._loaded_strings[-5:]}")  # Show last 5 entries
         else:
             logger.debug(f"Command not appended (empty or duplicate): '{command}'")
 
@@ -104,11 +105,13 @@ class QXHistory(History): # Inherit from History
 
     def get_strings(self):
         """Return all history strings (prompt_toolkit interface)."""
+        logger.debug(f"get_strings() called, returning {len(self._loaded_strings)} entries")
         return self._loaded_strings
 
     async def load(self):
         """Async load method (prompt_toolkit interface)."""
-        for entry in self._loaded_strings:
+        # Yield entries in reverse order (newest first) for proper Up arrow navigation
+        for entry in reversed(self._loaded_strings):
             yield entry
 
     def __iter__(self):
