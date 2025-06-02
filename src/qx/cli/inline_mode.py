@@ -146,7 +146,7 @@ async def _run_inline_mode(
     input_style = Style.from_dict(
         {
             # Style for the text as user types
-            "": "fg:#ff005f bg:#050505",
+            "": "fg:#ff005f",
             # Style for selected text
             "selected": "fg:#ff005f bg:#050505 reverse",
             # Style for the bottom toolbar
