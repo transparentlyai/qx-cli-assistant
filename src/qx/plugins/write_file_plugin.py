@@ -236,7 +236,7 @@ async def write_file_tool(  # Made async
         path_to_consider, args.content, diff_theme="vim", new_file_theme="rrt"
     )
 
-    prompt_msg = f"Allow QX to write to file: '{path_to_consider}'?"
+    prompt_msg = f"Allow Qx to write to file: '{path_to_consider}'?"
     decision_status, _ = await request_confirmation(  # Await
         prompt_message=prompt_msg,
         console=console,

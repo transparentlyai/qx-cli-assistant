@@ -192,7 +192,7 @@ async def read_file_tool(  # Made async
         console.print(
             "[info]File is outside project directory but within home. Confirmation required.[/info]"
         )
-        prompt_msg = f"Allow QX to read file: '{expanded_path_arg}' (located outside the project, in your home directory)?"
+        prompt_msg = f"Allow Qx to read file: '{expanded_path_arg}' (located outside the project, in your home directory)?"
         decision_status, _ = await request_confirmation(  # Await
             prompt_message=prompt_msg,
             console=console,

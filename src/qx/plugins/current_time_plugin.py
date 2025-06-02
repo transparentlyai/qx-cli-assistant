@@ -42,7 +42,7 @@ async def get_current_time_tool(
     - current_time: Formatted date/time string (YYYY-MM-DD HH:MM:SS)
     - timezone: System timezone identifier
 
-    Note: This is an async tool for consistency with other QX tools.
+    Note: This is an async tool for consistency with other Qx tools.
     """
     console.print("[info]Fetching current system time...[/info]")
     try:

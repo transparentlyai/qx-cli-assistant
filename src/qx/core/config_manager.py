@@ -19,7 +19,7 @@ from qx.core.mcp_manager import MCPManager
 
 # Define minimal config example and locations
 MINIMAL_CONFIG_EXAMPLE = """
-# Minimal QX Configuration Example
+# Minimal Qx Configuration Example
 # Place this in one of the following locations:
 # 1. /etc/qx/qx.conf (lowest priority)
 # 2. ~/.config/qx/qx.conf (user-level)

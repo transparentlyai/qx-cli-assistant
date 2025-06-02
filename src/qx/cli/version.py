@@ -8,19 +8,19 @@ from qx.core.llm_utils import initialize_agent_with_mcp
 from qx.cli.commands import _handle_model_command
 from qx.core.logging_config import configure_logging
 
-# QX Version
+# Qx Version
 QX_VERSION = "0.3.42"
 
 
 def display_version_info():
     """
-    Displays QX version, LLM model, and its parameters, then exits.
+    Displays Qx version, LLM model, and its parameters, then exits.
     """
     configure_logging()
     config_manager = ConfigManager(None, parent_task_group=None)
     config_manager.load_configurations()
 
-    Console().print(f"[bold]QX Version:[/bold] [green]{QX_VERSION}[/green]")
+    Console().print(f"[bold]Qx Version:[/bold] [green]{QX_VERSION}[/green]")
 
     try:
         # Temporarily create an MCPManager for version display

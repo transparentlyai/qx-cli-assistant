@@ -142,7 +142,7 @@ async def _run_inline_mode(
     Run the interactive inline mode with prompt_toolkit input."""
     rich_console = Console()
 
-    # Create custom history that handles QX format
+    # Create custom history that handles Qx format
     qx_history = QXHistory(QX_HISTORY_FILE)
 
     # Create custom completer that handles both commands and paths
@@ -291,7 +291,7 @@ async def _run_inline_mode(
             current_prompt = (
                 HTML('<style fg="#0087ff">MULTILINE⏵</style> ')
                 if is_multiline_mode[0]
-                else HTML('<style fg="#ff5f00">QX⏵</style> ')
+                else HTML('<style fg="#ff5f00">Qx⏵</style> ')
             )
 
             # Show prompt and get user input with prompt_toolkit
@@ -390,7 +390,7 @@ async def _run_inline_mode(
         while True:
             try:
                 # Restart the prompt session
-                current_prompt = HTML('<style fg="#ff5f00">QX⏵</style> ')
+                current_prompt = HTML('<style fg="#ff5f00">Qx⏵</style> ')
                 result = await session.prompt_async(current_prompt, wrap_lines=True)
 
                 user_input = result.strip()

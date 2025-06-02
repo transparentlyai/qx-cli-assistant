@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 class PluginManager:
     """
-    Manages the discovery and loading of QX plugins.
+    Manages the discovery and loading of Qx plugins.
     Plugins are expected to be functions with Pydantic BaseModel input arguments.
     """
 
