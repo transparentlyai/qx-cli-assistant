@@ -317,8 +317,6 @@ async def _run_inline_mode(
                 except Exception:
                     pass
 
-            # REMOVED: qx_history.append_string(user_input) - prompt_toolkit handles this
-
             # Reset multiline mode after successful submission
             is_multiline_mode[0] = False
 
