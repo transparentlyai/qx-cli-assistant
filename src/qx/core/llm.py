@@ -114,6 +114,43 @@ class QXLLMAgent:
         logger.info(f"QXLLMAgent initialized with model: {self.model_name}")
         logger.info(f"Registered {len(self._tool_functions)} tool functions.")
 
+    async def _log_request(self, request: httpx.Request) -> None:
+        """Log HTTP request details for debugging."""
+        logger.debug(f"OpenRouter Request: {request.method} {request.url}")
+        # Don't log Authorization header for security
+        headers = {k: v for k, v in request.headers.items() if k.lower() != 'authorization'}
+        logger.debug(f"Request Headers: {headers}")
+        if request.content:
+            try:
+                content = request.content.decode()
+                if content.startswith('{'):
+                    import json
+                    parsed = json.loads(content)
+                    logger.debug(f"Request Body: {json.dumps(parsed, indent=2)}")
+                else:
+                    logger.debug(f"Request Body: {content[:500]}...")
+            except Exception:
+                logger.debug(f"Request Body: {str(request.content)[:500]}...")
+
+    async def _log_response(self, response: httpx.Response) -> None:
+        """Log HTTP response details for debugging."""
+        logger.debug(f"OpenRouter Response: {response.status_code} {response.reason_phrase}")
+        logger.debug(f"Response Headers: {dict(response.headers)}")
+        
+        # Skip content logging for streaming responses to avoid ResponseNotRead error
+        is_streaming = response.headers.get('content-type', '').startswith('text/event-stream')
+        if not is_streaming:
+            try:
+                if hasattr(response, 'content') and response.content:
+                    content = response.content.decode()[:1000]  # First 1000 chars
+                    if content.strip().startswith('{'):
+                        import json
+                        parsed = json.loads(content)
+                        logger.debug(f"Response Body: {json.dumps(parsed, indent=2)}")
+                    else:
+                        logger.debug(f"Response Body: {content}...")
+            except Exception:
+                logger.debug("Could not log response body")
 
     def _initialize_openai_client(self) -> AsyncOpenAI:
         """Initializes the OpenAI client for OpenRouter."""
@@ -126,6 +163,14 @@ class QXLLMAgent:
             raise ValueError("OPENROUTER_API_KEY not set.")
 
         # Create HTTP client with proper configuration for streaming
+        # Add debug logging hooks if debug level is enabled
+        event_hooks = {}
+        if os.environ.get("QX_LOG_LEVEL", "ERROR").upper() == "DEBUG":
+            event_hooks = {
+                'request': [self._log_request],
+                'response': [self._log_response]
+            }
+        
         self._http_client = httpx.AsyncClient(
             timeout=httpx.Timeout(300.0, connect=15.0, read=300.0, write=30.0),  # Longer timeouts for streaming
             limits=httpx.Limits(
@@ -133,7 +178,8 @@ class QXLLMAgent:
                 max_keepalive_connections=5,
                 keepalive_expiry=60.0  # Longer keepalive for streaming connections
             ),
-            follow_redirects=True
+            follow_redirects=True,
+            event_hooks=event_hooks
         )
 
         return AsyncOpenAI(
@@ -359,6 +405,9 @@ class QXLLMAgent:
                 stream = await self.client.chat.completions.create(**chat_params)
                 
                 async for chunk in stream:
+                    # Log the complete response chunk object
+                    logger.debug(f"LLM Response Chunk: {chunk}")
+                    
                     if not chunk.choices:
                         continue
 
@@ -506,6 +555,7 @@ class QXLLMAgent:
                         logger.debug(f"Original rendered content: {repr(total_rendered_content[:200])}...")
             else:
                 logger.debug(f"Content validation passed: {accumulated_len} chars rendered successfully")
+        
         
         # Add final newline if we rendered any content
         if accumulated_content.strip() and (has_rendered_content or remaining_content):
