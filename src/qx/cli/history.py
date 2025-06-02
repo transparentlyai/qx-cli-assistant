@@ -15,14 +15,11 @@ class QXHistory(History): # Inherit from History
         super().__init__() # Call parent constructor
         self.history_file_path = history_file_path
         self._loaded_strings = []
-        logger.debug(f"QXHistory initialized with file: {self.history_file_path}")
         self.load_history()
-        logger.debug(f"Initial history entries after load: {len(self._loaded_strings)} entries.")
 
     def load_history(self):
         """Load history from the QX format file."""
         if not self.history_file_path.exists():
-            logger.debug(f"History file not found: {self.history_file_path}")
             return
 
         history_entries = []
@@ -52,7 +49,6 @@ class QXHistory(History): # Inherit from History
                 history_entries.append("\n".join(current_command_lines))
 
             self._loaded_strings = history_entries
-            logger.debug(f"Successfully loaded {len(self._loaded_strings)} history entries.")
 
         except Exception as e:
             logger.error(f"Error loading history from {self.history_file_path}: {e}")
@@ -60,13 +56,8 @@ class QXHistory(History): # Inherit from History
     def append_string(self, command: str):
         """Add a new command to history (prompt_toolkit interface)."""
         command = command.strip()
-        logger.debug(f"append_string() called with: '{command}'")
         if command and (not self._loaded_strings or self._loaded_strings[-1] != command):
             self._loaded_strings.append(command)
-            logger.debug(f"Command appended. Current in-memory entries count: {len(self._loaded_strings)}")
-            logger.debug(f"Current history: {self._loaded_strings[-5:]}")  # Show last 5 entries
-        else:
-            logger.debug(f"Command not appended (empty or duplicate): '{command}'")
 
     def store_string(self, command: str):
         """Store a string in the history (alternative prompt_toolkit interface)."""
@@ -86,7 +77,6 @@ class QXHistory(History): # Inherit from History
 
     def flush_history(self):
         """Save all current in-memory history entries to the file."""
-        logger.debug(f"Flushing history to {self.history_file_path}. Total entries: {len(self._loaded_strings)}")
         try:
             self.history_file_path.parent.mkdir(parents=True, exist_ok=True)
             with open(self.history_file_path, "w", encoding="utf-8") as f:
@@ -95,7 +85,6 @@ class QXHistory(History): # Inherit from History
             with open(self.history_file_path, "a", encoding="utf-8") as f:
                 for command in self._loaded_strings:
                     self._write_entry_to_file(f, command)
-            logger.debug(f"History successfully flushed.")
         except Exception as e:
             logger.error(f"Error flushing history to {self.history_file_path}: {e}")
 
@@ -105,7 +94,6 @@ class QXHistory(History): # Inherit from History
 
     def get_strings(self):
         """Return all history strings (prompt_toolkit interface)."""
-        logger.debug(f"get_strings() called, returning {len(self._loaded_strings)} entries")
         return self._loaded_strings
 
     async def load(self):
