@@ -103,7 +103,9 @@ class QXLLMAgent:
             # Create a complete function definition with all required fields
             complete_function_def = dict(function_def)  # Start with original
             complete_function_def["name"] = function_def.get("name", func.__name__)
-            complete_function_def["description"] = function_def.get("description", f"Tool function {func.__name__}")
+            complete_function_def["description"] = function_def.get(
+                "description", f"Tool function {func.__name__}"
+            )
 
             self._openai_tools_schema.append(
                 ChatCompletionToolParam(
@@ -460,6 +462,12 @@ class QXLLMAgent:
                 stream = await self.client.chat.completions.create(**chat_params)
 
                 async for chunk in stream:
+                    # Check for cancellation
+                    current_task = asyncio.current_task()
+                    if current_task and current_task.cancelled():
+                        logger.info("Stream cancelled by user")
+                        break
+
                     # Check for stream timeout
                     if time.time() - stream_start_time > max_stream_time:
                         logger.warning("Stream timeout exceeded, breaking stream")
@@ -602,6 +610,37 @@ class QXLLMAgent:
                 except Exception:
                     pass  # Stream might already be closed
 
+        except asyncio.CancelledError:
+            logger.info("LLM operation cancelled by user")
+            if stream and hasattr(stream, "aclose") and not stream_completed:
+                try:
+                    await stream.aclose()
+                except Exception:
+                    pass
+            # Return partial response if any content was accumulated
+            if accumulated_content:
+                from rich.console import Console
+
+                console = Console()
+                console.print("\n[yellow]⚠ Response interrupted[/yellow]")
+
+                response_message = cast(
+                    ChatCompletionMessageParam,
+                    {
+                        "role": "assistant",
+                        "content": accumulated_content,
+                    },
+                )
+                messages.append(response_message)
+                logger.debug(
+                    f"Returning partial response due to cancellation: {response_message}"
+                )
+                return QXRunResult(accumulated_content, messages)
+            else:
+                # No content was generated before cancellation
+                console = Console()
+                console.print("\n[yellow]Operation cancelled[/yellow]")
+                return QXRunResult("Operation cancelled", messages)
         except Exception as e:
             logger.error(f"Error during streaming: {e}", exc_info=True)
 
@@ -724,15 +763,14 @@ class QXLLMAgent:
 
         # Create message with explicit parameters to satisfy type checker
         if "tool_calls" in response_message_dict:
-            response_message = ChatCompletionMessage(
+            streaming_response_message = ChatCompletionMessage(
                 role="assistant",
                 content=response_message_dict.get("content"),
-                tool_calls=response_message_dict.get("tool_calls")
+                tool_calls=response_message_dict.get("tool_calls"),
             )
         else:
-            response_message = ChatCompletionMessage(
-                role="assistant",
-                content=response_message_dict.get("content")
+            streaming_response_message = ChatCompletionMessage(
+                role="assistant", content=response_message_dict.get("content")
             )
 
         # Log the received message if QX_LOG_RECEIVED is set (for streaming)
@@ -741,16 +779,16 @@ class QXLLMAgent:
                 f"Received message from LLM (streaming):\\n{json.dumps(response_message_dict, indent=2)}"
             )
 
-        messages.append(cast(ChatCompletionMessageParam, response_message))
+        messages.append(cast(ChatCompletionMessageParam, streaming_response_message))
 
         # Process tool calls if any
         if accumulated_tool_calls:
             # Pass empty content if we cleared narration
-            response_message.content = (
+            streaming_response_message.content = (
                 accumulated_content if accumulated_content else None
             )
             return await self._process_tool_calls_and_continue(
-                response_message, messages, user_input, recursion_depth
+                streaming_response_message, messages, user_input, recursion_depth
             )
         else:
             return QXRunResult(accumulated_content or "", messages)
@@ -1031,7 +1069,7 @@ def initialize_llm_agent(
 
         # Use a default console if none provided
         effective_console = console if console is not None else RichConsoleClass()
-        
+
         agent = QXLLMAgent(
             model_name=model_name_str,
             system_prompt=system_prompt_content,

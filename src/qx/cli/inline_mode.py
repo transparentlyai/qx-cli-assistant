@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import subprocess
 import sys
@@ -82,6 +83,11 @@ async def _handle_llm_interaction(
             message_history=current_message_history,
             console=Console(),  # Provide console for inline mode
         )
+    except asyncio.CancelledError:
+        # Handle cancellation gracefully
+        logger.info("LLM interaction cancelled by user")
+        Console().print("\n[yellow]Operation cancelled[/yellow]")
+        return current_message_history
     except Exception as e:
         logger.error(f"Error during LLM interaction: {e}", exc_info=True)
         Console().print(f"[red]Error:[/red] {e}")
@@ -161,7 +167,14 @@ async def _run_inline_mode(
 
     @bindings.add("c-c")
     def _(event):
-        """Handle Ctrl+C"""
+        """Handle Ctrl+C - Emergency stop without exiting"""
+        # Get all current tasks and cancel them
+        current_task = asyncio.current_task()
+        if current_task:
+            current_task.cancel()
+
+        # Cancel the current input and return to prompt
+        event.current_buffer.reset()
         event.app.exit(exception=KeyboardInterrupt, style="class:aborting")
 
     @bindings.add("c-d")
@@ -342,14 +355,26 @@ async def _run_inline_mode(
                 await _handle_inline_command(user_input, llm_agent)
                 continue
 
-            # Handle LLM query
-            current_message_history = await _handle_llm_interaction(
-                llm_agent,
-                user_input,
-                current_message_history,
-                "rrt",  # code theme
-                plain_text_output=False,
+            # Handle LLM query as a cancellable task
+            llm_task = asyncio.create_task(
+                _handle_llm_interaction(
+                    llm_agent,
+                    user_input,
+                    current_message_history,
+                    "rrt",  # code theme
+                    plain_text_output=False,
+                )
             )
+
+            try:
+                current_message_history = await llm_task
+            except asyncio.CancelledError:
+                rich_console.print("\n[yellow]Operation cancelled[/yellow]")
+                llm_task.cancel()
+                try:
+                    await llm_task
+                except asyncio.CancelledError:
+                    pass
 
             # Save session
             if current_message_history:
@@ -357,7 +382,56 @@ async def _run_inline_mode(
                 clean_old_sessions(keep_sessions)
 
     except KeyboardInterrupt:
-        rich_console.print("\nQX terminated by user.")
+        # Emergency stop - don't exit, just interrupt current operation
+        rich_console.print(
+            "\n[yellow]Operation interrupted.[/yellow] Returning to prompt..."
+        )
+        # Continue the loop to show a new prompt
+        while True:
+            try:
+                # Restart the prompt session
+                current_prompt = HTML('<style fg="#ff5f00">QX⏵</style> ')
+                result = await session.prompt_async(current_prompt, wrap_lines=True)
+
+                user_input = result.strip()
+                if not user_input:
+                    continue
+
+                # Handle commands or LLM interaction
+                if user_input.startswith("/"):
+                    await _handle_inline_command(user_input, llm_agent)
+                else:
+                    # Handle LLM query as a cancellable task
+                    llm_task = asyncio.create_task(
+                        _handle_llm_interaction(
+                            llm_agent,
+                            user_input,
+                            current_message_history,
+                            "rrt",
+                            plain_text_output=False,
+                        )
+                    )
+
+                    try:
+                        current_message_history = await llm_task
+                        if current_message_history:
+                            save_session(current_message_history)
+                            clean_old_sessions(keep_sessions)
+                    except asyncio.CancelledError:
+                        rich_console.print("\n[yellow]Operation cancelled[/yellow]")
+                        llm_task.cancel()
+                        try:
+                            await llm_task
+                        except asyncio.CancelledError:
+                            pass
+
+            except KeyboardInterrupt:
+                rich_console.print(
+                    "\n[yellow]Operation interrupted.[/yellow] Returning to prompt..."
+                )
+                continue
+            except EOFError:
+                break
     except EOFError:
         pass
     except Exception as e:
