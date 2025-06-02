@@ -675,13 +675,28 @@ class QXLLMAgent:
                     logger.error(error_msg, exc_info=True)
                     from rich.console import Console
                     Console().print(f"[red]{error_msg}[/red]")
+                    
+                    # Create a more actionable error message for the LLM
+                    error_details = []
+                    for error in ve.errors():
+                        field_path = " -> ".join(str(loc) for loc in error["loc"])
+                        error_type = error["type"]
+                        msg = error["msg"]
+                        error_details.append(f"Field '{field_path}': {msg} ({error_type})")
+                    
+                    actionable_error = f"Tool '{function_name}' validation failed:\n" + "\n".join(error_details)
+                    if hasattr(tool_input_model, 'model_fields'):
+                        required_fields = [name for name, field in tool_input_model.model_fields.items() if field.is_required()]
+                        if required_fields:
+                            actionable_error += f"\n\nRequired fields: {', '.join(required_fields)}"
+                    
                     messages.append(
                         cast(
                             ChatCompletionToolMessageParam,
                             {
                                 "role": "tool",
                                 "tool_call_id": tool_call_id,
-                                "content": f"Error: Invalid parameters for tool '{function_name}'. Details: {ve}",
+                                "content": actionable_error,
                             },
                         )
                     )

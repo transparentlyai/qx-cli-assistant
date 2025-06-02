@@ -3,12 +3,13 @@ import logging
 import datetime
 from typing import Callable, List, Literal, Optional, Tuple, Union, Any, Protocol
 
+from rich.console import RenderableType # Corrected import
+
 class ConsoleProtocol(Protocol):
     def print(self, *args, **kwargs): ...
     _app: Optional[Any] 
 
 RichConsole = ConsoleProtocol
-RenderableType = str
 
 logger = logging.getLogger(__name__)
 _approve_all_active: bool = False
@@ -136,7 +137,10 @@ async def _request_confirmation_terminal(
     if not sys.stdin.isatty() or os.environ.get("QX_AUTO_APPROVE", "false").lower() == "true":
         console.print(f"[info]AUTO-APPROVED (non-interactive environment):[/info] {prompt_message}")
         return ("approved", current_value_for_modification)
-    if content_to_display: console.print(f"\n--- Content Preview ---\n{content_to_display}\n--- End Preview ---\n")
+    if content_to_display:
+        console.print("\n--- Content Preview ---")
+        console.print(content_to_display)
+        console.print("--- End Preview ---\n")
     choices_map = [CHOICE_YES, CHOICE_NO]
     choices_map.extend([CHOICE_APPROVE_ALL, CHOICE_CANCEL])
     try:
