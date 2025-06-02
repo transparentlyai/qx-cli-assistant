@@ -241,7 +241,7 @@ async def _run_inline_mode(
         completer=qx_completer,
         complete_style="multi-column",
         key_bindings=bindings,
-        mouse_support=True,
+        mouse_support=False,  # Disabled to allow terminal scrolling
         wrap_lines=True,
         multiline=Condition(lambda: is_multiline_mode[0]),
         validator=SingleLineNonEmptyValidator(),
