@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import subprocess
+import sys
 from typing import Any, List, Optional
 
 from openai.types.chat import ChatCompletionMessageParam
@@ -83,7 +84,7 @@ async def _handle_llm_interaction(
             agent,
             user_input,
             message_history=current_message_history,
-            console=None,  # No console needed for inline mode
+            console=Console(),  # Provide console for inline mode
         )
     except Exception as e:
         logger.error(f"Error during LLM interaction: {e}", exc_info=True)
@@ -255,12 +256,12 @@ async def _run_inline_mode(
         event.app.invalidate()
 
     # Create prompt session with enhanced features
-    session = PromptSession(
+    session: PromptSession[str] = PromptSession(
         history=qx_history,
         auto_suggest=AutoSuggestFromHistory(),
         enable_history_search=False,  # Disable built-in search, we use fzf
-        completer=qx_completer,
-        complete_style="multi-column",
+        completer=qx_completer,  # type: ignore
+        complete_style="multi-column",  # type: ignore
         key_bindings=bindings,
         mouse_support=False,  # Disabled to allow terminal scrolling
         wrap_lines=True,
