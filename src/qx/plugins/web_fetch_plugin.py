@@ -140,7 +140,7 @@ async def web_fetch_tool(
             final_content = content
             if output_format == "markdown":
                 try:
-                    from markdownify import markdownify as md_converter
+                    from markdownify import markdownify as md_converter  # type: ignore
 
                     final_content = md_converter(content)
                 except ImportError:

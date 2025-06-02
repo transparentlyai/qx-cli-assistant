@@ -77,15 +77,18 @@ async def _async_main(
 
             # Handle exit after response mode (non-interactive)
             if exit_after_response and initial_prompt:
-                current_message_history = await _handle_llm_interaction(
+                if llm_agent is None:
+                    logger.error("LLM agent initialization failed")
+                    return
+                message_history = await _handle_llm_interaction(
                     llm_agent,
                     initial_prompt,
                     None,
                     code_theme_to_use,
                     plain_text_output=True,
                 )
-                if current_message_history:
-                    save_session(current_message_history)
+                if message_history:
+                    save_session(message_history)
                     clean_old_sessions(keep_sessions)
                 return  # Return instead of sys.exit() to avoid issues with async context
 
@@ -123,6 +126,9 @@ async def _async_main(
                 from rich.console import Console
 
                 Console().print(f"[bold]Initial Prompt:[/bold] {initial_prompt}")
+                if llm_agent is None:
+                    logger.error("LLM agent initialization failed")
+                    return
                 current_message_history = await _handle_llm_interaction(
                     llm_agent,
                     initial_prompt,
@@ -134,6 +140,10 @@ async def _async_main(
             if not exit_after_response:
                 # Remove the temporary stream handler for inline mode
                 remove_temp_stream_handler()
+
+                if llm_agent is None:
+                    logger.error("LLM agent initialization failed")
+                    return
 
                 # Print version info
                 from rich.console import Console

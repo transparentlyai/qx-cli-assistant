@@ -100,15 +100,14 @@ class QXLLMAgent:
                 # Regular plugins format: {"name": ..., "description": ..., "parameters": ...}
                 function_def = schema
 
-            # Ensure function_def has required fields
-            if "name" not in function_def:
-                function_def["name"] = func.__name__
-            if "description" not in function_def:
-                function_def["description"] = f"Tool function {func.__name__}"
+            # Create a complete function definition with all required fields
+            complete_function_def = dict(function_def)  # Start with original
+            complete_function_def["name"] = function_def.get("name", func.__name__)
+            complete_function_def["description"] = function_def.get("description", f"Tool function {func.__name__}")
 
             self._openai_tools_schema.append(
                 ChatCompletionToolParam(
-                    type="function", function=FunctionDefinition(**function_def)
+                    type="function", function=FunctionDefinition(**complete_function_def)  # type: ignore
                 )
             )
             self._tool_input_models[func.__name__] = input_model_class
@@ -297,8 +296,9 @@ class QXLLMAgent:
                 if last_message.get("role") == "user" and self._openai_tools_schema:
                     logger.info(f"Available tools ({len(self._openai_tools_schema)}):")
                     for tool in self._openai_tools_schema[:3]:  # Show first 3 tools
+                        tool_dict: Dict[str, Any]
                         if hasattr(tool, "get"):
-                            tool_dict = tool
+                            tool_dict = tool  # type: ignore
                         elif hasattr(tool, "items"):
                             tool_dict = dict(tool)
                         else:
@@ -333,7 +333,7 @@ class QXLLMAgent:
         allow_fallbacks_str = os.environ.get("QX_ALLOW_PROVIDER_FALLBACK")
 
         if provider_name or allow_fallbacks_str is not None:
-            provider_config = {}
+            provider_config: Dict[str, Any] = {}
             if provider_name:
                 provider_config["order"] = [p.strip() for p in provider_name.split(",")]
 
@@ -697,7 +697,7 @@ class QXLLMAgent:
             Console().print()
 
         # Create response message from accumulated data
-        response_message_dict = {
+        response_message_dict: Dict[str, Any] = {
             "role": "assistant",
             "content": accumulated_content if accumulated_content else None,
         }
@@ -722,7 +722,18 @@ class QXLLMAgent:
         # Convert to proper message format
         from openai.types.chat.chat_completion_message import ChatCompletionMessage
 
-        response_message = ChatCompletionMessage(**response_message_dict)
+        # Create message with explicit parameters to satisfy type checker
+        if "tool_calls" in response_message_dict:
+            response_message = ChatCompletionMessage(
+                role="assistant",
+                content=response_message_dict.get("content"),
+                tool_calls=response_message_dict.get("tool_calls")
+            )
+        else:
+            response_message = ChatCompletionMessage(
+                role="assistant",
+                content=response_message_dict.get("content")
+            )
 
         # Log the received message if QX_LOG_RECEIVED is set (for streaming)
         if os.getenv("QX_LOG_RECEIVED"):
@@ -730,7 +741,7 @@ class QXLLMAgent:
                 f"Received message from LLM (streaming):\\n{json.dumps(response_message_dict, indent=2)}"
             )
 
-        messages.append(response_message)
+        messages.append(cast(ChatCompletionMessageParam, response_message))
 
         # Process tool calls if any
         if accumulated_tool_calls:
@@ -965,7 +976,7 @@ class QXRunResult:
 
 def initialize_llm_agent(
     model_name_str: str,
-    console: RichConsole,
+    console: Optional[RichConsole],
     mcp_manager: MCPManager,  # New parameter
     enable_streaming: bool = True,
 ) -> Optional[QXLLMAgent]:
@@ -992,7 +1003,8 @@ def initialize_llm_agent(
 
     except Exception as e:
         logger.error(f"Failed to load plugins: {e}", exc_info=True)
-        console.print(f"[red]Error:[/red] Failed to load tools: {e}")
+        if console:
+            console.print(f"[red]Error:[/red] Failed to load tools: {e}")
         registered_tools = []
 
     # Add MCP tools to the list of registered tools
@@ -1017,11 +1029,14 @@ def initialize_llm_agent(
             )
             reasoning_effort = None
 
+        # Use a default console if none provided
+        effective_console = console if console is not None else RichConsoleClass()
+        
         agent = QXLLMAgent(
             model_name=model_name_str,
             system_prompt=system_prompt_content,
             tools=registered_tools,  # Pass combined tools
-            console=console,
+            console=effective_console,
             temperature=temperature,
             max_output_tokens=max_output_tokens,
             reasoning_effort=reasoning_effort,
@@ -1031,7 +1046,8 @@ def initialize_llm_agent(
 
     except Exception as e:
         logger.error(f"Failed to initialize QXLLMAgent: {e}", exc_info=True)
-        console.print(f"[red]Error:[/red] Init LLM Agent: {e}")
+        if console:
+            console.print(f"[red]Error:[/red] Init LLM Agent: {e}")
         return None
 
 
