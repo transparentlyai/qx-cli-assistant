@@ -11,6 +11,7 @@ from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.styles import Style
 from prompt_toolkit.validation import ValidationError, Validator
 from rich.console import Console
+from rich.markdown import Markdown
 from openai.types.chat import ChatCompletionMessageParam
 
 from qx.cli.history import QXHistory
@@ -40,7 +41,7 @@ class SingleLineNonEmptyValidator(Validator):
                 raise ValidationError(message="")
         # In multiline mode, allow empty submissions (for mode switching)
 
-def get_bottom_toolbar():
+def get_bottom_toolbar(qx_history: QXHistory):
     """Return formatted text for the bottom toolbar."""
     # Get current mode
     mode = "MULTILINE" if is_multiline_mode[0] else "SINGLE"
@@ -56,7 +57,7 @@ def get_bottom_toolbar():
         ("class:bottom-toolbar.text", f"Mode: {mode}  "),
         (
             "class:bottom-toolbar.text",
-            f"History: {len(QXHistory()._entries)} entries",
+            f"History: {len(qx_history._loaded_strings)} entries",
         ),
     ]
 
@@ -131,7 +132,8 @@ async def _run_inline_mode(
     current_message_history: Optional[List[ChatCompletionMessageParam]],
     keep_sessions: int,
 ):
-    """Run the interactive inline mode with prompt_toolkit input."""
+    """
+    Run the interactive inline mode with prompt_toolkit input."""
     rich_console = Console()
 
     # Create custom history that handles QX format
@@ -245,11 +247,11 @@ async def _run_inline_mode(
         validator=SingleLineNonEmptyValidator(),
         validate_while_typing=False,  # Only validate on submit attempt
         style=input_style,  # Apply custom input text styling
-        bottom_toolbar=get_bottom_toolbar,  # Add status footer
+        bottom_toolbar=lambda: get_bottom_toolbar(qx_history),  # Add status footer
     )
 
-    while True:
-        try:
+    try:
+        while True:
             # Start with single-line mode for each new input
             if not is_multiline_mode[0]:
                 is_multiline_mode[0] = False
@@ -279,13 +281,14 @@ async def _run_inline_mode(
                 console = Console()
                 try:
                     # Move cursor up and clear the line using Rich console
-                    print("\033[1A\r\033[K", end="", flush=True)  # More direct approach
+                    print("\033[1A\r\033[K", end="", flush=True)
                 except Exception:
                     pass
                 # Continue loop to show multiline prompt with stored text
                 continue
 
             user_input = result.strip()
+            logger.debug(f"User input received: '{user_input}'")
 
             if not user_input:
                 # Handle empty input differently based on current mode
@@ -314,8 +317,7 @@ async def _run_inline_mode(
                 except Exception:
                     pass
 
-            # Add to history (both in-memory and to file)
-            qx_history.append_string(user_input)
+            # REMOVED: qx_history.append_string(user_input) - prompt_toolkit handles this
 
             # Reset multiline mode after successful submission
             is_multiline_mode[0] = False
@@ -339,11 +341,13 @@ async def _run_inline_mode(
                 save_session(current_message_history)
                 clean_old_sessions(keep_sessions)
 
-        except KeyboardInterrupt:
-            rich_console.print("\nQX terminated by user.")
-            break
-        except EOFError:
-            break
-        except Exception as e:
-            logger.error(f"Error in inline mode: {e}", exc_info=True)
-            rich_console.print(f"[red]Error:[/red] {e}")
+    except KeyboardInterrupt:
+        rich_console.print("\nQX terminated by user.")
+    except EOFError:
+        pass
+    except Exception as e:
+        logger.error(f"Error in inline mode: {e}", exc_info=True)
+        rich_console.print(f"[red]Error:[/red] {e}")
+    finally:
+        # Ensure history is flushed when the session ends
+        qx_history.flush_history()
