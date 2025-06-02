@@ -208,13 +208,23 @@ class ExecuteShellPluginInput(BaseModel):
 
 
 class ExecuteShellPluginOutput(BaseModel):
-    command: str = Field(
-        description="The command that was executed."
+    command: str = Field(description="The command that was executed.")
+    stdout: Optional[str] = Field(
+        None,
+        description="Standard output from the command. Only present if command was executed.",
     )
-    stdout: Optional[str] = Field(None, description="Standard output from the command. Only present if command was executed.")
-    stderr: Optional[str] = Field(None, description="Standard error from the command. Only present if command was executed.")
-    return_code: Optional[int] = Field(None, description="Exit code from command execution. 0 indicates success, non-zero indicates failure. None if command was not executed.")
-    error: Optional[str] = Field(None, description="Error message explaining why command was not executed (e.g., 'prohibited', 'denied by user', 'empty command'). None if command was executed.")
+    stderr: Optional[str] = Field(
+        None,
+        description="Standard error from the command. Only present if command was executed.",
+    )
+    return_code: Optional[int] = Field(
+        None,
+        description="Exit code from command execution. 0 indicates success, non-zero indicates failure. None if command was not executed.",
+    )
+    error: Optional[str] = Field(
+        None,
+        description="Error message explaining why command was not executed (e.g., 'prohibited', 'denied by user', 'empty command'). None if command was executed.",
+    )
 
 
 def _is_command_prohibited(command: str) -> bool:
@@ -241,12 +251,12 @@ async def execute_shell_tool(  # Made async
     console: RichConsole, args: ExecuteShellPluginInput
 ) -> ExecuteShellPluginOutput:
     """Tool for executing shell commands.
-    
+
     Executes non-interactive shell commands with user approval flow:
     - Auto-approved commands (ls, pwd, etc.) execute immediately
     - Other commands require user confirmation
     - Prohibited commands are blocked
-    
+
     Returns structured output with:
     - command: The actual command executed
     - stdout/stderr: Command output (only if executed)
@@ -290,8 +300,7 @@ async def execute_shell_tool(  # Made async
     if needs_confirmation:
         prompt_msg = f"Allow QX to execute shell command: '{command_to_consider}'?"
         decision_status, _ = await request_confirmation(  # Await
-            prompt_message=prompt_msg,
-            console=console
+            prompt_message=prompt_msg, console=console
         )
 
         if decision_status in ["approved", "session_approved"]:

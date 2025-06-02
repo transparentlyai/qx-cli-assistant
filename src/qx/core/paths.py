@@ -55,7 +55,7 @@ def _find_project_root(cwd_str: str) -> Path | None:
         ):
             return None
 
-        path_to_check = path_to_check.parent # Move to parent directory
+        path_to_check = path_to_check.parent  # Move to parent directory
 
 
 if __name__ == "__main__":
@@ -71,7 +71,9 @@ if __name__ == "__main__":
 
     # Ensure sessions dir exists for testing
     os.makedirs(QX_SESSIONS_DIR, exist_ok=True)
-    print(f"Ensured QX Sessions directory exists for testing: {QX_SESSIONS_DIR.exists()}")
+    print(
+        f"Ensured QX Sessions directory exists for testing: {QX_SESSIONS_DIR.exists()}"
+    )
 
     print(
         f"Project root from CWD ({Path.cwd()}): {_find_project_root(str(Path.cwd()))}"

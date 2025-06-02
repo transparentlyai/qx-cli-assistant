@@ -108,10 +108,12 @@ class ReadFilePluginOutput(BaseModel):
         description="The expanded path that was attempted to be read (may include ~ expansion)."
     )
     content: Optional[str] = Field(
-        None, description="The complete file content if read was successful. None if operation failed or was denied."
+        None,
+        description="The complete file content if read was successful. None if operation failed or was denied.",
     )
     error: Optional[str] = Field(
-        None, description="Error message explaining why the read failed (e.g., 'file not found', 'permission denied', 'denied by user'). None if successful."
+        None,
+        description="Error message explaining why the read failed (e.g., 'file not found', 'permission denied', 'denied by user'). None if successful.",
     )
 
 
@@ -121,12 +123,12 @@ async def read_file_tool(  # Made async
 ) -> ReadFilePluginOutput:
     """
     Tool to read the content of a specified file.
-    
+
     File access permissions:
     - Files within project directory: Auto-approved
     - Files outside project but within user home: Requires approval
     - Files outside user home: Access denied by policy
-    
+
     Returns structured output with:
     - path: The attempted file path (with expansions)
     - content: File contents if successful
@@ -188,7 +190,7 @@ async def read_file_tool(  # Made async
 
     if needs_confirmation:
         console.print(
-            f"[info]File is outside project directory but within home. Confirmation required.[/info]"
+            "[info]File is outside project directory but within home. Confirmation required.[/info]"
         )
         prompt_msg = f"Allow QX to read file: '{expanded_path_arg}' (located outside the project, in your home directory)?"
         decision_status, _ = await request_confirmation(  # Await
@@ -220,7 +222,9 @@ async def read_file_tool(  # Made async
         )
         return ReadFilePluginOutput(path=expanded_path_arg, content=None, error=err_msg)
 
-    content, error_from_core = await _read_file_core_logic(str(absolute_path_to_evaluate))
+    content, error_from_core = await _read_file_core_logic(
+        str(absolute_path_to_evaluate)
+    )
 
     if error_from_core:
         # _read_file_core_logic already logs its specific errors.

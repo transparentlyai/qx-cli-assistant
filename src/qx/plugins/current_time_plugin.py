@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 class CurrentTimeInput(BaseModel):
     """Input model for the GetCurrentTimeTool - no parameters required."""
+
     pass
 
 
@@ -25,7 +26,9 @@ class CurrentTimePluginOutput(BaseModel):
     )
 
 
-async def get_current_time_tool(console: RichConsole, args: CurrentTimeInput) -> CurrentTimePluginOutput:
+async def get_current_time_tool(
+    console: RichConsole, args: CurrentTimeInput
+) -> CurrentTimePluginOutput:
     """
     Get the current date and time.
 
@@ -38,7 +41,7 @@ async def get_current_time_tool(console: RichConsole, args: CurrentTimeInput) ->
     Returns structured output with:
     - current_time: Formatted date/time string (YYYY-MM-DD HH:MM:SS)
     - timezone: System timezone identifier
-    
+
     Note: This is an async tool for consistency with other QX tools.
     """
     console.print("[info]Fetching current system time...[/info]")

@@ -3,6 +3,7 @@ from pathlib import Path
 
 from prompt_toolkit.completion import Completion
 
+
 class QXCompleter:
     """Custom completer that handles both commands and path completion."""
 

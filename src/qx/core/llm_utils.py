@@ -11,6 +11,7 @@ from qx.core.constants import DEFAULT_MODEL
 
 logger = logging.getLogger("qx")
 
+
 async def initialize_agent_with_mcp(mcp_manager: MCPManager) -> QXLLMAgent:
     """
     Initializes and returns the QXLLMAgent, passing the MCPManager.
@@ -24,7 +25,7 @@ async def initialize_agent_with_mcp(mcp_manager: MCPManager) -> QXLLMAgent:
         )
         sys.exit(1)
 
-    logger.debug(f"Initializing LLM agent with parameters:")
+    logger.debug("Initializing LLM agent with parameters:")
     logger.debug(f"  Model Name: {model_name_from_env}")
 
     # Check if streaming is enabled via environment variable

@@ -1,4 +1,3 @@
-import os
 import sys
 import asyncio
 
@@ -11,6 +10,7 @@ from qx.core.logging_config import configure_logging
 
 # QX Version
 QX_VERSION = "0.3.42"
+
 
 def display_version_info():
     """
@@ -28,7 +28,7 @@ def display_version_info():
         # when only version info is needed.
         class TempMCPManager:
             async def disconnect_all(self):
-                pass # No-op for temp manager
+                pass  # No-op for temp manager
 
         temp_mcp_manager = TempMCPManager()
         agent = asyncio.run(initialize_agent_with_mcp(temp_mcp_manager))
