@@ -69,7 +69,7 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
         rich_console.print("  [green]/help[/green]       - Show this help message")
         rich_console.print("\n[bold]Input Modes:[/bold]")
         rich_console.print(
-            "  • [yellow]Single-line mode[/yellow] (default): [#ff5f00]QX⏵[/#ff5f00] prompt"
+            "  • [yellow]Single-line mode[/yellow] (default): [#ff5f00]Qx⏵[/#ff5f00] prompt"
         )
         rich_console.print("    - [cyan]Enter[/cyan]: Submit input")
         rich_console.print("    - [cyan]Alt+Enter[/cyan]: Switch to multiline mode")
@@ -86,10 +86,16 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
             "  • [cyan]Fuzzy history search[/cyan] with Ctrl+R (using fzf)"
         )
         rich_console.print("  • [cyan]Auto-suggestions[/cyan] from history")
+        rich_console.print("  • [cyan]Shift+Tab[/cyan]: Toggle 'Approve All' mode")
+        rich_console.print("\n[bold]Emergency Stop:[/bold]")
         rich_console.print(
-            "  • [cyan]Shift+Tab[/cyan]: Toggle 'Approve All' mode"
-        )  # Added Shift+Tab feature
-        rich_console.print("  • [cyan]Ctrl+C or Ctrl+D[/cyan] to exit")
+            "  • [cyan]Ctrl+C[/cyan]: Emergency stop - interrupts current operation and returns to prompt"
+        )
+        rich_console.print("    - Cancels streaming LLM responses immediately")
+        rich_console.print("    - Preserves partial responses when possible")
+        rich_console.print("    - Does not exit the application")
+        rich_console.print("\n[bold]Exit:[/bold]")
+        rich_console.print("  • [cyan]Ctrl+D[/cyan]: Exit QX")
     else:
         rich_console.print(f"[red]Unknown command: {command_name}[/red]")
         rich_console.print("Available commands: /model, /reset, /approve-all, /help")
@@ -122,7 +128,9 @@ async def handle_command(
             == "true",
         )
         if new_agent is None:
-            Console().print("[red]Error:[/red] Failed to reinitialize agent after reset")
+            Console().print(
+                "[red]Error:[/red] Failed to reinitialize agent after reset"
+            )
             return current_message_history
         # Note: We can't actually replace the agent reference here since it's passed by value
         Console().print("[info]Session reset, system prompt reloaded.[/info]")

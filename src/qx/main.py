@@ -34,7 +34,7 @@ async def _async_main(
     recover_session_path: Optional[Path] = None,
 ):
     """
-    Asynchronous main function to handle the QX agent logic.
+    Asynchronous main function to handle the Qx agent logic.
     """
     try:
         async with anyio.create_task_group() as tg:
@@ -150,7 +150,7 @@ async def _async_main(
 
                 rich_console = Console()
                 rich_console.print(
-                    f"[dim]QX ver:{QX_VERSION} - {llm_agent.model_name}[/dim]"
+                    f"[dim]Qx ver:{QX_VERSION} - {llm_agent.model_name}[/dim]"
                 )
 
                 try:
@@ -159,8 +159,8 @@ async def _async_main(
                         llm_agent, current_message_history, keep_sessions
                     )
                 except KeyboardInterrupt:
-                    logger.debug("QX terminated by user (Ctrl+C)")
-                    rich_console.print("\nQX terminated by user.")
+                    logger.debug("Qx terminated by user (Ctrl+C)")
+                    rich_console.print("\nQx terminated by user.")
                 except Exception as e:
                     logger.error(f"Error running inline mode: {e}", exc_info=True)
                     rich_console.print(f"[red]App Error:[/red] {e}")
@@ -189,13 +189,13 @@ def main():
     configure_logging()
 
     parser = argparse.ArgumentParser(
-        description="QX - A terminal-based agentic coding assistant with simplified interface."
+        description="Qx - A terminal-based agentic coding assistant with simplified interface."
     )
     parser.add_argument(
         "-v",
         "--version",
         action="store_true",
-        help="Show QX version, LLM model, and parameters, then exit.",
+        help="Show Qx version, LLM model, and parameters, then exit.",
     )
     parser.add_argument(
         "-x",
@@ -214,7 +214,7 @@ def main():
     parser.add_argument(
         "initial_prompt",
         nargs=argparse.REMAINDER,
-        help="Initial prompt for QX. If provided, QX will process this once and then either exit (with -x) or enter interactive mode.",
+        help="Initial prompt for QX. If provided, Qx will process this once and then either exit (with -x) or enter interactive mode.",
     )
     args = parser.parse_args()
 
@@ -262,7 +262,7 @@ def main():
     except KeyboardInterrupt:
         from rich.console import Console
 
-        Console().print("\nQX terminated by user.")
+        Console().print("\nQx terminated by user.")
         sys.exit(0)
     except Exception as e:
         fallback_logger = logging.getLogger("qx.critical")

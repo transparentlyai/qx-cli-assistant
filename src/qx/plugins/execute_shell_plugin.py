@@ -298,7 +298,7 @@ async def execute_shell_tool(  # Made async
     )  # "pending" is a placeholder, will be overwritten
 
     if needs_confirmation:
-        prompt_msg = f"Allow QX to execute shell command: '{command_to_consider}'?"
+        prompt_msg = f"Allow Qx to execute shell command: '{command_to_consider}'?"
         decision_status, _ = await request_confirmation(  # Await
             prompt_message=prompt_msg, console=console
         )

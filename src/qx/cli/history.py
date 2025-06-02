@@ -19,7 +19,7 @@ class QXHistory(History):  # Inherit from History
         self.load_history()
 
     def load_history(self):
-        """Load history from the QX format file."""
+        """Load history from the Qx format file."""
         if not self.history_file_path.exists():
             return
 

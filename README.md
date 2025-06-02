@@ -1,6 +1,6 @@
-# QX - Coding CLI Agent
+# Qx - Coding CLI Agent
 
-QX is a command-line interface (CLI) agent designed to assist with software development, DevOps tasks, and code interaction within your project workspace. It is built using Python and the PydanticAI framework.
+Qx is a command-line interface (CLI) agent designed to assist with software development, DevOps tasks, and code interaction within your project workspace. It is built using Python and the PydanticAI framework.
 
 ## Features
 *(To be filled in as project progresses)*
@@ -40,7 +40,7 @@ To create a new plugin for QX, follow these steps:
 
 3.  **Tool Function Definition**:
     *   This is the main entry point for your plugin that PydanticAI will call.
-    *   If your plugin needs access to shared QX resources (like the console for printing messages, or configuration), include `ctx: RunContext[QXToolDependencies]` as the first argument.
+    *   If your plugin needs access to shared Qx resources (like the console for printing messages, or configuration), include `ctx: RunContext[QXToolDependencies]` as the first argument.
     *   The second argument should be an instance of your input Pydantic model.
     *   The function must be type-hinted to return an instance of your output Pydantic model.
 
@@ -142,4 +142,4 @@ To create a new plugin for QX, follow these steps:
         # agent = PydanticAI(tools=active_tools, llm=...)
         ```
 
-By following these guidelines, you can create new plugins that integrate smoothly with the QX agent's architecture and adhere to its security and usability standards.
+By following these guidelines, you can create new plugins that integrate smoothly with the Qx agent's architecture and adhere to its security and usability standards.

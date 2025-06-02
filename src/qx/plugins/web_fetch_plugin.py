@@ -99,7 +99,7 @@ async def web_fetch_tool(
     console.print(
         f"[info]Requesting permission to fetch URL:[/info] [blue]'{url_to_fetch}'[/blue]"
     )
-    prompt_msg = f"Allow QX to fetch content from URL: '{url_to_fetch}'?"
+    prompt_msg = f"Allow Qx to fetch content from URL: '{url_to_fetch}'?"
     decision_status, _ = await request_confirmation(
         prompt_message=prompt_msg,
         console=console,

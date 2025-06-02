@@ -393,6 +393,6 @@ class MCPManager:
             },
         }
         logger.debug(
-            f"Converted MCP tool '{tool_name}' to QX format. OpenAI schema: {json.dumps(openai_tool_schema, indent=2)}"
+            f"Converted MCP tool '{tool_name}' to Qx format. OpenAI schema: {json.dumps(openai_tool_schema, indent=2)}"
         )
         return wrapper_func, openai_tool_schema, ToolInputModel

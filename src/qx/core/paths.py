@@ -5,7 +5,7 @@ from pathlib import Path
 # Determine USER_HOME_DIR dynamically at runtime
 USER_HOME_DIR = Path.home().resolve()
 
-# QX Configuration and Data Directory
+# Qx Configuration and Data Directory
 QX_CONFIG_DIR = USER_HOME_DIR / ".config" / "qx"
 
 # History file path
@@ -61,18 +61,18 @@ def _find_project_root(cwd_str: str) -> Path | None:
 if __name__ == "__main__":
     # Test _find_project_root
     print(f"User home directory: {USER_HOME_DIR}")
-    print(f"QX Config directory: {QX_CONFIG_DIR}")
-    print(f"QX History file: {QX_HISTORY_FILE}")
-    print(f"QX Sessions directory: {QX_SESSIONS_DIR}")
+    print(f"Qx Config directory: {QX_CONFIG_DIR}")
+    print(f"Qx History file: {QX_HISTORY_FILE}")
+    print(f"Qx Sessions directory: {QX_SESSIONS_DIR}")
 
     # Ensure config dir exists for testing other modules that might import this
     os.makedirs(QX_CONFIG_DIR, exist_ok=True)
-    print(f"Ensured QX Config directory exists for testing: {QX_CONFIG_DIR.exists()}")
+    print(f"Ensured Qx Config directory exists for testing: {QX_CONFIG_DIR.exists()}")
 
     # Ensure sessions dir exists for testing
     os.makedirs(QX_SESSIONS_DIR, exist_ok=True)
     print(
-        f"Ensured QX Sessions directory exists for testing: {QX_SESSIONS_DIR.exists()}"
+        f"Ensured Qx Sessions directory exists for testing: {QX_SESSIONS_DIR.exists()}"
     )
 
     print(

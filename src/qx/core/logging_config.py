@@ -101,7 +101,7 @@ def configure_logging():
     sys.excepthook = handle_exception
 
     logger.debug(
-        f"QX application log level set to: {logging.getLevelName(effective_log_level)} ({effective_log_level})"
+        f"Qx application log level set to: {logging.getLevelName(effective_log_level)} ({effective_log_level})"
     )
     if log_file_path:
         logger.debug(f"Logging to file: {log_file}")
