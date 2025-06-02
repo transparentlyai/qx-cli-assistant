@@ -45,6 +45,16 @@ class ConfigManager:
         if path.is_file():
             load_dotenv(dotenv_path=path, override=override)
 
+    def _export_qx_configurations(self, original_env: Dict[str, str]):
+        """Explicitly export all configurations loaded from config files as environment variables."""
+        # Get all new environment variables that were loaded by dotenv
+        current_env = dict(os.environ)
+        new_env_vars = {k: v for k, v in current_env.items() if k not in original_env}
+        
+        # Explicitly ensure all newly loaded variables are exported to subprocesses
+        for var, value in new_env_vars.items():
+            os.environ[var] = value
+
     def _get_rg_ignore_patterns(self, project_root: Path) -> List[str]:
         """
         Generates a list of ignore patterns for `rg` command,
@@ -79,6 +89,9 @@ class ConfigManager:
         self._ensure_directories_exist()
         self.mcp_manager.load_mcp_configs()
 
+        # Store original environment to track what we've loaded
+        original_env = dict(os.environ)
+
         # --- Hierarchical qx.conf loading ---
         # 1. Server-level configuration (lowest priority)
         self._load_dotenv_if_exists(Path("/etc/qx/qx.conf"), override=False)
@@ -91,6 +104,9 @@ class ConfigManager:
         project_root = _find_project_root(str(cwd))
         if project_root:
             self._load_dotenv_if_exists(project_root / ".Q" / "qx.conf", override=True)
+
+        # Explicitly ensure all QX_ prefixed configurations are in environment
+        self._export_qx_configurations(original_env)
 
         # Check for minimal required variables
         if not os.getenv("QX_MODEL_NAME") or not os.getenv("OPENROUTER_API_KEY"):
