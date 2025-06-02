@@ -8,7 +8,7 @@ def show_spinner(
     Show a spinner message in the console.
     Just prints a simple message now.
     """
-    from rich.console import Console
+    from qx.cli.theme import themed_console
 
-    Console().print(f"[dim]{message}[/dim]")
+    themed_console.print(message, style="spinner")
     return None  # No status object to return

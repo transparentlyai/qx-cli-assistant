@@ -1,8 +1,7 @@
 import sys
 import asyncio
 
-from rich.console import Console
-
+from qx.cli.theme import themed_console
 from qx.core.config_manager import ConfigManager
 from qx.core.llm_utils import initialize_agent_with_mcp
 from qx.cli.commands import _handle_model_command
@@ -20,7 +19,7 @@ def display_version_info():
     config_manager = ConfigManager(None, parent_task_group=None)
     config_manager.load_configurations()
 
-    Console().print(f"[bold]Qx Version:[/bold] [green]{QX_VERSION}[/green]")
+    themed_console.print(f"Qx Version: {QX_VERSION}", style="app.header")
 
     try:
         # Temporarily create an MCPManager for version display
@@ -34,7 +33,8 @@ def display_version_info():
         agent = asyncio.run(initialize_agent_with_mcp(temp_mcp_manager))
         _handle_model_command(agent)
     except SystemExit:
-        Console().print(
-            "[yellow]Note:[/yellow] Could not display LLM model information as QX_MODEL_NAME is not configured."
+        themed_console.print(
+            "Note: Could not display LLM model information as QX_MODEL_NAME is not configured.",
+            style="warning",
         )
     sys.exit(0)

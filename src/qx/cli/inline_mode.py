@@ -13,10 +13,10 @@ from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.styles import Style
 from prompt_toolkit.validation import ValidationError, Validator
-from rich.console import Console
 from rich.markdown import Markdown
 
 from qx.cli.commands import _handle_inline_command
+from qx.cli.theme import themed_console
 from qx.cli.completer import QXCompleter
 from qx.cli.history import QXHistory
 from qx.core.history_utils import parse_history_for_fzf
@@ -81,16 +81,16 @@ async def _handle_llm_interaction(
             agent,
             user_input,
             message_history=current_message_history,
-            console=Console(),  # Provide console for inline mode
+            console=themed_console,  # Provide console for inline mode
         )
     except asyncio.CancelledError:
         # Handle cancellation gracefully
         logger.info("LLM interaction cancelled by user")
-        Console().print("\n[yellow]Operation cancelled[/yellow]")
+        themed_console.print("\nOperation cancelled", style="warning")
         return current_message_history
     except Exception as e:
         logger.error(f"Error during LLM interaction: {e}", exc_info=True)
-        Console().print(f"[red]Error:[/red] {e}")
+        themed_console.print(f"Error: {e}", style="error")
         return current_message_history
 
     if run_result:
@@ -103,10 +103,9 @@ async def _handle_llm_interaction(
             else:
                 # For streaming, content is already displayed during the stream
                 if not agent.enable_streaming and output_content.strip():
-                    rich_console = Console()
-                    rich_console.print()
-                    rich_console.print(Markdown(output_content, code_theme="rrt"))
-                    rich_console.print()
+                    themed_console.print()
+                    themed_console.print(Markdown(output_content, code_theme="rrt"))
+                    themed_console.print()
             if hasattr(run_result, "all_messages"):
                 return run_result.all_messages()
             else:
@@ -119,16 +118,16 @@ async def _handle_llm_interaction(
             if plain_text_output:
                 sys.stderr.write("Error: Unexpected response structure from LLM.\n")
             else:
-                Console().print(
-                    "[red]Error:[/red] Unexpected response structure from LLM."
+                themed_console.print(
+                    "Error: Unexpected response structure from LLM.", style="error"
                 )
             return current_message_history
     else:
         if plain_text_output:
             sys.stdout.write("Info: No response generated or an error occurred.\n")
         else:
-            Console().print(
-                "[yellow]Info:[/yellow] No response generated or an error occurred."
+            themed_console.print(
+                "Info: No response generated or an error occurred.", style="info"
             )
         return current_message_history
 
@@ -140,7 +139,6 @@ async def _run_inline_mode(
 ):
     """
     Run the interactive inline mode with prompt_toolkit input."""
-    rich_console = Console()
 
     # Create custom history that handles Qx format
     qx_history = QXHistory(QX_HISTORY_FILE)
@@ -256,9 +254,13 @@ async def _run_inline_mode(
 
             def print_status():
                 if user_prompts._approve_all_active:
-                    rich_console.print("[green]✓ 'Approve All' mode activated.[/]\n")
+                    themed_console.print(
+                        "✓ 'Approve All' mode activated.\n", style="success"
+                    )
                 else:
-                    rich_console.print("[yellow]✗ 'Approve All' mode deactivated.[/]\n")
+                    themed_console.print(
+                        "✗ 'Approve All' mode deactivated.\n", style="warning"
+                    )
 
             run_in_terminal(print_status)
         # Invalidate to redraw toolbar and reflect changes immediately
@@ -369,7 +371,7 @@ async def _run_inline_mode(
             try:
                 current_message_history = await llm_task
             except asyncio.CancelledError:
-                rich_console.print("\n[yellow]Operation cancelled[/yellow]")
+                themed_console.print("\nOperation cancelled", style="warning")
                 llm_task.cancel()
                 try:
                     await llm_task
@@ -383,8 +385,8 @@ async def _run_inline_mode(
 
     except KeyboardInterrupt:
         # Emergency stop - don't exit, just interrupt current operation
-        rich_console.print(
-            "\n[yellow]Operation interrupted.[/yellow] Returning to prompt..."
+        themed_console.print(
+            "\nOperation interrupted. Returning to prompt...", style="warning"
         )
         # Continue the loop to show a new prompt
         while True:
@@ -418,7 +420,7 @@ async def _run_inline_mode(
                             save_session(current_message_history)
                             clean_old_sessions(keep_sessions)
                     except asyncio.CancelledError:
-                        rich_console.print("\n[yellow]Operation cancelled[/yellow]")
+                        themed_console.print("\nOperation cancelled", style="warning")
                         llm_task.cancel()
                         try:
                             await llm_task
@@ -426,8 +428,8 @@ async def _run_inline_mode(
                             pass
 
             except KeyboardInterrupt:
-                rich_console.print(
-                    "\n[yellow]Operation interrupted.[/yellow] Returning to prompt..."
+                themed_console.print(
+                    "\nOperation interrupted. Returning to prompt...", style="warning"
                 )
                 continue
             except EOFError:
@@ -436,7 +438,7 @@ async def _run_inline_mode(
         pass
     except Exception as e:
         logger.error(f"Error in inline mode: {e}", exc_info=True)
-        rich_console.print(f"[red]Error:[/red] {e}")
+        themed_console.print(f"Error: {e}", style="error")
     finally:
         # Ensure history is flushed when the session ends
         qx_history.flush_history()

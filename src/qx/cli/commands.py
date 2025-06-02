@@ -2,9 +2,9 @@ import os
 import logging
 from typing import List, Optional
 
-from rich.console import Console
 from openai.types.chat import ChatCompletionMessageParam
 
+from qx.cli.theme import themed_console
 from qx.core.llm import QXLLMAgent, initialize_llm_agent
 from qx.core.session_manager import reset_session
 from qx.core.config_manager import ConfigManager
@@ -17,29 +17,23 @@ def _handle_model_command(agent: QXLLMAgent):
     """
     Displays information about the current LLM model configuration.
     """
-    rich_console = Console()
-
-    model_info_content = "[bold]Current LLM Model Configuration:[/bold]\n"
-    model_info_content += f"  Model Name: [green]{agent.model_name}[/green]\n"
-    model_info_content += (
-        "  Provider: [green]OpenRouter (https://openrouter.ai/api/v1)[/green]\n"
-    )
+    model_info_content = "Current LLM Model Configuration:\n"
+    model_info_content += f"  Model Name: {agent.model_name}\n"
+    model_info_content += "  Provider: OpenRouter (https://openrouter.ai/api/v1)\n"
 
     temperature_val = agent.temperature
     max_tokens_val = agent.max_output_tokens
     reasoning_effort_val = agent.reasoning_effort
 
-    model_info_content += f"  Temperature: [green]{temperature_val}[/green]\n"
-    model_info_content += f"  Max Output Tokens: [green]{max_tokens_val}[/green]\n"
-    model_info_content += f"  Reasoning Effort: [green]{reasoning_effort_val if reasoning_effort_val else 'None'}[/green]\n"
+    model_info_content += f"  Temperature: {temperature_val}\n"
+    model_info_content += f"  Max Output Tokens: {max_tokens_val}\n"
+    model_info_content += f"  Reasoning Effort: {reasoning_effort_val if reasoning_effort_val else 'None'}\n"
 
-    rich_console.print(model_info_content)
+    themed_console.print(model_info_content, style="app.header")
 
 
 async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
     """Handle slash commands in inline mode."""
-    rich_console = Console()
-
     parts = command_input.strip().split(maxsplit=1)
     command_name = parts[0].lower()
 
@@ -48,57 +42,66 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
     elif command_name == "/reset":
         # Just reset message history in inline mode
         reset_session()
-        rich_console.print("[info]Session reset, system prompt reloaded.[/info]")
+        themed_console.print("Session reset, system prompt reloaded.", style="info")
     elif command_name == "/approve-all":
         async with qx.core.user_prompts._approve_all_lock:
             qx.core.user_prompts._approve_all_active = True
-        rich_console.print(
-            "[orange]✓ 'Approve All' mode activated for this session.[/orange]"
+        themed_console.print(
+            "✓ 'Approve All' mode activated for this session.", style="warning"
         )
     elif command_name == "/help":
-        rich_console.print("[bold]Available Commands:[/bold]")
-        rich_console.print(
-            "  [green]/model[/green]      - Show current LLM model configuration"
+        themed_console.print("Available Commands:", style="app.header")
+        themed_console.print(
+            "  /model      - Show current LLM model configuration", style="primary"
         )
-        rich_console.print(
-            "  [green]/reset[/green]      - Reset session and clear message history"
+        themed_console.print(
+            "  /reset      - Reset session and clear message history", style="primary"
         )
-        rich_console.print(
-            "  [green]/approve-all[/green] - Activate 'approve all' mode for tool confirmations"
+        themed_console.print(
+            "  /approve-all - Activate 'approve all' mode for tool confirmations",
+            style="primary",
         )
-        rich_console.print("  [green]/help[/green]       - Show this help message")
-        rich_console.print("\n[bold]Input Modes:[/bold]")
-        rich_console.print(
-            "  • [yellow]Single-line mode[/yellow] (default): [#ff5f00]Qx⏵[/#ff5f00] prompt"
+        themed_console.print("  /help       - Show this help message", style="primary")
+        themed_console.print("\nInput Modes:", style="app.header")
+        themed_console.print(
+            "  • Single-line mode (default): Qx⏵ prompt", style="warning"
         )
-        rich_console.print("    - [cyan]Enter[/cyan]: Submit input")
-        rich_console.print("    - [cyan]Alt+Enter[/cyan]: Switch to multiline mode")
-        rich_console.print(
-            "  • [yellow]Multiline mode[/yellow]: [#0087ff]MULTILINE⏵[/#0087ff] prompt"
+        themed_console.print("    - Enter: Submit input", style="info")
+        themed_console.print("    - Alt+Enter: Switch to multiline mode", style="info")
+        themed_console.print("  • Multiline mode: MULTILINE⏵ prompt", style="warning")
+        themed_console.print(
+            "    - Enter: Add newline (continue editing)", style="info"
         )
-        rich_console.print("    - [cyan]Enter[/cyan]: Add newline (continue editing)")
-        rich_console.print(
-            "    - [cyan]Alt+Enter[/cyan]: Submit input and return to single-line"
+        themed_console.print(
+            "    - Alt+Enter: Submit input and return to single-line", style="info"
         )
-        rich_console.print("\n[bold]Features:[/bold]")
-        rich_console.print("  • [cyan]Tab completion[/cyan] for commands and paths")
-        rich_console.print(
-            "  • [cyan]Fuzzy history search[/cyan] with Ctrl+R (using fzf)"
+        themed_console.print("\nFeatures:", style="app.header")
+        themed_console.print("  • Tab completion for commands and paths", style="info")
+        themed_console.print(
+            "  • Fuzzy history search with Ctrl+R (using fzf)", style="info"
         )
-        rich_console.print("  • [cyan]Auto-suggestions[/cyan] from history")
-        rich_console.print("  • [cyan]Shift+Tab[/cyan]: Toggle 'Approve All' mode")
-        rich_console.print("\n[bold]Emergency Stop:[/bold]")
-        rich_console.print(
-            "  • [cyan]Ctrl+C[/cyan]: Emergency stop - interrupts current operation and returns to prompt"
+        themed_console.print("  • Auto-suggestions from history", style="info")
+        themed_console.print("  • Shift+Tab: Toggle 'Approve All' mode", style="info")
+        themed_console.print("\nEmergency Stop:", style="app.header")
+        themed_console.print(
+            "  • Ctrl+C: Emergency stop - interrupts current operation and returns to prompt",
+            style="info",
         )
-        rich_console.print("    - Cancels streaming LLM responses immediately")
-        rich_console.print("    - Preserves partial responses when possible")
-        rich_console.print("    - Does not exit the application")
-        rich_console.print("\n[bold]Exit:[/bold]")
-        rich_console.print("  • [cyan]Ctrl+D[/cyan]: Exit QX")
+        themed_console.print(
+            "    - Cancels streaming LLM responses immediately", style="text.muted"
+        )
+        themed_console.print(
+            "    - Preserves partial responses when possible", style="text.muted"
+        )
+        themed_console.print("    - Does not exit the application", style="text.muted")
+        themed_console.print("\nExit:", style="app.header")
+        themed_console.print("  • Ctrl+D: Exit QX", style="info")
     else:
-        rich_console.print(f"[red]Unknown command: {command_name}[/red]")
-        rich_console.print("Available commands: /model, /reset, /approve-all, /help")
+        themed_console.print(f"Unknown command: {command_name}", style="error")
+        themed_console.print(
+            "Available commands: /model, /reset, /approve-all, /help",
+            style="text.muted",
+        )
 
 
 async def handle_command(
@@ -128,14 +131,14 @@ async def handle_command(
             == "true",
         )
         if new_agent is None:
-            Console().print(
-                "[red]Error:[/red] Failed to reinitialize agent after reset"
+            themed_console.print(
+                "Error: Failed to reinitialize agent after reset", style="error"
             )
             return current_message_history
         # Note: We can't actually replace the agent reference here since it's passed by value
-        Console().print("[info]Session reset, system prompt reloaded.[/info]")
+        themed_console.print("Session reset, system prompt reloaded.", style="info")
         return None  # Clear history after reset
     else:
-        Console().print(f"[red]Unknown command: {command_name}[/red]")
-        Console().print("Available commands: /model, /reset")
+        themed_console.print(f"Unknown command: {command_name}", style="error")
+        themed_console.print("Available commands: /model, /reset", style="text.muted")
     return current_message_history
