@@ -2,7 +2,6 @@ import logging
 from typing import Optional
 
 import httpx
-from markitdown import MarkItDown
 from pydantic import BaseModel, Field
 from rich.console import Console as RichConsole
 
@@ -33,13 +32,16 @@ class WebFetchPluginOutput(BaseModel):
 
     url: str = Field(description="The URL that was attempted to be fetched.")
     content: Optional[str] = Field(
-        None, description="The fetched content (in requested format). None if fetch failed or was denied."
+        None,
+        description="The fetched content (in requested format). None if fetch failed or was denied.",
     )
     error: Optional[str] = Field(
-        None, description="Error message explaining why fetch failed (e.g., 'timeout', 'HTTP error', 'denied by user'). None if successful."
+        None,
+        description="Error message explaining why fetch failed (e.g., 'timeout', 'HTTP error', 'denied by user'). None if successful.",
     )
     status_code: Optional[int] = Field(
-        None, description="HTTP response status code (e.g., 200, 404). None if request failed before receiving response."
+        None,
+        description="HTTP response status code (e.g., 200, 404). None if request failed before receiving response.",
     )
     truncated: bool = Field(
         False,
@@ -52,18 +54,18 @@ async def web_fetch_tool(
 ) -> WebFetchPluginOutput:
     """
     Fetches content from a specified URL.
-    
+
     Features:
     - Always requires user approval before fetching
     - Supports HTML to Markdown conversion (default)
     - 10-second timeout for requests
     - Content truncated at 250,000 characters if needed
     - Handles HTTP errors gracefully
-    
+
     Output formats:
     - 'markdown': Converts HTML to Markdown for readability
     - 'raw': Returns content exactly as received
-    
+
     Returns structured output with:
     - url: The attempted URL
     - content: Fetched content (if successful)
@@ -137,7 +139,6 @@ async def web_fetch_tool(
 
             final_content = content
             if output_format == "markdown":
-                md = MarkItDown()
                 try:
                     from markdownify import markdownify as md_converter
 

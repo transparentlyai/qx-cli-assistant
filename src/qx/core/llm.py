@@ -18,15 +18,15 @@ from openai.types.shared_params.function_definition import FunctionDefinition
 from pydantic import BaseModel, ValidationError
 from rich.console import Console as RichConsoleClass
 
+from qx.core.mcp_manager import MCPManager
+from qx.core.plugin_manager import PluginManager
+
 
 class ConsoleProtocol(Protocol):
     def print(self, *args, **kwargs): ...
 
 
 RichConsole = ConsoleProtocol  # Type alias for backward compatibility
-
-from qx.core.mcp_manager import MCPManager  # New import
-from qx.core.plugin_manager import PluginManager
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +100,12 @@ class QXLLMAgent:
                 # Regular plugins format: {"name": ..., "description": ..., "parameters": ...}
                 function_def = schema
 
+            # Ensure function_def has required fields
+            if "name" not in function_def:
+                function_def["name"] = func.__name__
+            if "description" not in function_def:
+                function_def["description"] = f"Tool function {func.__name__}"
+
             self._openai_tools_schema.append(
                 ChatCompletionToolParam(
                     type="function", function=FunctionDefinition(**function_def)
@@ -118,13 +124,16 @@ class QXLLMAgent:
         """Log HTTP request details for debugging."""
         logger.debug(f"OpenRouter Request: {request.method} {request.url}")
         # Don't log Authorization header for security
-        headers = {k: v for k, v in request.headers.items() if k.lower() != 'authorization'}
+        headers = {
+            k: v for k, v in request.headers.items() if k.lower() != "authorization"
+        }
         logger.debug(f"Request Headers: {headers}")
         if request.content:
             try:
                 content = request.content.decode()
-                if content.startswith('{'):
+                if content.startswith("{"):
                     import json
+
                     parsed = json.loads(content)
                     logger.debug(f"Request Body: {json.dumps(parsed, indent=2)}")
                 else:
@@ -134,17 +143,22 @@ class QXLLMAgent:
 
     async def _log_response(self, response: httpx.Response) -> None:
         """Log HTTP response details for debugging."""
-        logger.debug(f"OpenRouter Response: {response.status_code} {response.reason_phrase}")
+        logger.debug(
+            f"OpenRouter Response: {response.status_code} {response.reason_phrase}"
+        )
         logger.debug(f"Response Headers: {dict(response.headers)}")
-        
+
         # Skip content logging for streaming responses to avoid ResponseNotRead error
-        is_streaming = response.headers.get('content-type', '').startswith('text/event-stream')
+        is_streaming = response.headers.get("content-type", "").startswith(
+            "text/event-stream"
+        )
         if not is_streaming:
             try:
-                if hasattr(response, 'content') and response.content:
+                if hasattr(response, "content") and response.content:
                     content = response.content.decode()[:1000]  # First 1000 chars
-                    if content.strip().startswith('{'):
+                    if content.strip().startswith("{"):
                         import json
+
                         parsed = json.loads(content)
                         logger.debug(f"Response Body: {json.dumps(parsed, indent=2)}")
                     else:
@@ -157,6 +171,7 @@ class QXLLMAgent:
         openrouter_api_key = os.environ.get("OPENROUTER_API_KEY")
         if not openrouter_api_key:
             from rich.console import Console
+
             Console().print(
                 "[red]Error:[/red] OPENROUTER_API_KEY environment variable not set."
             )
@@ -164,22 +179,26 @@ class QXLLMAgent:
 
         # Create HTTP client with proper configuration for streaming
         # Add debug logging hooks if debug level is enabled
-        event_hooks = {}
+        from typing import Dict, List, Callable, Any
+
+        event_hooks: Dict[str, List[Callable[..., Any]]] = {}
         if os.environ.get("QX_LOG_LEVEL", "ERROR").upper() == "DEBUG":
             event_hooks = {
-                'request': [self._log_request],
-                'response': [self._log_response]
+                "request": [self._log_request],
+                "response": [self._log_response],
             }
-        
+
         self._http_client = httpx.AsyncClient(
-            timeout=httpx.Timeout(300.0, connect=15.0, read=300.0, write=30.0),  # Longer timeouts for streaming
+            timeout=httpx.Timeout(
+                300.0, connect=15.0, read=300.0, write=30.0
+            ),  # Longer timeouts for streaming
             limits=httpx.Limits(
                 max_connections=10,
                 max_keepalive_connections=5,
-                keepalive_expiry=60.0  # Longer keepalive for streaming connections
+                keepalive_expiry=60.0,  # Longer keepalive for streaming connections
             ),
             follow_redirects=True,
-            event_hooks=event_hooks
+            event_hooks=event_hooks,
         )
 
         return AsyncOpenAI(
@@ -205,13 +224,14 @@ class QXLLMAgent:
             logger.error(error_msg)
             return QXRunResult(f"Error: {error_msg}", message_history or [])
         messages: List[ChatCompletionMessageParam] = []
-        
+
         # Only add system prompt if not already present in message history
         has_system_message = message_history and any(
-            (msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None)) == "system" 
+            (msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None))
+            == "system"
             for msg in message_history
         )
-        
+
         if not has_system_message:
             messages.append(
                 cast(
@@ -229,21 +249,32 @@ class QXLLMAgent:
             pass
         else:
             # Only add user message if not already in the last position of message history and not empty
-            should_add_user_message = user_input.strip() != ""  # Don't add empty messages
+            should_add_user_message = (
+                user_input.strip() != ""
+            )  # Don't add empty messages
             if should_add_user_message and message_history:
                 # Check if the last message is already this user input
                 last_msg = message_history[-1] if message_history else None
                 if last_msg:
                     # Handle both dict and Pydantic model cases
-                    msg_role = last_msg.get("role") if isinstance(last_msg, dict) else getattr(last_msg, "role", None)
-                    msg_content = last_msg.get("content") if isinstance(last_msg, dict) else getattr(last_msg, "content", None)
+                    msg_role = (
+                        last_msg.get("role")
+                        if isinstance(last_msg, dict)
+                        else getattr(last_msg, "role", None)
+                    )
+                    msg_content = (
+                        last_msg.get("content")
+                        if isinstance(last_msg, dict)
+                        else getattr(last_msg, "content", None)
+                    )
                     if msg_role == "user" and msg_content == user_input:
                         should_add_user_message = False
-            
+
             if should_add_user_message:
                 messages.append(
                     cast(
-                        ChatCompletionUserMessageParam, {"role": "user", "content": user_input}
+                        ChatCompletionUserMessageParam,
+                        {"role": "user", "content": user_input},
                     )
                 )
 
@@ -258,14 +289,23 @@ class QXLLMAgent:
                 # Convert to dict if it's a BaseModel
                 if isinstance(last_message, BaseModel):
                     last_message = last_message.model_dump()
-                logger.info(f"Sending message to LLM:\\n{json.dumps(last_message, indent=2)}")
-                
+                logger.info(
+                    f"Sending message to LLM:\\n{json.dumps(last_message, indent=2)}"
+                )
+
                 # Also log available tools on first user message
                 if last_message.get("role") == "user" and self._openai_tools_schema:
                     logger.info(f"Available tools ({len(self._openai_tools_schema)}):")
                     for tool in self._openai_tools_schema[:3]:  # Show first 3 tools
-                        tool_dict = tool.model_dump() if hasattr(tool, 'model_dump') else dict(tool)
-                        logger.info(f"  - {tool_dict.get('function', {}).get('name', 'unknown')}")
+                        if hasattr(tool, "get"):
+                            tool_dict = tool
+                        elif hasattr(tool, "items"):
+                            tool_dict = dict(tool)
+                        else:
+                            tool_dict = vars(tool) if hasattr(tool, "__dict__") else {}
+                        logger.info(
+                            f"  - {tool_dict.get('function', {}).get('name', 'unknown')}"
+                        )
 
         # Parameters for the chat completion
         chat_params: Dict[str, Any] = {
@@ -291,17 +331,17 @@ class QXLLMAgent:
         # Add provider settings from environment variables
         provider_name = os.environ.get("QX_MODEL_PROVIDER")
         allow_fallbacks_str = os.environ.get("QX_ALLOW_PROVIDER_FALLBACK")
-        
+
         if provider_name or allow_fallbacks_str is not None:
             provider_config = {}
             if provider_name:
                 provider_config["order"] = [p.strip() for p in provider_name.split(",")]
-            
+
             if allow_fallbacks_str is not None:
                 # Convert string to boolean: "true", "1", "yes" -> True; otherwise False
                 allow_fallbacks = allow_fallbacks_str.lower() in ("true", "1", "yes")
                 provider_config["allow_fallbacks"] = allow_fallbacks
-            
+
             if provider_config:
                 extra_body_params["provider"] = provider_config
 
@@ -314,6 +354,7 @@ class QXLLMAgent:
                 chat_params["stream"] = True
                 # Add an empty line before the streaming response starts
                 from rich.console import Console
+
                 Console().print("")
                 return await self._handle_streaming_response(
                     chat_params, messages, user_input, _recursion_depth
@@ -322,7 +363,7 @@ class QXLLMAgent:
                 response = await self.client.chat.completions.create(**chat_params)
 
                 response_message = response.choices[0].message
-                
+
                 # Log the received message if QX_LOG_RECEIVED is set
                 if os.getenv("QX_LOG_RECEIVED"):
                     response_dict = {
@@ -336,18 +377,20 @@ class QXLLMAgent:
                                 "type": tc.type,
                                 "function": {
                                     "name": tc.function.name,
-                                    "arguments": tc.function.arguments
-                                }
+                                    "arguments": tc.function.arguments,
+                                },
                             }
                             for tc in response_message.tool_calls
                         ]
-                    logger.info(f"Received message from LLM:\\n{json.dumps(response_dict, indent=2)}")
-                
+                    logger.info(
+                        f"Received message from LLM:\\n{json.dumps(response_dict, indent=2)}"
+                    )
+
                 messages.append(response_message)
 
                 if response_message.tool_calls:
                     return await self._process_tool_calls_and_continue(
-                        response_message, messages, user_input, retry_count
+                        response_message, messages, user_input, _recursion_depth
                     )
                 else:
                     return QXRunResult(response_message.content or "", messages)
@@ -355,6 +398,7 @@ class QXLLMAgent:
         except Exception as e:
             logger.error(f"Error during LLM chat completion: {e}", exc_info=True)
             from rich.console import Console
+
             Console().print(f"[red]Error:[/red] LLM chat completion: {e}")
             return None
 
@@ -370,11 +414,14 @@ class QXLLMAgent:
         import time
 
         accumulated_content = ""
-        accumulated_tool_calls = []
+        accumulated_tool_calls: list[dict[str, Any]] = []
         current_tool_call = None
-        has_tool_calls = False  # Track if we've seen any tool calls
-        has_rendered_content = False  # Track if we've rendered any content during streaming
-        total_rendered_content = ""  # Track all content that was rendered for validation
+        has_rendered_content = (
+            False  # Track if we've rendered any content during streaming
+        )
+        total_rendered_content = (
+            ""  # Track all content that was rendered for validation
+        )
 
         # Use markdown-aware buffer for streaming
         from qx.core.markdown_buffer import create_markdown_buffer
@@ -390,6 +437,7 @@ class QXLLMAgent:
                 # Output as markdown to rich console
                 from rich.console import Console
                 from rich.markdown import Markdown
+
                 rich_console = Console()
                 rich_console.print(Markdown(content, code_theme="rrt"), end="")
 
@@ -402,14 +450,15 @@ class QXLLMAgent:
         max_duplicate_chunks = 5
         stream_start_time = time.time()
         max_stream_time = 300  # 5 minutes timeout
-        
+
         try:
             from rich.console import Console
+
             console = Console()
-            
+
             with console.status("Thinking...", spinner="dots") as status:
                 stream = await self.client.chat.completions.create(**chat_params)
-                
+
                 async for chunk in stream:
                     # Check for stream timeout
                     if time.time() - stream_start_time > max_stream_time:
@@ -417,54 +466,66 @@ class QXLLMAgent:
                         break
                     # Log the complete response chunk object
                     logger.debug(f"LLM Response Chunk: {chunk}")
-                    
+
                     if not chunk.choices:
                         continue
 
                     choice = chunk.choices[0]
                     delta = choice.delta
-                    
+
                     # Detect duplicate chunks to prevent infinite loops
                     current_chunk_content = ""
                     if delta.content:
                         current_chunk_content = delta.content
-                    elif hasattr(delta, 'reasoning') and delta.reasoning:
+                    elif hasattr(delta, "reasoning") and delta.reasoning:
                         current_chunk_content = delta.reasoning
-                    
-                    if current_chunk_content and current_chunk_content == last_chunk_content:
+
+                    if (
+                        current_chunk_content
+                        and current_chunk_content == last_chunk_content
+                    ):
                         duplicate_chunk_count += 1
                         if duplicate_chunk_count >= max_duplicate_chunks:
-                            logger.warning(f"Detected {duplicate_chunk_count} duplicate chunks, terminating stream")
+                            logger.warning(
+                                f"Detected {duplicate_chunk_count} duplicate chunks, terminating stream"
+                            )
                             break
                     else:
                         duplicate_chunk_count = 0
                         last_chunk_content = current_chunk_content
 
                     # Handle reasoning streaming (OpenRouter specific)
-                    if hasattr(delta, 'reasoning') and delta.reasoning:
+                    if hasattr(delta, "reasoning") and delta.reasoning:
                         # Stop spinner when we start processing reasoning
                         if not spinner_stopped:
                             spinner_stopped = True
                             status.stop()
-                        
+
                         # Display reasoning content in faded color
                         reasoning_text = delta.reasoning
                         if reasoning_text and reasoning_text.strip():
                             from rich.console import Console
+
                             reasoning_console = Console()
-                            reasoning_console.print(f"[dim]{reasoning_text}[/dim]", end="")
+                            reasoning_console.print(
+                                f"[dim]{reasoning_text}[/dim]", end=""
+                            )
 
                     # Handle content streaming
                     if delta.content:
                         accumulated_content += delta.content
                         # Check if buffer returns content to render
                         content_to_render = markdown_buffer.add_content(delta.content)
-                        
+
                         # Stop spinner when markdown buffer actually releases content to render
-                        if not spinner_stopped and content_to_render and content_to_render.strip():
+                        if (
+                            not spinner_stopped
+                            and content_to_render
+                            and content_to_render.strip()
+                        ):
                             spinner_stopped = True
                             status.stop()
-                        
+
                         # Continue rendering content even if tool calls are detected
                         # This prevents content loss when responses contain both text and tool calls
                         if content_to_render:
@@ -476,15 +537,16 @@ class QXLLMAgent:
                         if not spinner_stopped:
                             spinner_stopped = True
                             status.stop()
-                        
-                        has_tool_calls = True  # Mark that we've seen tool calls
+
                         if os.getenv("QX_LOG_RECEIVED"):
                             logger.info(f"Received tool call delta: {delta.tool_calls}")
                         for tool_call_delta in delta.tool_calls:
                             # Start new tool call
                             if tool_call_delta.index is not None:
                                 # Ensure we have enough space in the list
-                                while len(accumulated_tool_calls) <= tool_call_delta.index:
+                                while (
+                                    len(accumulated_tool_calls) <= tool_call_delta.index
+                                ):
                                     accumulated_tool_calls.append(
                                         {
                                             "id": None,
@@ -502,31 +564,39 @@ class QXLLMAgent:
 
                                 if tool_call_delta.function:
                                     if tool_call_delta.function.name:
-                                        current_tool_call["function"]["name"] = (
-                                            tool_call_delta.function.name
-                                        )
+                                        current_tool_call["function"][
+                                            "name"
+                                        ] = tool_call_delta.function.name
                                     if tool_call_delta.function.arguments:
-                                        current_tool_call["function"]["arguments"] += (
-                                            tool_call_delta.function.arguments
-                                        )
+                                        current_tool_call["function"][
+                                            "arguments"
+                                        ] += tool_call_delta.function.arguments
 
                     # Check if stream is finished
                     if choice.finish_reason:
                         stream_completed = True
                         break
-                    
+
                     # Additional safeguard: if we get multiple consecutive empty chunks after content/reasoning
                     # this might indicate the stream should end
-                    if not delta.content and not (hasattr(delta, 'reasoning') and delta.reasoning) and not delta.tool_calls:
-                        if accumulated_content or has_rendered_content:  # Only count empty chunks if we've seen content
+                    if (
+                        not delta.content
+                        and not (hasattr(delta, "reasoning") and delta.reasoning)
+                        and not delta.tool_calls
+                    ):
+                        if (
+                            accumulated_content or has_rendered_content
+                        ):  # Only count empty chunks if we've seen content
                             duplicate_chunk_count += 1
                             if duplicate_chunk_count >= max_duplicate_chunks:
-                                logger.warning("Too many consecutive empty chunks, terminating stream")
+                                logger.warning(
+                                    "Too many consecutive empty chunks, terminating stream"
+                                )
                                 break
-            
+
             # Mark stream as completed and attempt graceful close
             stream_completed = True
-            if stream and hasattr(stream, 'aclose'):
+            if stream and hasattr(stream, "aclose"):
                 try:
                     await stream.aclose()
                 except Exception:
@@ -534,16 +604,16 @@ class QXLLMAgent:
 
         except Exception as e:
             logger.error(f"Error during streaming: {e}", exc_info=True)
-            
+
             # Clean up the stream in error case
-            if stream and hasattr(stream, 'aclose') and not stream_completed:
+            if stream and hasattr(stream, "aclose") and not stream_completed:
                 try:
                     # Small delay to allow any pending data to be processed
                     await asyncio.sleep(0.1)
                     await stream.aclose()
                 except Exception:
                     pass  # Ignore errors closing stream
-            
+
             # Only fall back to non-streaming if we haven't accumulated any content
             # This prevents losing partial responses that were already streamed
             if not accumulated_content:
@@ -561,54 +631,69 @@ class QXLLMAgent:
                     else:
                         return QXRunResult(response_message.content, messages)
                 except Exception as fallback_error:
-                    logger.error(f"Fallback non-streaming also failed: {fallback_error}", exc_info=True)
-                    return QXRunResult(f"Error: Both streaming and fallback failed", messages)
+                    logger.error(
+                        f"Fallback non-streaming also failed: {fallback_error}",
+                        exc_info=True,
+                    )
+                    return QXRunResult(
+                        "Error: Both streaming and fallback failed", messages
+                    )
             else:
                 # We have partial content from streaming, continue with that
-                logger.warning(f"Streaming failed but recovered {len(accumulated_content)} characters of content")
+                logger.warning(
+                    f"Streaming failed but recovered {len(accumulated_content)} characters of content"
+                )
 
         # After streaming, flush any remaining content
         remaining_content = markdown_buffer.flush()
-        
+
         # Always render remaining content if present
         if remaining_content and remaining_content.strip():
             await render_content(remaining_content)
-        
+
         # Validate that all content was rendered and attempt recovery
         if accumulated_content:
             # Compare lengths to detect content loss
             accumulated_len = len(accumulated_content)
             rendered_len = len(total_rendered_content)
-            
+
             if accumulated_len != rendered_len:
                 content_loss = accumulated_len - rendered_len
                 logger.warning(
                     f"Content validation mismatch: accumulated {accumulated_len} chars, "
                     f"rendered {rendered_len} chars. Difference: {content_loss}"
                 )
-                
+
                 # Attempt to recover lost content
                 if content_loss > 0:
                     # Try to find and render the missing content
                     if rendered_len < accumulated_len:
                         missing_content = accumulated_content[rendered_len:]
                         if missing_content.strip():
-                            logger.info(f"Attempting to recover {len(missing_content)} characters of lost content")
+                            logger.info(
+                                f"Attempting to recover {len(missing_content)} characters of lost content"
+                            )
                             await render_content(missing_content)
                             total_rendered_content += missing_content
-                    
+
                     # Log debug information if content was lost
                     if os.getenv("QX_DEBUG_STREAMING"):
                         # Only log detailed info if debug flag is set
-                        logger.debug(f"Accumulated content: {repr(accumulated_content[:200])}...")
-                        logger.debug(f"Original rendered content: {repr(total_rendered_content[:200])}...")
+                        logger.debug(
+                            f"Accumulated content: {repr(accumulated_content[:200])}..."
+                        )
+                        logger.debug(
+                            f"Original rendered content: {repr(total_rendered_content[:200])}..."
+                        )
             else:
-                logger.debug(f"Content validation passed: {accumulated_len} chars rendered successfully")
-        
-        
+                logger.debug(
+                    f"Content validation passed: {accumulated_len} chars rendered successfully"
+                )
+
         # Add final newline if we rendered any content
         if accumulated_content.strip() and (has_rendered_content or remaining_content):
             from rich.console import Console
+
             Console().print()
 
         # Create response message from accumulated data
@@ -638,18 +723,21 @@ class QXLLMAgent:
         from openai.types.chat.chat_completion_message import ChatCompletionMessage
 
         response_message = ChatCompletionMessage(**response_message_dict)
-        
+
         # Log the received message if QX_LOG_RECEIVED is set (for streaming)
         if os.getenv("QX_LOG_RECEIVED"):
-            logger.info(f"Received message from LLM (streaming):\\n{json.dumps(response_message_dict, indent=2)}")
-        
-        messages.append(response_message)
+            logger.info(
+                f"Received message from LLM (streaming):\\n{json.dumps(response_message_dict, indent=2)}"
+            )
 
+        messages.append(response_message)
 
         # Process tool calls if any
         if accumulated_tool_calls:
             # Pass empty content if we cleared narration
-            response_message.content = accumulated_content if accumulated_content else None
+            response_message.content = (
+                accumulated_content if accumulated_content else None
+            )
             return await self._process_tool_calls_and_continue(
                 response_message, messages, user_input, recursion_depth
             )
@@ -679,6 +767,7 @@ class QXLLMAgent:
                 error_msg = f"LLM attempted to call unknown tool: {function_name}"
                 logger.error(error_msg)
                 from rich.console import Console
+
                 Console().print(f"[red]{error_msg}[/red]")
                 messages.append(
                     cast(
@@ -704,6 +793,7 @@ class QXLLMAgent:
                         error_msg = f"LLM provided invalid JSON arguments for tool '{function_name}': {function_args}"
                         logger.error(error_msg)
                         from rich.console import Console
+
                         Console().print(f"[red]{error_msg}[/red]")
                         messages.append(
                             cast(
@@ -723,22 +813,34 @@ class QXLLMAgent:
                     error_msg = f"LLM provided invalid parameters for tool '{function_name}'. Validation errors: {ve}"
                     logger.error(error_msg, exc_info=True)
                     from rich.console import Console
+
                     Console().print(f"[red]{error_msg}[/red]")
-                    
+
                     # Create a more actionable error message for the LLM
                     error_details = []
                     for error in ve.errors():
                         field_path = " -> ".join(str(loc) for loc in error["loc"])
                         error_type = error["type"]
                         msg = error["msg"]
-                        error_details.append(f"Field '{field_path}': {msg} ({error_type})")
-                    
-                    actionable_error = f"Tool '{function_name}' validation failed:\n" + "\n".join(error_details)
-                    if hasattr(tool_input_model, 'model_fields'):
-                        required_fields = [name for name, field in tool_input_model.model_fields.items() if field.is_required()]
+                        error_details.append(
+                            f"Field '{field_path}': {msg} ({error_type})"
+                        )
+
+                    actionable_error = (
+                        f"Tool '{function_name}' validation failed:\n"
+                        + "\n".join(error_details)
+                    )
+                    if hasattr(tool_input_model, "model_fields"):
+                        required_fields = [
+                            name
+                            for name, field in tool_input_model.model_fields.items()
+                            if field.is_required()
+                        ]
                         if required_fields:
-                            actionable_error += f"\n\nRequired fields: {', '.join(required_fields)}"
-                    
+                            actionable_error += (
+                                f"\n\nRequired fields: {', '.join(required_fields)}"
+                            )
+
                     messages.append(
                         cast(
                             ChatCompletionToolMessageParam,
@@ -767,6 +869,7 @@ class QXLLMAgent:
                 error_msg = f"Error preparing tool call '{function_name}': {e}"
                 logger.error(error_msg, exc_info=True)
                 from rich.console import Console
+
                 Console().print(f"[red]{error_msg}[/red]")
                 messages.append(
                     cast(
@@ -785,17 +888,17 @@ class QXLLMAgent:
             async def run_tool_with_timeout(task_info):
                 try:
                     return await asyncio.wait_for(
-                        task_info["coroutine"], 
-                        timeout=30.0  # 30 second timeout per tool
+                        task_info["coroutine"],
+                        timeout=30.0,  # 30 second timeout per tool
                     )
                 except asyncio.TimeoutError:
                     error_msg = f"Tool '{task_info['function_name']}' timed out after 30 seconds"
                     logger.error(error_msg)
                     return Exception(error_msg)
-            
+
             results = await asyncio.gather(
-                *[run_tool_with_timeout(task) for task in tool_tasks], 
-                return_exceptions=True
+                *[run_tool_with_timeout(task) for task in tool_tasks],
+                return_exceptions=True,
             )
 
             for i, result in enumerate(results):
@@ -807,6 +910,7 @@ class QXLLMAgent:
                     error_msg = f"Error executing tool '{function_name}': {result}"
                     logger.error(error_msg, exc_info=True)
                     from rich.console import Console
+
                     Console().print(f"[red]{error_msg}[/red]")
                     tool_output_content = f"Error: Tool execution failed: {result}. This might be due to an internal tool error or an unexpected argument type."
                 else:
@@ -820,11 +924,13 @@ class QXLLMAgent:
                     "tool_call_id": tool_call_id,
                     "content": tool_output_content,
                 }
-                
+
                 # Log tool response if QX_LOG_SENT is set (since we're sending it to the model)
                 if os.getenv("QX_LOG_SENT"):
-                    logger.info(f"Sending tool response to LLM:\\n{json.dumps(tool_message, indent=2)}")
-                
+                    logger.info(
+                        f"Sending tool response to LLM:\\n{json.dumps(tool_message, indent=2)}"
+                    )
+
                 messages.append(
                     cast(
                         ChatCompletionToolMessageParam,
@@ -836,7 +942,7 @@ class QXLLMAgent:
         # The model needs to generate a response based on the tool outputs
         # We pass a special marker that won't be added to messages but triggers response generation
         return await self.run("__CONTINUE_AFTER_TOOLS__", messages, recursion_depth + 1)
-    
+
     async def cleanup(self):
         """Clean up resources like HTTP client."""
         if self._http_client:

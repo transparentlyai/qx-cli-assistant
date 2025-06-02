@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import subprocess
 import sys
@@ -23,10 +22,7 @@ from qx.core.history_utils import parse_history_for_fzf
 from qx.core.llm import QXLLMAgent, query_llm
 from qx.core.paths import QX_HISTORY_FILE
 from qx.core.session_manager import clean_old_sessions, save_session
-from qx.core.user_prompts import (  # Import the flag and lock
-    _approve_all_active,
-    _approve_all_lock,
-)
+from qx.core.user_prompts import _approve_all_lock  # Import the flag and lock
 
 logger = logging.getLogger("qx")
 
@@ -56,7 +52,7 @@ def get_bottom_toolbar(qx_history: QXHistory):
         ("class:bottom-toolbar.key", " Ctrl+R "),
         ("class:bottom-toolbar.text", "fzf search  "),
         ("class:bottom-toolbar.key", " Alt+Enter "),
-        ("class:bottom-toolbar.text", f"toggle mode  "),
+        ("class:bottom-toolbar.text", "toggle mode  "),
         ("class:bottom-toolbar.key", " Tab "),
         ("class:bottom-toolbar.text", "complete  "),
         ("class:bottom-toolbar.key", " Shift+Tab "),  # Add Shift+Tab to toolbar
@@ -207,12 +203,12 @@ async def _run_inline_mode(
                         event.current_buffer.text = original
                         event.current_buffer.cursor_position = len(original)
                         break
-        except Exception as e:
+        except Exception:
             # Always try to restore terminal state on any error
             try:
                 event.app.invalidate()
                 event.app.renderer.reset()
-            except:
+            except Exception:
                 pass
 
     @bindings.add("escape", "enter")  # Alt+Enter
@@ -300,7 +296,6 @@ async def _run_inline_mode(
             # Check if this was a mode toggle
             if result == "__TOGGLE_MULTILINE__":
                 # Clear the previous prompt line before showing multiline prompt
-                console = Console()
                 try:
                     # Move cursor up and clear the line using Rich console
                     print("\033[1A\r\033[K", end="", flush=True)

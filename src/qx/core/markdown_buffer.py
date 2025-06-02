@@ -1,4 +1,3 @@
-import asyncio
 import re
 import threading
 from typing import Optional
@@ -14,12 +13,13 @@ class MarkdownStreamBuffer:
     """
 
     def __init__(
-        self, max_buffer_size: int = 65000,
-        max_list_buffer_size: int = 8000
+        self, max_buffer_size: int = 65000, max_list_buffer_size: int = 8000
     ):  # Increased default max_buffer_size
         self.buffer: str = ""
         self.max_buffer_size: int = max_buffer_size
-        self.max_list_buffer_size: int = max_list_buffer_size  # Separate limit for lists
+        self.max_list_buffer_size: int = (
+            max_list_buffer_size  # Separate limit for lists
+        )
         self.md_parser: MarkdownIt = MarkdownIt()
         self._has_rendered_once: bool = False  # Track if we've rendered anything yet
         # Common Markdown block-level elements that have distinct open/close tokens
@@ -53,15 +53,15 @@ class MarkdownStreamBuffer:
         """
         if not content:  # Guard against empty content
             return None
-        
+
         with self._lock:
             self.buffer += content
 
             if self._should_render():
                 content_to_render = self.buffer  # Capture the buffer content
-                self.buffer = ""                  # Always clear the buffer
-                self._has_rendered_once = True    # Always mark as rendered attempt
-                
+                self.buffer = ""  # Always clear the buffer
+                self._has_rendered_once = True  # Always mark as rendered attempt
+
                 # Always return the content unit identified by _should_render.
                 # The downstream Markdown renderer will handle its significance.
                 return content_to_render
@@ -81,7 +81,6 @@ class MarkdownStreamBuffer:
             self.buffer = ""
             return content_to_render
 
-
     def _is_in_open_fenced_code_block(self) -> bool:
         """Checks if the buffer is currently inside an open fenced code block."""
         return self.buffer.count("```") % 2 == 1
@@ -97,12 +96,12 @@ class MarkdownStreamBuffer:
         if self._is_in_list_context() and len(self.buffer) > self.max_list_buffer_size:
             # For lists, use the smaller threshold to ensure more frequent rendering
             # But still check if we're at a safe breakpoint (end of line)
-            if self.buffer.endswith('\n'):
+            if self.buffer.endswith("\n"):
                 return True
             # If not at line end but way over limit, force render
             elif len(self.buffer) > self.max_list_buffer_size * 1.5:
                 return True
-        
+
         # 2. Emergency fallback: render if buffer gets too large, but respect markdown boundaries
         if len(self.buffer) > self.max_buffer_size:
             # If we're inside a fenced code block, NEVER force render
@@ -148,7 +147,7 @@ class MarkdownStreamBuffer:
                         # print("DEBUG: Rendering, double newline and not inside construct.")
                         return True
                 # If there's non-whitespace content after \n\n, check if it's a list starting
-                elif re.match(r'^\s*[-*+]\s+', content_after_nnd.lstrip()):
+                elif re.match(r"^\s*[-*+]\s+", content_after_nnd.lstrip()):
                     # Don't render yet - new list is starting after paragraph break
                     return False
                 # Let other rules decide for other content
@@ -177,7 +176,7 @@ class MarkdownStreamBuffer:
             if self._is_in_list_context():
                 # print("DEBUG: Not rendering on sentence end - in list context.")
                 return False
-                
+
             # Additional safety check: ensure we have enough content to render meaningfully
             # This helps prevent rendering very short content that might be incomplete
             # BUT: Don't apply this check at the very beginning of the stream
@@ -185,10 +184,10 @@ class MarkdownStreamBuffer:
             stripped_buffer = self.buffer.strip()
             # Only apply minimum length check if we've already rendered something
             # (i.e., this isn't the first chunk of content)
-            if hasattr(self, '_has_rendered_once') and self._has_rendered_once:
+            if hasattr(self, "_has_rendered_once") and self._has_rendered_once:
                 if len(stripped_buffer) < 3:  # Very short content, might be incomplete
                     return False
-                
+
             # print("DEBUG: Rendering, sentence end with newline.")
             return True
 
@@ -227,7 +226,7 @@ class MarkdownStreamBuffer:
         try:
             # Parsing the raw buffer. `render()` is not needed here.
             tokens = self.md_parser.parse(self.buffer)
-        except Exception as e:
+        except Exception:
             # If parsing fails (e.g., due to highly malformed Markdown mid-stream),
             # it's safer to assume we are in an unstable/incomplete state.
             # However, for very short content at the beginning, we might be too conservative
@@ -371,39 +370,44 @@ class MarkdownStreamBuffer:
         """
         if not self.buffer:
             return False
-        
-        lines = self.buffer.split('\n')
-        
+
+        lines = self.buffer.split("\n")
+
         # Look for list markers in recent lines
-        list_marker_pattern = r'^\s*([-*+]|\d+\.)\s+'
-        
+        list_marker_pattern = r"^\s*([-*+]|\d+\.)\s+"
+
         # Check if any of the last few lines contain list markers
-        lines_to_check = lines[-5:] if len(lines) >= 5 else lines  # Check more lines for nested lists
+        lines_to_check = (
+            lines[-5:] if len(lines) >= 5 else lines
+        )  # Check more lines for nested lists
         has_list_markers = any(
-            re.match(list_marker_pattern, line) 
-            for line in lines_to_check if line.strip()
+            re.match(list_marker_pattern, line)
+            for line in lines_to_check
+            if line.strip()
         )
-        
+
         if not has_list_markers:
             return False
-        
+
         # If we have list markers and the buffer doesn't end with double newline,
         # we're likely still in list context
-        if not self.buffer.rstrip('\n').endswith('\n\n'):
+        if not self.buffer.rstrip("\n").endswith("\n\n"):
             return True
-        
+
         # Additional check: if the last non-empty line is indented (likely nested list continuation)
         # we're still in list context even after a single newline
         non_empty_lines = [line for line in lines if line.strip()]
         if non_empty_lines:
             last_line = non_empty_lines[-1]
-            if last_line.startswith('  '):  # Indented, likely nested list
+            if last_line.startswith("  "):  # Indented, likely nested list
                 return True
-        
+
         return False
 
 
-def create_markdown_buffer(max_size: int = 65000, max_list_size: int = 8000) -> MarkdownStreamBuffer:
+def create_markdown_buffer(
+    max_size: int = 65000, max_list_size: int = 8000
+) -> MarkdownStreamBuffer:
     """
     Factory function to create a new MarkdownStreamBuffer.
 

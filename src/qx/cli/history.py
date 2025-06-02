@@ -2,17 +2,18 @@ import logging
 from pathlib import Path
 from datetime import datetime
 
-from prompt_toolkit.history import History # Import History
+from prompt_toolkit.history import History  # Import History
 
 from qx.core.paths import QX_HISTORY_FILE
 
 logger = logging.getLogger("qx")
 
-class QXHistory(History): # Inherit from History
+
+class QXHistory(History):  # Inherit from History
     """Custom history class that reads/writes QX's specific history file format."""
 
     def __init__(self, history_file_path: Path = QX_HISTORY_FILE):
-        super().__init__() # Call parent constructor
+        super().__init__()  # Call parent constructor
         self.history_file_path = history_file_path
         self._loaded_strings = []
         self.load_history()
@@ -36,12 +37,8 @@ class QXHistory(History): # Inherit from History
                         history_entries.append("\n".join(current_command_lines))
                         current_command_lines = []
                 elif stripped_line.startswith("+"):
-                    current_command_lines.append(
-                        stripped_line[1:]
-                    )
-                elif (
-                    not stripped_line and current_command_lines
-                ):
+                    current_command_lines.append(stripped_line[1:])
+                elif not stripped_line and current_command_lines:
                     history_entries.append("\n".join(current_command_lines))
                     current_command_lines = []
 
@@ -56,7 +53,9 @@ class QXHistory(History): # Inherit from History
     def append_string(self, command: str):
         """Add a new command to history (prompt_toolkit interface)."""
         command = command.strip()
-        if command and (not self._loaded_strings or self._loaded_strings[-1] != command):
+        if command and (
+            not self._loaded_strings or self._loaded_strings[-1] != command
+        ):
             self._loaded_strings.append(command)
 
     def store_string(self, command: str):

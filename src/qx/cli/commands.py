@@ -1,8 +1,6 @@
 import os
-import sys
 import logging
-import asyncio
-from typing import Any, List, Optional
+from typing import List, Optional
 
 from rich.console import Console
 from openai.types.chat import ChatCompletionMessageParam
@@ -14,16 +12,17 @@ import qx.core.user_prompts
 
 logger = logging.getLogger("qx")
 
+
 def _handle_model_command(agent: QXLLMAgent):
     """
     Displays information about the current LLM model configuration.
     """
     rich_console = Console()
 
-    model_info_content = f"[bold]Current LLM Model Configuration:[/bold]\n"
+    model_info_content = "[bold]Current LLM Model Configuration:[/bold]\n"
     model_info_content += f"  Model Name: [green]{agent.model_name}[/green]\n"
     model_info_content += (
-        f"  Provider: [green]OpenRouter (https://openrouter.ai/api/v1)[/green]\n"
+        "  Provider: [green]OpenRouter (https://openrouter.ai/api/v1)[/green]\n"
     )
 
     temperature_val = agent.temperature
@@ -35,6 +34,7 @@ def _handle_model_command(agent: QXLLMAgent):
     model_info_content += f"  Reasoning Effort: [green]{reasoning_effort_val if reasoning_effort_val else 'None'}[/green]\n"
 
     rich_console.print(model_info_content)
+
 
 async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
     """Handle slash commands in inline mode."""
@@ -86,11 +86,14 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
             "  • [cyan]Fuzzy history search[/cyan] with Ctrl+R (using fzf)"
         )
         rich_console.print("  • [cyan]Auto-suggestions[/cyan] from history")
-        rich_console.print("  • [cyan]Shift+Tab[/cyan]: Toggle 'Approve All' mode") # Added Shift+Tab feature
+        rich_console.print(
+            "  • [cyan]Shift+Tab[/cyan]: Toggle 'Approve All' mode"
+        )  # Added Shift+Tab feature
         rich_console.print("  • [cyan]Ctrl+C or Ctrl+D[/cyan] to exit")
     else:
         rich_console.print(f"[red]Unknown command: {command_name}[/red]")
         rich_console.print("Available commands: /model, /reset, /approve-all, /help")
+
 
 async def handle_command(
     command_input: str,
@@ -101,7 +104,6 @@ async def handle_command(
     """Handle slash commands."""
     parts = command_input.strip().split(maxsplit=1)
     command_name = parts[0].lower()
-    command_args = parts[1].strip() if len(parts) > 1 else ""
 
     if command_name == "/model":
         _handle_model_command(llm_agent)
@@ -110,15 +112,17 @@ async def handle_command(
         reset_session()
         # Re-initialize agent after reset, as system prompt might change
         from qx.core.constants import DEFAULT_MODEL
+
         model_name_from_env = os.environ.get("QX_MODEL_NAME", DEFAULT_MODEL)
         llm_agent = initialize_llm_agent(
             model_name_str=model_name_from_env,
             console=None,
             mcp_manager=config_manager.mcp_manager,
-            enable_streaming=os.environ.get("QX_ENABLE_STREAMING", "true").lower() == "true",
+            enable_streaming=os.environ.get("QX_ENABLE_STREAMING", "true").lower()
+            == "true",
         )
         Console().print("[info]Session reset, system prompt reloaded.[/info]")
-        return None # Clear history after reset
+        return None  # Clear history after reset
     else:
         Console().print(f"[red]Unknown command: {command_name}[/red]")
         Console().print("Available commands: /model, /reset")

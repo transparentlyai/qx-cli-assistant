@@ -9,7 +9,12 @@ from dotenv import load_dotenv
 import anyio
 
 from qx.core.constants import DEFAULT_TREE_IGNORE_PATTERNS
-from qx.core.paths import USER_HOME_DIR, _find_project_root, QX_CONFIG_DIR, QX_SESSIONS_DIR
+from qx.core.paths import (
+    USER_HOME_DIR,
+    _find_project_root,
+    QX_CONFIG_DIR,
+    QX_SESSIONS_DIR,
+)
 from qx.core.mcp_manager import MCPManager
 
 # Define minimal config example and locations
@@ -31,7 +36,9 @@ Possible configuration file locations (in order of priority, lowest to highest):
 1. /etc/qx/qx.conf
 2. {user_config_path}
 3. <project-directory>/.Q/qx.conf
-""".format(user_config_path=QX_CONFIG_DIR / "qx.conf")
+""".format(
+    user_config_path=QX_CONFIG_DIR / "qx.conf"
+)
 
 
 class ConfigManager:
@@ -50,7 +57,7 @@ class ConfigManager:
         # Get all new environment variables that were loaded by dotenv
         current_env = dict(os.environ)
         new_env_vars = {k: v for k, v in current_env.items() if k not in original_env}
-        
+
         # Explicitly ensure all newly loaded variables are exported to subprocesses
         for var, value in new_env_vars.items():
             os.environ[var] = value
@@ -64,7 +71,14 @@ class ConfigManager:
 
         # Add default ignore patterns, ensuring .Q is never ignored
         for p in DEFAULT_TREE_IGNORE_PATTERNS:
-            if not (p == ".Q" or p == "/.Q" or p == ".Q/" or p == "/.Q/" or p.startswith(".Q/") or p.startswith("/.Q/")):
+            if not (
+                p == ".Q"
+                or p == "/.Q"
+                or p == ".Q/"
+                or p == "/.Q/"
+                or p.startswith(".Q/")
+                or p.startswith("/.Q/")
+            ):
                 ignore_patterns.append(p)
 
         # Add patterns from .gitignore, ensuring .Q is never ignored
@@ -75,11 +89,21 @@ class ConfigManager:
                     for line in f:
                         line = line.strip()
                         if line and not line.startswith("#"):
-                            if not (line == ".Q" or line == "/.Q" or line == ".Q/" or line == "/.Q/" or line.startswith(".Q/") or line.startswith("/.Q/")):
+                            if not (
+                                line == ".Q"
+                                or line == "/.Q"
+                                or line == ".Q/"
+                                or line == "/.Q/"
+                                or line.startswith(".Q/")
+                                or line.startswith("/.Q/")
+                            ):
                                 ignore_patterns.append(line)
             except Exception as e:
                 from rich.console import Console
-                Console().print(f"[yellow]Warning: Could not read or parse .gitignore file {gitignore_path}: {e}[/yellow]")
+
+                Console().print(
+                    f"[yellow]Warning: Could not read or parse .gitignore file {gitignore_path}: {e}[/yellow]"
+                )
 
         # Deduplicate the final list
         return list(set(ignore_patterns))
@@ -111,8 +135,11 @@ class ConfigManager:
         # Check for minimal required variables
         if not os.getenv("QX_MODEL_NAME") or not os.getenv("OPENROUTER_API_KEY"):
             from rich.console import Console
+
             rich_console = Console()
-            rich_console.print("[red]Error: Missing essential configuration variables.[/red]")
+            rich_console.print(
+                "[red]Error: Missing essential configuration variables.[/red]"
+            )
             rich_console.print(MINIMAL_CONFIG_EXAMPLE)
             rich_console.print(CONFIG_LOCATIONS)
             sys.exit(1)
@@ -126,7 +153,9 @@ class ConfigManager:
             try:
                 qx_user_context = user_context_path.read_text(encoding="utf-8")
             except Exception as e:
-                Console().print(f"[yellow]Warning: Could not read user context file {user_context_path}: {e}[/yellow]")
+                Console().print(
+                    f"[yellow]Warning: Could not read user context file {user_context_path}: {e}[/yellow]"
+                )
         os.environ["QX_USER_CONTEXT"] = qx_user_context
 
         # Initialize project-specific variables
@@ -138,9 +167,13 @@ class ConfigManager:
             project_context_file_path = project_root / ".Q" / "project.md"
             if project_context_file_path.is_file():
                 try:
-                    qx_project_context = project_context_file_path.read_text(encoding="utf-8")
+                    qx_project_context = project_context_file_path.read_text(
+                        encoding="utf-8"
+                    )
                 except Exception as e:
-                    Console().print(f"[yellow]Warning: Could not read project context file {project_context_file_path}: {e}[/yellow]")
+                    Console().print(
+                        f"[yellow]Warning: Could not read project context file {project_context_file_path}: {e}[/yellow]"
+                    )
 
             # Load Project Files Tree using rg
             if cwd == USER_HOME_DIR:
@@ -150,7 +183,9 @@ class ConfigManager:
 
                 temp_ignore_file_path = None
                 try:
-                    with tempfile.NamedTemporaryFile(mode='w', delete=False, encoding='utf-8') as temp_ignore_file:
+                    with tempfile.NamedTemporaryFile(
+                        mode="w", delete=False, encoding="utf-8"
+                    ) as temp_ignore_file:
                         temp_ignore_file.write("\n".join(ignore_patterns))
                     temp_ignore_file_path = Path(temp_ignore_file.name)
 
@@ -158,9 +193,12 @@ class ConfigManager:
                         "rg",
                         "--files",
                         "--hidden",
-                        "--no-ignore-vcs", # Crucial: tells rg to ignore .gitignore and other VCS ignore files
-                        "--ignore-file", str(temp_ignore_file_path),
-                        str(project_root) # Explicitly pass project_root as the search path
+                        "--no-ignore-vcs",  # Crucial: tells rg to ignore .gitignore and other VCS ignore files
+                        "--ignore-file",
+                        str(temp_ignore_file_path),
+                        str(
+                            project_root
+                        ),  # Explicitly pass project_root as the search path
                     ]
 
                     process = subprocess.run(
@@ -178,10 +216,14 @@ class ConfigManager:
                         if process.stdout.strip():
                             qx_project_files = process.stdout.strip()
                         else:
-                            Console().print(f"[yellow]Warning: rg command returned non-zero exit code {process.returncode}. Stderr: {process.stderr.strip()}[/yellow]")
+                            Console().print(
+                                f"[yellow]Warning: rg command returned non-zero exit code {process.returncode}. Stderr: {process.stderr.strip()}[/yellow]"
+                            )
                             qx_project_files = f"Error generating project tree (code {process.returncode}): {process.stderr.strip()}"
                 except FileNotFoundError:
-                    Console().print("[red]Error: 'rg' command not found. Please ensure it is installed and in PATH.[/red]")
+                    Console().print(
+                        "[red]Error: 'rg' command not found. Please ensure it is installed and in PATH.[/red]"
+                    )
                     qx_project_files = "Error: 'rg' command not found. Please ensure it is installed and in PATH."
                 except Exception as e:
                     Console().print(f"[red]Error executing 'rg' command: {e}[/red]")
@@ -200,5 +242,9 @@ class ConfigManager:
 
 
 if __name__ == "__main__":
-    print("This module is now part of a class structure. Direct execution for testing needs update.")
-    print("Please run tests via the main application entry point or a dedicated test suite.")
+    print(
+        "This module is now part of a class structure. Direct execution for testing needs update."
+    )
+    print(
+        "Please run tests via the main application entry point or a dedicated test suite."
+    )

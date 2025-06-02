@@ -7,7 +7,6 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
 from pydantic import (  # Import BaseModel and Field for schema extraction
     BaseModel,
-    Field,
 )
 
 logger = logging.getLogger(__name__)
@@ -48,6 +47,11 @@ class PluginManager:
             logger.error(f"Plugin package '{plugin_package_path}' not found.")
             return loaded_tools
 
+        if package.__file__ is None:
+            logger.error(
+                f"Plugin package '{plugin_package_path}' has no __file__ attribute."
+            )
+            return loaded_tools
         plugin_module_path = Path(package.__file__).parent
 
         for _, module_name, _ in pkgutil.iter_modules([str(plugin_module_path)]):
@@ -120,4 +124,3 @@ class PluginManager:
             logger.warning(f"No plugins found in '{plugin_package_path}'.")
 
         return loaded_tools
-

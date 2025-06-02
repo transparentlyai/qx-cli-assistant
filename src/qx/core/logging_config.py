@@ -3,12 +3,13 @@ import os
 import sys
 import traceback
 from pathlib import Path
-from typing import Optional # Added this import
+from typing import Optional  # Added this import
 
 logger = logging.getLogger("qx")
 
 # Global variable to hold the temporary stream handler
 temp_stream_handler: Optional[logging.Handler] = None
+
 
 def configure_logging():
     """
@@ -37,7 +38,7 @@ def configure_logging():
     if log_file_path:
         log_file = Path(log_file_path)
         log_file.parent.mkdir(parents=True, exist_ok=True)
-        
+
         file_handler = logging.FileHandler(log_file)
         file_handler.setFormatter(
             logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -66,18 +67,18 @@ def configure_logging():
         httpx_logger = logging.getLogger("httpx")
         httpx_logger.setLevel(logging.DEBUG)
         httpx_logger.propagate = True
-        
+
         # Enable openai debug logging
         openai_logger = logging.getLogger("openai")
         openai_logger.setLevel(logging.DEBUG)
         openai_logger.propagate = True
-        
+
         # Enable specific httpx sub-loggers that handle HTTP traffic
         for logger_name in ["httpx._client", "httpx._trace"]:
             sub_logger = logging.getLogger(logger_name)
             sub_logger.setLevel(logging.DEBUG)
             sub_logger.propagate = True
-        
+
         # Set environment variable to enable httpx debug mode
         os.environ["HTTPX_LOG_LEVEL"] = "debug"
 
@@ -93,9 +94,9 @@ def configure_logging():
         # Also write to file directly in case logger fails (only if QX_LOG_FILE is set)
         if log_file_path:
             with open(log_file, "a") as f:
-                f.write(f"\n=== UNCAUGHT EXCEPTION ===\n")
+                f.write("\n=== UNCAUGHT EXCEPTION ===\n")
                 traceback.print_exception(exc_type, exc_value, exc_traceback, file=f)
-                f.write(f"=== END EXCEPTION ===\n\n")
+                f.write("=== END EXCEPTION ===\n\n")
 
     sys.excepthook = handle_exception
 
@@ -105,6 +106,7 @@ def configure_logging():
     if log_file_path:
         logger.debug(f"Logging to file: {log_file}")
     logger.debug("Global exception handler installed")
+
 
 def remove_temp_stream_handler():
     global temp_stream_handler

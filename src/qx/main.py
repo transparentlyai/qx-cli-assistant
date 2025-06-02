@@ -40,7 +40,7 @@ async def _async_main(
         async with anyio.create_task_group() as tg:
             config_manager = ConfigManager(None, parent_task_group=tg)
             config_manager.load_configurations()
-            
+
             # Configure logging after config is loaded so QX_LOG_LEVEL is available
             configure_logging()
 
