@@ -28,21 +28,21 @@ def configure_logging():
     }
     effective_log_level = LOG_LEVELS.get(log_level_name, logging.ERROR)
 
-    # Create log file in ~/tmp directory
-    log_dir = Path.home() / "tmp"
-    log_dir.mkdir(exist_ok=True)
-    log_file = log_dir / "qx.log"
-
     # Clear existing handlers to prevent duplicates on re-configuration
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
 
-    # Add file handler
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setFormatter(
-        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    )
-    logger.addHandler(file_handler)
+    # Add file handler if QX_LOG_FILE is set
+    log_file_path = os.getenv("QX_LOG_FILE")
+    if log_file_path:
+        log_file = Path(log_file_path)
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setFormatter(
+            logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        )
+        logger.addHandler(file_handler)
 
     # Add a temporary StreamHandler for INFO and above, to be removed later
     temp_stream_handler = logging.StreamHandler()
@@ -60,6 +60,27 @@ def configure_logging():
 
     logger.setLevel(effective_log_level)
 
+    # Enable debug logging for OpenRouter/OpenAI HTTP requests
+    if effective_log_level <= logging.DEBUG:
+        # Enable httpx debug logging at module level
+        httpx_logger = logging.getLogger("httpx")
+        httpx_logger.setLevel(logging.DEBUG)
+        httpx_logger.propagate = True
+        
+        # Enable openai debug logging
+        openai_logger = logging.getLogger("openai")
+        openai_logger.setLevel(logging.DEBUG)
+        openai_logger.propagate = True
+        
+        # Enable specific httpx sub-loggers that handle HTTP traffic
+        for logger_name in ["httpx._client", "httpx._trace"]:
+            sub_logger = logging.getLogger(logger_name)
+            sub_logger.setLevel(logging.DEBUG)
+            sub_logger.propagate = True
+        
+        # Set environment variable to enable httpx debug mode
+        os.environ["HTTPX_LOG_LEVEL"] = "debug"
+
     # Set up global exception handler
     def handle_exception(exc_type, exc_value, exc_traceback):
         if issubclass(exc_type, KeyboardInterrupt):
@@ -69,18 +90,20 @@ def configure_logging():
         logger.critical(
             "Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback)
         )
-        # Also write to file directly in case logger fails
-        with open(log_file, "a") as f:
-            f.write(f"\n=== UNCAUGHT EXCEPTION ===\n")
-            traceback.print_exception(exc_type, exc_value, exc_traceback, file=f)
-            f.write(f"=== END EXCEPTION ===\n\n")
+        # Also write to file directly in case logger fails (only if QX_LOG_FILE is set)
+        if log_file_path:
+            with open(log_file, "a") as f:
+                f.write(f"\n=== UNCAUGHT EXCEPTION ===\n")
+                traceback.print_exception(exc_type, exc_value, exc_traceback, file=f)
+                f.write(f"=== END EXCEPTION ===\n\n")
 
     sys.excepthook = handle_exception
 
     logger.debug(
         f"QX application log level set to: {logging.getLevelName(effective_log_level)} ({effective_log_level})"
     )
-    logger.debug(f"Logging to file: {log_file}")
+    if log_file_path:
+        logger.debug(f"Logging to file: {log_file}")
     logger.debug("Global exception handler installed")
 
 def remove_temp_stream_handler():
