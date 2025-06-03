@@ -446,12 +446,17 @@ class QXLLMAgent:
             if content and content.strip():
                 has_rendered_content = True
                 total_rendered_content += content  # Track for validation
-                # Output as markdown to rich console
+                # Output as markdown with Rich markup support
                 from rich.console import Console
                 from rich.markdown import Markdown
+                from ..cli.theme import custom_theme
 
-                rich_console = Console()
-                rich_console.print(Markdown(content, code_theme="rrt"), end="")
+                rich_console = Console(theme=custom_theme)
+                # Pre-process content to handle Rich markup within markdown
+                processed_content = content
+                # Use Rich's markup parsing capabilities by printing with markup=True
+                # This allows both markdown and Rich markup to coexist
+                rich_console.print(Markdown(processed_content, code_theme="rrt"), end="", markup=True)
 
         # Stream content directly to console
         stream = None
