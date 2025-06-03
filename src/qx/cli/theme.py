@@ -18,6 +18,8 @@ custom_theme = Theme(
         "error": "bold red",
         "debug": "dim white",
         "success": "bold green",
+        "attention": "bold yellow",
+        "critical": "bold bright_red",
         # UI elements
         "app.title": "bold white on blue",
         "app.header": "bold yellow",
