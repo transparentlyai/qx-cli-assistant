@@ -456,7 +456,9 @@ class QXLLMAgent:
                 processed_content = content
                 # Use Rich's markup parsing capabilities by printing with markup=True
                 # This allows both markdown and Rich markup to coexist
-                rich_console.print(Markdown(processed_content, code_theme="rrt"), end="", markup=True)
+                rich_console.print(
+                    Markdown(processed_content, code_theme="rrt"), end="", markup=True
+                )
 
         # Stream content directly to console
         stream = None

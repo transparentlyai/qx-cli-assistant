@@ -62,9 +62,20 @@ async def save_session_async(message_history: List[ChatCompletionMessageParam]):
         return
 
     # Convert ChatCompletionMessageParam objects to dictionaries for JSON serialization
-    serializable_history = [
-        dict(msg) if hasattr(msg, "items") else msg for msg in message_history
-    ]
+    serializable_history = []
+    for msg in message_history:
+        if hasattr(msg, "model_dump") and callable(getattr(msg, "model_dump")):
+            # Pydantic model with model_dump method
+            serializable_history.append(msg.model_dump())  # type: ignore
+        elif hasattr(msg, "__dict__"):
+            # Object with __dict__ attribute
+            serializable_history.append(msg.__dict__)
+        elif hasattr(msg, "items"):
+            # Dict-like object
+            serializable_history.append(dict(msg))
+        else:
+            # Already serializable (dict, list, etc.)
+            serializable_history.append(msg)
 
     try:
         # Use asyncio.to_thread for file I/O to avoid blocking
