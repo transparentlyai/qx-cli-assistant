@@ -205,7 +205,7 @@ async def write_file_tool(  # Made async
     )  # Start with this for checks and prompts
 
     console.print(
-        f"[info]Preparing to write to file:[/info] [blue]'{path_to_consider}'[/blue]"
+        f"[info]Preparing to write to file:[/info] [info]'{path_to_consider}'[/]"
     )
 
     # Preliminary security check
@@ -225,7 +225,7 @@ async def write_file_tool(  # Made async
             f"Write access denied by policy (plugin pre-check) for path: {path_to_consider}"
         )
         console.print(
-            f"[red]Access denied by policy for path:[/red] [yellow]'{path_to_consider}'[/yellow]"
+            f"[error]Access denied by policy for path:[/] [warning]'{path_to_consider}'[/]"
         )
         return WriteFilePluginOutput(
             path=path_to_consider, success=False, message=err_msg
@@ -250,7 +250,7 @@ async def write_file_tool(  # Made async
             decision_status == "approved"
         ):  # Only print if not session_approved (which prints its own message)
             console.print(
-                f"[info]Proceeding to write to:[/info] [blue]'{path_to_write}'[/blue]"
+                f"[info]Proceeding to write to:[/info] [info]'{path_to_write}'[/]"
             )
     else:  # denied or cancelled
         error_message = (
@@ -267,14 +267,14 @@ async def write_file_tool(  # Made async
 
     if error_from_impl:
         console.print(
-            f"[error]Failed to write to '{path_to_write}':[/error] [red]{error_from_impl}[/red]"
+            f"[error]Failed to write to '{path_to_write}':[/error] [error]{error_from_impl}[/]"
         )
         return WriteFilePluginOutput(
             path=path_to_consider, success=False, message=error_from_impl
         )
     else:
         console.print(
-            f"[success]Successfully wrote to:[/success] [green]'{path_to_write}'[/green]"
+            f"[success]Successfully wrote to:[/success] [success]'{path_to_write}'[/]"
         )
         return WriteFilePluginOutput(
             path=path_to_consider,

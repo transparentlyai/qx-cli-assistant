@@ -8,7 +8,7 @@ import anyio
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from pydantic import BaseModel, Field, create_model
-from rich.console import Console
+from qx.cli.theme import themed_console
 
 from qx.core.paths import (
     PROJECT_MCP_SERVERS_PATH,
@@ -66,10 +66,10 @@ class MCPManager:
                     logger.warning(
                         f"Failed to load MCP configurations from {path}: {e}"
                     )
-                    from rich.console import Console
+                    from qx.cli.theme import themed_console
 
-                    Console().print(
-                        f"[yellow]Warning:[/yellow] Failed to load MCP configurations from {path}: {e}"
+                    themed_console.print(
+                        f"[warning]Warning:[/] Failed to load MCP configurations from {path}: {e}"
                     )
             else:
                 logger.debug(f"MCP configuration file not found at {path}")
@@ -91,22 +91,22 @@ class MCPManager:
         Manages the connection within a dedicated AnyIO task.
         """
         if self._parent_task_group is None:
-            from rich.console import Console
+            from qx.cli.theme import themed_console
 
-            Console().print(
-                "[red]Error:[/red] MCPManager not initialized with a parent task group. Cannot connect."
+            themed_console.print(
+                "[error]Error:[/] MCPManager not initialized with a parent task group. Cannot connect."
             )
             return False
 
         if server_name not in self._available_servers:
-            Console().print(
-                f"[red]Error:[/red] MCP server '{server_name}' not found in configurations."
+            themed_console.print(
+                f"[error]Error:[/] MCP server '{server_name}' not found in configurations."
             )
             return False
 
         if server_name in self._active_tasks:  # Check _active_tasks for running session
-            Console().print(
-                f"[blue]Info:[/blue] MCP server '{server_name}' is already connected or connecting."
+            themed_console.print(
+                f"[info]Info:[/] MCP server '{server_name}' is already connected or connecting."
             )
             return True
 
@@ -173,16 +173,16 @@ class MCPManager:
                             f"Failed to convert or register tool '{mcp_tool.name}' from '{server_name}': {e}",
                             exc_info=True,
                         )
-                        Console().print(
-                            f"[red]Error:[/red] Failed to register tool '{mcp_tool.name}' from '{server_name}': {e}"
+                        themed_console.print(
+                            f"[error]Error:[/] Failed to register tool '{mcp_tool.name}' from '{server_name}': {e}"
                         )
 
                 self._tools_by_server[server_name] = (
                     new_tools  # Store tools for this server
                 )
 
-                Console().print(
-                    f"[green]Success:[/green] Connected to MCP server '{server_name}' and loaded {len(new_tools)} tools."
+                themed_console.print(
+                    f"[success]Success:[/] Connected to MCP server '{server_name}' and loaded {len(new_tools)} tools."
                 )
 
                 task_status.started()  # Signal successful startup to TaskGroup.start()
@@ -198,8 +198,8 @@ class MCPManager:
                     f"Error in MCP session management task for '{server_name}': {e}",
                     exc_info=True,
                 )
-                Console().print(
-                    f"[red]Error:[/red] MCP session for '{server_name}' encountered an error: {e}"
+                themed_console.print(
+                    f"[error]Error:[/] MCP session for '{server_name}' encountered an error: {e}"
                 )
                 # If task_status.started() hasn't been called, TaskGroup.start() will raise this.
                 # Otherwise, the TaskGroup's general error handling applies.
@@ -241,8 +241,8 @@ class MCPManager:
                 f"Failed to start MCP session task for '{server_name}' (during startup phase): {e}",
                 exc_info=True,
             )
-            Console().print(
-                f"[red]Error:[/red] Failed to start MCP session for '{server_name}': {e}"
+            themed_console.print(
+                f"[error]Error:[/] Failed to start MCP session for '{server_name}': {e}"
             )
             # _manage_session_task's finally block should handle cleanup of any partial registrations.
             return False
@@ -250,8 +250,8 @@ class MCPManager:
     async def disconnect_server(self, server_name: str) -> bool:
         """Disconnects from a specified MCP server."""
         if server_name not in self._active_tasks:
-            Console().print(
-                f"[blue]Info:[/blue] MCP server '{server_name}' is not currently connected or already disconnected."
+            themed_console.print(
+                f"[info]Info:[/] MCP server '{server_name}' is not currently connected or already disconnected."
             )
             return False
 
@@ -293,8 +293,8 @@ class MCPManager:
         # - _active_sessions[server_name]
         # - _tools_by_server[server_name]
 
-        Console().print(
-            f"[green]Success:[/green] Disconnection requested for MCP server '{server_name}'."
+        themed_console.print(
+            f"[success]Success:[/] Disconnection requested for MCP server '{server_name}'."
         )
         return True
 
@@ -355,7 +355,7 @@ class MCPManager:
 
         # Create the Pydantic model for tool arguments
         ToolInputModel = create_model(
-            f"{tool_name.capitalize().replace('_','')}Input",  # Sanitize name for Pydantic
+            f"{tool_name.capitalize().replace('_', '')}Input",  # Sanitize name for Pydantic
             __base__=BaseModel,  # Ensure it's a Pydantic model
             **fields,  # type: ignore
         )
@@ -375,7 +375,7 @@ class MCPManager:
                 error_msg = f"Error during MCP tool '{tool_name}' execution: {e}"
                 logger.error(error_msg, exc_info=True)
                 if console:  # Check if console is provided (it should be)
-                    console.print(f"[red]Error:[/red] {error_msg}")
+                    console.print(f"[error]Error:[/] {error_msg}")
                 raise  # Re-raise the exception to be handled by the caller
 
         wrapper_func.__name__ = tool_name  # Set for better introspection

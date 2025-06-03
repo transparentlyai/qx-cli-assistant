@@ -3,7 +3,7 @@ import sys
 import logging
 from typing import Optional
 
-from rich.console import Console
+from qx.cli.theme import themed_console
 
 from qx.core.llm import QXLLMAgent, initialize_llm_agent
 from qx.core.mcp_manager import MCPManager
@@ -20,8 +20,8 @@ async def initialize_agent_with_mcp(mcp_manager: MCPManager) -> QXLLMAgent:
     model_name_from_env = os.environ.get("QX_MODEL_NAME", DEFAULT_MODEL)
 
     if not model_name_from_env:
-        Console().print(
-            "[red]Critical Error:[/red] QX_MODEL_NAME environment variable not set. Please set it to an OpenRouter model string."
+        themed_console.print(
+            "[critical]Critical Error:[/] QX_MODEL_NAME environment variable not set. Please set it to an OpenRouter model string."
         )
         sys.exit(1)
 
@@ -39,8 +39,8 @@ async def initialize_agent_with_mcp(mcp_manager: MCPManager) -> QXLLMAgent:
     )
 
     if agent is None:
-        Console().print(
-            "[red]Critical Error:[/red] Failed to initialize LLM agent. Exiting."
+        themed_console.print(
+            "[critical]Critical Error:[/] Failed to initialize LLM agent. Exiting."
         )
         sys.exit(1)
     return agent

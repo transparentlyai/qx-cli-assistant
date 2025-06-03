@@ -79,7 +79,7 @@ async def web_fetch_tool(
     if not url_to_fetch:
         err_msg = "Error: Empty URL provided."
         logger.error(err_msg)
-        console.print(f"[red]{err_msg}[/red]")
+        console.print(f"[error]{err_msg}[/]")
         return WebFetchPluginOutput(
             url="", content=None, error=err_msg, status_code=None, truncated=False
         )
@@ -87,7 +87,7 @@ async def web_fetch_tool(
     if output_format not in ["markdown", "raw"]:
         err_msg = f"Error: Invalid format '{output_format}'. Supported formats are 'markdown' and 'raw'."
         logger.error(err_msg)
-        console.print(f"[red]{err_msg}[/red]")
+        console.print(f"[error]{err_msg}[/]")
         return WebFetchPluginOutput(
             url=url_to_fetch,
             content=None,
@@ -97,7 +97,7 @@ async def web_fetch_tool(
         )
 
     console.print(
-        f"[info]Requesting permission to fetch URL:[/info] [blue]'{url_to_fetch}'[/blue]"
+        f"[info]Requesting permission to fetch URL:[/info] [info]'{url_to_fetch}'[/]"
     )
     prompt_msg = f"Allow Qx to fetch content from URL: '{url_to_fetch}'?"
     decision_status, _ = await request_confirmation(
@@ -119,7 +119,7 @@ async def web_fetch_tool(
             truncated=False,
         )
 
-    console.print(f"[info]Fetching content from:[/info] [blue]'{url_to_fetch}'[/blue]")
+    console.print(f"[info]Fetching content from:[/info] [info]'{url_to_fetch}'[/]")
 
     try:
         # Use a simple HTTP client for now
@@ -158,7 +158,7 @@ async def web_fetch_tool(
                 f"Successfully fetched URL: {url_to_fetch} (Status: {response.status_code}, Truncated: {truncated})"
             )
             console.print(
-                f"[success]Successfully fetched URL:[/success] [green]{url_to_fetch}[/green] [dim](Status: {response.status_code})[/dim]"
+                f"[success]Successfully fetched URL:[/success] [success]{url_to_fetch}[/] [dim](Status: {response.status_code})[/dim]"
             )
             return WebFetchPluginOutput(
                 url=url_to_fetch,
@@ -171,7 +171,7 @@ async def web_fetch_tool(
     except httpx.TimeoutException:
         err_msg = f"Error: Request to {url_to_fetch} timed out after {REQUEST_TIMEOUT} seconds."
         logger.error(err_msg)
-        console.print(f"[red]{err_msg}[/red]")
+        console.print(f"[error]{err_msg}[/]")
         return WebFetchPluginOutput(
             url=url_to_fetch,
             content=None,
@@ -184,7 +184,7 @@ async def web_fetch_tool(
             f"Error: An HTTP request error occurred while fetching {url_to_fetch}: {e}"
         )
         logger.error(err_msg, exc_info=True)
-        console.print(f"[red]{err_msg}[/red]")
+        console.print(f"[error]{err_msg}[/]")
         return WebFetchPluginOutput(
             url=url_to_fetch,
             content=None,
@@ -195,7 +195,7 @@ async def web_fetch_tool(
     except httpx.HTTPStatusError as e:
         err_msg = f"Error: HTTP status error for {url_to_fetch}: {e.response.status_code} - {e.response.text[:200]}..."
         logger.error(err_msg, exc_info=True)
-        console.print(f"[red]{err_msg}[/red]")
+        console.print(f"[error]{err_msg}[/]")
         return WebFetchPluginOutput(
             url=url_to_fetch,
             content=None,
@@ -208,7 +208,7 @@ async def web_fetch_tool(
             f"Error: An unexpected error occurred while fetching {url_to_fetch}: {e}"
         )
         logger.error(err_msg, exc_info=True)
-        console.print(f"[red]{err_msg}[/red]")
+        console.print(f"[error]{err_msg}[/]")
         return WebFetchPluginOutput(
             url=url_to_fetch,
             content=None,

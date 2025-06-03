@@ -72,7 +72,7 @@ async def _ask_basic_confirmation(
             if user_input_lower == "c" and any(choice[0] == "c" for choice in choices):
                 return "c"
             console.print(
-                f"[red]Invalid choice. Please enter one of: {choices_str}[/red]"
+                f"[error]Invalid choice. Please enter one of: {choices_str}[/]"
             )
         except (EOFError, KeyboardInterrupt):
             logger.warning(
@@ -82,7 +82,7 @@ async def _ask_basic_confirmation(
             return "c"
         except Exception as e:
             logger.error(f"Error in confirmation prompt: {e}", exc_info=True)
-            console.print(f"[red]Error: {e}[/red]")
+            console.print(f"[error]Error: {e}[/]")
             return "c"
 
 
@@ -126,7 +126,7 @@ async def _request_confirmation_textual(
             has_prompt_text,
         )
         console.print(
-            "[yellow]⚠️ AUTO-APPROVED (UI limitation - app methods missing).[/yellow]"
+            "[warning]⚠️ AUTO-APPROVED (UI limitation - app methods missing).[/]"
         )
         return ("approved", current_value_for_modification)
 
@@ -163,7 +163,7 @@ async def _request_confirmation_textual(
             return ("denied", None)
     except Exception as e:
         logger.error(f"Error in confirmation: {e}", exc_info=True)
-        console.print(f"[red]Error during confirmation: {e}[/red]")
+        console.print(f"[error]Error during confirmation: {e}[/]")
         return ("cancelled", None)
 
 
@@ -217,7 +217,7 @@ async def _request_confirmation_terminal(
             return ("cancelled", None)
     except Exception as e:
         logger.error(f"Error in request_confirmation_terminal: {e}", exc_info=True)
-        console.print(f"[red]Error during confirmation: {e}[/red]")
+        console.print(f"[error]Error during confirmation: {e}[/]")
         return ("cancelled", None)
 
 

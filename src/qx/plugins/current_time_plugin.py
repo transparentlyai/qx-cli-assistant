@@ -57,7 +57,7 @@ async def get_current_time_tool(
             f"Current time requested. Returning: {formatted_time} {timezone_name}"
         )
         console.print(
-            f"[success]Current time retrieved:[/success] [green]{formatted_time} {timezone_name}[/green]"
+            f"[success]Current time retrieved:[/success] [success]{formatted_time} {timezone_name}[/]"
         )
         return CurrentTimePluginOutput(
             current_time=formatted_time, timezone=timezone_name
@@ -65,5 +65,5 @@ async def get_current_time_tool(
     except Exception as e:
         logger.error(f"Error getting current time: {e}", exc_info=True)
         err_msg = f"Error: Could not retrieve current time: {e}"
-        console.print(f"[red]{err_msg}[/red]")
+        console.print(f"[error]{err_msg}[/]")
         return CurrentTimePluginOutput(current_time=err_msg, timezone="Unknown")

@@ -157,7 +157,7 @@ async def read_file_tool(  # Made async
             f"Read access denied by policy (plugin pre-check) for path: {absolute_path_to_evaluate}"
         )
         console.print(
-            f"[red]Read denied by policy:[/red] [yellow]{absolute_path_to_evaluate}[/yellow]"
+            f"[error]Read denied by policy:[/] [warning]{absolute_path_to_evaluate}[/]"
         )
         return ReadFilePluginOutput(path=expanded_path_arg, content=None, error=err_msg)
 
@@ -207,7 +207,7 @@ async def read_file_tool(  # Made async
 
     # If all checks passed and confirmed (if needed):
     console.print(
-        f"[info]Reading file:[/info] [blue]{absolute_path_to_evaluate}[/blue]"
+        f"[info]Reading file:[/info] [info]{absolute_path_to_evaluate}[/]"
     )  # Use absolute path for clarity
 
     # Ensure the path passed to core logic is the fully resolved absolute path
@@ -218,7 +218,7 @@ async def read_file_tool(  # Made async
         )
         logger.error(err_msg)
         console.print(
-            f"[red]Failed to read '{expanded_path_arg}':[/red] Path is not a file or does not exist."
+            f"[error]Failed to read '{expanded_path_arg}':[/] Path is not a file or does not exist."
         )
         return ReadFilePluginOutput(path=expanded_path_arg, content=None, error=err_msg)
 
@@ -229,13 +229,13 @@ async def read_file_tool(  # Made async
     if error_from_core:
         # _read_file_core_logic already logs its specific errors.
         console.print(
-            f"[red]Failed to read '{expanded_path_arg}':[/red] [red]{error_from_core}[/red]"
+            f"[error]Failed to read '{expanded_path_arg}':[/] [error]{error_from_core}[/]"
         )
         return ReadFilePluginOutput(
             path=expanded_path_arg, content=content, error=error_from_core
         )  # content will be None
     else:
         console.print(
-            f"[success]Successfully read file:[/success] [green]{absolute_path_to_evaluate}[/green]"
+            f"[success]Successfully read file:[/success] [success]{absolute_path_to_evaluate}[/]"
         )  # Use absolute path for clarity
         return ReadFilePluginOutput(path=expanded_path_arg, content=content, error=None)
