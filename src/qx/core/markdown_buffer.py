@@ -294,7 +294,12 @@ class MarkdownStreamBuffer:
             # print("DEBUG_construct: List heuristic triggered.")
             return True
 
-        # Check 5: Unclosed HTML tags (basic check)
+        # Check 5: Unclosed Rich markup tags
+        # Check for Rich markup patterns like [style]text[/] or [style]text[/style]
+        if self._has_unclosed_rich_markup():
+            return True
+
+        # Check 6: Unclosed HTML tags (basic check)
         # This is a very simplified check. markdown-it-py handles HTML blocks/inline.
         # This is more for unterminated raw HTML that might be mid-stream.
         # Count open tags like <tag> or <tag attr=""> vs closing tags </tag>
@@ -323,6 +328,72 @@ class MarkdownStreamBuffer:
             # If it's raw HTML that markdown-it passes through as html_inline with nesting 0, this is a fallback.
 
         # print("DEBUG_construct: No specific construct detected as open.")
+        return False
+
+    def _has_unclosed_rich_markup(self) -> bool:
+        """
+        Check for unclosed Rich markup tags like [error]text without [/] or [/error]
+        Also detects partial tags like [err or incomplete closing tags like [/
+        """
+        if not self.buffer:
+            return False
+
+        # Pattern for Rich opening tags: [style] or [style.substyle] etc.
+        # Rich styles can contain alphanumeric, dots, underscores, hyphens
+        opening_tag_pattern = r"\[([a-zA-Z0-9_.\\-]+)\]"
+
+        # Pattern for Rich closing tags: [/] or [/style]
+        closing_tag_pattern = r"\[/([a-zA-Z0-9_.\\-]*)\]"
+
+        # Find all opening and closing tags
+        opening_tags = re.findall(opening_tag_pattern, self.buffer)
+        closing_tags = re.findall(closing_tag_pattern, self.buffer)
+
+        # Count generic closers [/] - these close any open tag
+        generic_closers = len([tag for tag in closing_tags if not tag])
+
+        # Count specific closers [/style] - these close specific tags
+        specific_closers = [tag for tag in closing_tags if tag]
+
+        # Check for incomplete opening tag at buffer end (like "[err" or "[error")
+        if self.buffer.rstrip().endswith("["):
+            return True
+
+        # Check for partial opening tag at buffer end
+        partial_tag_match = re.search(r"\[[a-zA-Z0-9_.\\-]*$", self.buffer)
+        if partial_tag_match:
+            # Buffer ends with something like "[err" or "[error.sub"
+            return True
+
+        # Check for incomplete closing tag at buffer end (like "[/" or "[/err")
+        partial_close_match = re.search(r"\[/[a-zA-Z0-9_.\\-]*$", self.buffer)
+        if partial_close_match:
+            # Buffer ends with something like "[/" or "[/err"
+            return True
+
+        # Check if there are unclosed tags
+        # Simple approach: total opening tags should equal total closing tags
+        total_opening = len(opening_tags)
+        total_closing = len(specific_closers) + generic_closers
+
+        if total_opening > total_closing:
+            # There are more opening tags than closing tags
+            return True
+
+        # More sophisticated check: validate specific tag matching
+        # For [style]...[/style] pairs, they should match
+        for specific_closer in specific_closers:
+            if specific_closer in opening_tags:
+                opening_tags.remove(specific_closer)
+            else:
+                # Closing tag without matching opening tag - malformed
+                return True
+
+        # Remaining opening tags should be closed by generic closers [/]
+        remaining_opening = len(opening_tags)
+        if remaining_opening > generic_closers:
+            return True
+
         return False
 
     def _is_in_list_heuristic(self, tokens: list[Token]) -> bool:
@@ -556,3 +627,21 @@ if __name__ == "__main__":
     b14 = create_markdown_buffer(max_size=50)
     stream14 = ["- Item 1\n", "- "]  # Just a list marker
     process_stream(b14, stream14, "Test Case 14: List item just marker")
+
+    # Test Case 15: Rich markup tags
+    b15 = create_markdown_buffer(max_size=50)
+    stream15 = [
+        "# Status Report\n",
+        "[error]Critical",
+        " failure[/]\n",
+        "- [success]Database: OK[/]\n",
+        "- [warning]Cache",
+        ": Degraded[/]\n\n",
+        "Done.",
+    ]
+    process_stream(b15, stream15, "Test Case 15: Rich markup tags")
+
+    # Test Case 16: Incomplete Rich markup tags
+    b16 = create_markdown_buffer(max_size=50)
+    stream16 = ["Text with [err", "or]incomplete[/", "]\n\nComplete."]
+    process_stream(b16, stream16, "Test Case 16: Incomplete Rich markup tags")

@@ -104,7 +104,9 @@ async def _handle_llm_interaction(
                 # For streaming, content is already displayed during the stream
                 if not agent.enable_streaming and output_content.strip():
                     themed_console.print()
-                    themed_console.print(Markdown(output_content, code_theme="rrt"), markup=True)
+                    themed_console.print(
+                        Markdown(output_content, code_theme="rrt"), markup=True
+                    )
                     themed_console.print()
             if hasattr(run_result, "all_messages"):
                 return run_result.all_messages()
