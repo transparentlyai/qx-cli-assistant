@@ -36,6 +36,7 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
     """Handle slash commands in inline mode."""
     parts = command_input.strip().split(maxsplit=1)
     command_name = parts[0].lower()
+    command_args = parts[1] if len(parts) > 1 else ""
 
     if command_name == "/model":
         _handle_model_command(llm_agent)
@@ -49,6 +50,11 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
         themed_console.print(
             "✓ 'Approve All' mode activated for this session.", style="warning"
         )
+    elif command_name == "/print":
+        if command_args:
+            themed_console.print(command_args)
+        else:
+            themed_console.print("Usage: /print <text to print>", style="error")
     elif command_name == "/help":
         themed_console.print("Available Commands:", style="app.header")
         themed_console.print(
@@ -60,6 +66,9 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
         themed_console.print(
             "  /approve-all - Activate 'approve all' mode for tool confirmations",
             style="primary",
+        )
+        themed_console.print(
+            "  /print <text> - Print the specified text to the console", style="primary"
         )
         themed_console.print("  /help       - Show this help message", style="primary")
         themed_console.print("\nInput Modes:", style="app.header")
@@ -99,7 +108,7 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
     else:
         themed_console.print(f"Unknown command: {command_name}", style="error")
         themed_console.print(
-            "Available commands: /model, /reset, /approve-all, /help",
+            "Available commands: /model, /reset, /approve-all, /print, /help",
             style="text.muted",
         )
 
@@ -113,6 +122,8 @@ async def handle_command(
     """Handle slash commands."""
     parts = command_input.strip().split(maxsplit=1)
     command_name = parts[0].lower()
+    command_args = parts[1] if len(parts) > 1 else ""
+
 
     if command_name == "/model":
         _handle_model_command(llm_agent)
@@ -138,7 +149,12 @@ async def handle_command(
         # Note: We can't actually replace the agent reference here since it's passed by value
         themed_console.print("Session reset, system prompt reloaded.", style="info")
         return None  # Clear history after reset
+    elif command_name == "/print": # Added to handle_command as well for consistency
+        if command_args:
+            themed_console.print(command_args)
+        else:
+            themed_console.print("Usage: /print <text to print>", style="error")
     else:
         themed_console.print(f"Unknown command: {command_name}", style="error")
-        themed_console.print("Available commands: /model, /reset", style="text.muted")
+        themed_console.print("Available commands: /model, /reset, /print", style="text.muted")
     return current_message_history
