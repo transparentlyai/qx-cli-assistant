@@ -7,3 +7,9 @@
 - the environment is already inititalized with the latest version of uv. only add packages with uv add
 - if you need to create temporary scirpts, files, and other artifacts, use the ./tmp directory - remember to remove them after the task is done.
 - Do not use relative imports 
+
+# for python code
+Limit the scope to the file you are working and apply the following directives in the order they are listed:
+    1. Compile code using `python -m py_compile <file.py>`
+    2. Run mypy for type checking e.g. `mypy <file.py>`
+    2. Use ruff for linting and formatting e.g. `ruff check <file.py>` and `ruff format <file.py>`
