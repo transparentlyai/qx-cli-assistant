@@ -36,9 +36,7 @@ Possible configuration file locations (in order of priority, lowest to highest):
 1. /etc/qx/qx.conf
 2. {user_config_path}
 3. <project-directory>/.Q/qx.conf
-""".format(
-    user_config_path=QX_CONFIG_DIR / "qx.conf"
-)
+""".format(user_config_path=QX_CONFIG_DIR / "qx.conf")
 
 
 class ConfigManager:
@@ -99,10 +97,10 @@ class ConfigManager:
                             ):
                                 ignore_patterns.append(line)
             except Exception as e:
-                from rich.console import Console
+                from qx.cli.theme import themed_console
 
-                Console().print(
-                    f"[yellow]Warning: Could not read or parse .gitignore file {gitignore_path}: {e}[/yellow]"
+                themed_console.print(
+                    f"[warning]Warning: Could not read or parse .gitignore file {gitignore_path}: {e}[/]"
                 )
 
         # Deduplicate the final list
@@ -134,14 +132,13 @@ class ConfigManager:
 
         # Check for minimal required variables
         if not os.getenv("QX_MODEL_NAME") or not os.getenv("OPENROUTER_API_KEY"):
-            from rich.console import Console
+            from qx.cli.theme import themed_console
 
-            rich_console = Console()
-            rich_console.print(
-                "[red]Error: Missing essential configuration variables.[/red]"
+            themed_console.print(
+                "[error]Error: Missing essential configuration variables.[/]"
             )
-            rich_console.print(MINIMAL_CONFIG_EXAMPLE)
-            rich_console.print(CONFIG_LOCATIONS)
+            themed_console.print(MINIMAL_CONFIG_EXAMPLE)
+            themed_console.print(CONFIG_LOCATIONS)
             sys.exit(1)
 
         # --- End Hierarchical qx.conf loading ---
@@ -153,8 +150,10 @@ class ConfigManager:
             try:
                 qx_user_context = user_context_path.read_text(encoding="utf-8")
             except Exception as e:
-                Console().print(
-                    f"[yellow]Warning: Could not read user context file {user_context_path}: {e}[/yellow]"
+                from qx.cli.theme import themed_console
+
+                themed_console.print(
+                    f"[warning]Warning: Could not read user context file {user_context_path}: {e}[/]"
                 )
         os.environ["QX_USER_CONTEXT"] = qx_user_context
 
@@ -171,8 +170,10 @@ class ConfigManager:
                         encoding="utf-8"
                     )
                 except Exception as e:
-                    Console().print(
-                        f"[yellow]Warning: Could not read project context file {project_context_file_path}: {e}[/yellow]"
+                    from qx.cli.theme import themed_console
+
+                    themed_console.print(
+                        f"[warning]Warning: Could not read project context file {project_context_file_path}: {e}[/]"
                     )
 
             # Load Project Files Tree using rg
@@ -216,17 +217,21 @@ class ConfigManager:
                         if process.stdout.strip():
                             qx_project_files = process.stdout.strip()
                         else:
-                            Console().print(
-                                f"[yellow]Warning: rg command returned non-zero exit code {process.returncode}. Stderr: {process.stderr.strip()}[/yellow]"
+                            from qx.cli.theme import themed_console
+
+                            themed_console.print(
+                                f"[warning]Warning: rg command returned non-zero exit code {process.returncode}. Stderr: {process.stderr.strip()}[/]"
                             )
                             qx_project_files = f"Error generating project tree (code {process.returncode}): {process.stderr.strip()}"
                 except FileNotFoundError:
-                    Console().print(
-                        "[red]Error: 'rg' command not found. Please ensure it is installed and in PATH.[/red]"
+                    from qx.cli.theme import themed_console
+
+                    themed_console.print(
+                        "[error]Error: 'rg' command not found. Please ensure it is installed and in PATH.[/]"
                     )
                     qx_project_files = "Error: 'rg' command not found. Please ensure it is installed and in PATH."
                 except Exception as e:
-                    Console().print(f"[red]Error executing 'rg' command: {e}[/red]")
+                    themed_console.print(f"[error]Error executing 'rg' command: {e}[/]")
                     qx_project_files = f"Error executing 'rg' command: {e}"
                 finally:
                     if temp_ignore_file_path and temp_ignore_file_path.exists():

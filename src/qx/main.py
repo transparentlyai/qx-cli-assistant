@@ -96,36 +96,42 @@ async def _async_main(
 
             # Handle session recovery
             if recover_session_path:
-                from rich.console import Console
+                from qx.cli.theme import themed_console
 
                 if recover_session_path == "LATEST":
-                    Console().print("Attempting to recover latest session...")
+                    themed_console.print("Attempting to recover latest session...")
                     loaded_history = load_latest_session()
                     if loaded_history:
                         current_message_history = loaded_history
-                        Console().print("Latest session recovered successfully!")
+                        themed_console.print(
+                            "[success]Latest session recovered successfully![/]"
+                        )
                     else:
-                        Console().print(
-                            "[red]No previous sessions found. Starting new session.[/red]"
+                        themed_console.print(
+                            "[error]No previous sessions found. Starting new session.[/]"
                         )
                 else:
-                    Console().print(
-                        f"[info]Attempting to recover session from: {recover_session_path}[/info]"
+                    themed_console.print(
+                        f"[info]Attempting to recover session from: {recover_session_path}[/]"
                     )
                     loaded_history = load_session_from_path(Path(recover_session_path))
                     if loaded_history:
                         current_message_history = loaded_history
-                        Console().print("[info]Session recovered successfully![/info]")
+                        themed_console.print(
+                            "[success]Session recovered successfully![/]"
+                        )
                     else:
-                        Console().print(
-                            "[red]Failed to recover session. Starting new session.[/red]"
+                        themed_console.print(
+                            "[error]Failed to recover session. Starting new session.[/]"
                         )
 
             # Handle initial prompt
             if initial_prompt and not exit_after_response:
-                from rich.console import Console
+                from qx.cli.theme import themed_console
 
-                Console().print(f"[bold]Initial Prompt:[/bold] {initial_prompt}")
+                themed_console.print(
+                    f"[text.important]Initial Prompt:[/] {initial_prompt}"
+                )
                 if llm_agent is None:
                     logger.error("LLM agent initialization failed")
                     return
@@ -146,11 +152,10 @@ async def _async_main(
                     return
 
                 # Print version info
-                from rich.console import Console
+                from qx.cli.theme import themed_console
 
-                rich_console = Console()
-                rich_console.print(
-                    f"[dim]Qx ver:{QX_VERSION} - {llm_agent.model_name}[/dim]"
+                themed_console.print(
+                    f"[text.muted]Qx ver:{QX_VERSION} - {llm_agent.model_name}[/]"
                 )
 
                 try:
@@ -160,10 +165,10 @@ async def _async_main(
                     )
                 except KeyboardInterrupt:
                     logger.debug("Qx terminated by user (Ctrl+C)")
-                    rich_console.print("\nQx terminated by user.")
+                    themed_console.print("\nQx terminated by user.")
                 except Exception as e:
                     logger.error(f"Error running inline mode: {e}", exc_info=True)
-                    rich_console.print(f"[red]App Error:[/red] {e}")
+                    themed_console.print(f"[error]App Error:[/] {e}")
                 finally:
                     # Cleanup: disconnect all active MCP servers
                     try:
@@ -225,18 +230,18 @@ def main():
 
     # Handle mutually exclusive arguments
     if args.recover_session and initial_prompt_str:
-        from rich.console import Console
+        from qx.cli.theme import themed_console
 
-        Console().print(
-            "[red]Error:[/red] Cannot use --recover-session with an initial prompt. Please choose one."
+        themed_console.print(
+            "[error]Error:[/] Cannot use --recover-session with an initial prompt. Please choose one."
         )
         sys.exit(1)
 
     if args.recover_session and args.exit_after_response:
-        from rich.console import Console
+        from qx.cli.theme import themed_console
 
-        Console().print(
-            "[red]Error:[/red] Cannot use --recover-session with --exit-after-response. Recovery implies interactive mode."
+        themed_console.print(
+            "[error]Error:[/] Cannot use --recover-session with --exit-after-response. Recovery implies interactive mode."
         )
         sys.exit(1)
 
@@ -260,16 +265,16 @@ def main():
             sys.exit(0)
 
     except KeyboardInterrupt:
-        from rich.console import Console
+        from qx.cli.theme import themed_console
 
-        Console().print("\nQx terminated by user.")
+        themed_console.print("\nQx terminated by user.")
         sys.exit(0)
     except Exception as e:
         fallback_logger = logging.getLogger("qx.critical")
         fallback_logger.critical(f"Critical error running QX: {e}", exc_info=True)
-        from rich.console import Console
+        from qx.cli.theme import themed_console
 
-        Console().print(f"[bold red]Critical error running QX:[/bold red] {e}")
+        themed_console.print(f"[critical]Critical error running QX:[/] {e}")
         sys.exit(1)
 
 

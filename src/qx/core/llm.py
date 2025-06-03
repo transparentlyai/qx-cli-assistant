@@ -17,6 +17,7 @@ from openai.types.chat import (
 from openai.types.shared_params.function_definition import FunctionDefinition
 from pydantic import BaseModel, ValidationError
 from rich.console import Console as RichConsoleClass
+from qx.cli.theme import themed_console
 
 from qx.core.mcp_manager import MCPManager
 from qx.core.plugin_manager import PluginManager
@@ -109,7 +110,8 @@ class QXLLMAgent:
 
             self._openai_tools_schema.append(
                 ChatCompletionToolParam(
-                    type="function", function=FunctionDefinition(**complete_function_def)  # type: ignore
+                    type="function",
+                    function=FunctionDefinition(**complete_function_def),  # type: ignore
                 )
             )
             self._tool_input_models[func.__name__] = input_model_class
@@ -174,7 +176,7 @@ class QXLLMAgent:
             from rich.console import Console
 
             Console().print(
-                "[red]Error:[/red] OPENROUTER_API_KEY environment variable not set."
+                "[error]Error:[/] OPENROUTER_API_KEY environment variable not set."
             )
             raise ValueError("OPENROUTER_API_KEY not set.")
 
@@ -409,7 +411,7 @@ class QXLLMAgent:
             logger.error(f"Error during LLM chat completion: {e}", exc_info=True)
             from rich.console import Console
 
-            Console().print(f"[red]Error:[/red] LLM chat completion: {e}")
+            themed_console.print(f"[error]Error:[/] LLM chat completion: {e}")
             return None
 
     async def _handle_streaming_response(
@@ -586,13 +588,13 @@ class QXLLMAgent:
 
                                 if tool_call_delta.function:
                                     if tool_call_delta.function.name:
-                                        current_tool_call["function"][
-                                            "name"
-                                        ] = tool_call_delta.function.name
+                                        current_tool_call["function"]["name"] = (
+                                            tool_call_delta.function.name
+                                        )
                                     if tool_call_delta.function.arguments:
-                                        current_tool_call["function"][
-                                            "arguments"
-                                        ] += tool_call_delta.function.arguments
+                                        current_tool_call["function"]["arguments"] += (
+                                            tool_call_delta.function.arguments
+                                        )
 
                     # Check if stream is finished
                     if choice.finish_reason:
@@ -636,7 +638,7 @@ class QXLLMAgent:
                 from rich.console import Console
 
                 console = Console()
-                console.print("\n[yellow]⚠ Response interrupted[/yellow]")
+                console.print("\n[warning]⚠ Response interrupted[/]")
 
                 response_message = cast(
                     ChatCompletionMessageParam,
@@ -653,7 +655,7 @@ class QXLLMAgent:
             else:
                 # No content was generated before cancellation
                 console = Console()
-                console.print("\n[yellow]Operation cancelled[/yellow]")
+                console.print("\n[warning]Operation cancelled[/]")
                 return QXRunResult("Operation cancelled", messages)
         except Exception as e:
             logger.error(f"Error during streaming: {e}", exc_info=True)
@@ -833,9 +835,8 @@ class QXLLMAgent:
             if function_name not in self._tool_functions:
                 error_msg = f"LLM attempted to call unknown tool: {function_name}"
                 logger.error(error_msg)
-                from rich.console import Console
 
-                Console().print(f"[red]{error_msg}[/red]")
+                themed_console.print(f"[error]{error_msg}[/]")
                 messages.append(
                     cast(
                         ChatCompletionToolMessageParam,
@@ -859,9 +860,8 @@ class QXLLMAgent:
                     except json.JSONDecodeError:
                         error_msg = f"LLM provided invalid JSON arguments for tool '{function_name}': {function_args}"
                         logger.error(error_msg)
-                        from rich.console import Console
 
-                        Console().print(f"[red]{error_msg}[/red]")
+                        themed_console.print(f"[error]{error_msg}[/]")
                         messages.append(
                             cast(
                                 ChatCompletionToolMessageParam,
@@ -879,9 +879,8 @@ class QXLLMAgent:
                 except ValidationError as ve:
                     error_msg = f"LLM provided invalid parameters for tool '{function_name}'. Validation errors: {ve}"
                     logger.error(error_msg, exc_info=True)
-                    from rich.console import Console
 
-                    Console().print(f"[red]{error_msg}[/red]")
+                    themed_console.print(f"[error]{error_msg}[/]")
 
                     # Create a more actionable error message for the LLM
                     error_details = []
@@ -935,9 +934,8 @@ class QXLLMAgent:
                 # This catch is for errors during parsing/validation, not tool execution
                 error_msg = f"Error preparing tool call '{function_name}': {e}"
                 logger.error(error_msg, exc_info=True)
-                from rich.console import Console
 
-                Console().print(f"[red]{error_msg}[/red]")
+                themed_console.print(f"[error]{error_msg}[/]")
                 messages.append(
                     cast(
                         ChatCompletionToolMessageParam,
@@ -976,9 +974,8 @@ class QXLLMAgent:
                 if isinstance(result, Exception):
                     error_msg = f"Error executing tool '{function_name}': {result}"
                     logger.error(error_msg, exc_info=True)
-                    from rich.console import Console
 
-                    Console().print(f"[red]{error_msg}[/red]")
+                    themed_console.print(f"[error]{error_msg}[/]")
                     tool_output_content = f"Error: Tool execution failed: {result}. This might be due to an internal tool error or an unexpected argument type."
                 else:
                     if hasattr(result, "model_dump_json"):
@@ -1025,7 +1022,7 @@ class QXLLMAgent:
         except Exception as e:
             logger.error(f"Error continuing after tool execution: {e}", exc_info=True)
             self.console.print(
-                f"[red]Error:[/red] Failed to continue after tool execution: {e}"
+                f"[error]Error:[/] Failed to continue after tool execution: {e}"
             )
             # Return partial result with tool responses included
             return QXRunResult(
@@ -1041,7 +1038,7 @@ class QXLLMAgent:
         """Handle timeout by trying 'try again' message as fallback."""
         logger.warning("Attempting timeout fallback with 'try again' message")
         self.console.print(
-            "[yellow]Request timed out after retries. Asking model to try again...[/yellow]"
+            "[warning]Request timed out after retries. Asking model to try again...[/]"
         )
 
         try:
@@ -1080,7 +1077,7 @@ class QXLLMAgent:
         except Exception as e:
             logger.error(f"Timeout fallback also failed: {e}", exc_info=True)
             self.console.print(
-                "[red]Error:[/red] Request timed out and fallback failed. Please try again."
+                "[error]Error:[/] Request timed out and fallback failed. Please try again."
             )
             return QXRunResult("Request timed out and retry failed", messages)
 
@@ -1101,7 +1098,7 @@ class QXLLMAgent:
                     )
                     raise
                 self.console.print(
-                    f"[yellow]Request timed out, retrying... (attempt {attempt + 2}/{max_retries + 1})[/yellow]"
+                    f"[warning]Request timed out, retrying... (attempt {attempt + 2}/{max_retries + 1})[/]"
                 )
                 await asyncio.sleep(1)  # Brief delay before retry
             except Exception as e:
@@ -1158,7 +1155,7 @@ def initialize_llm_agent(
     except Exception as e:
         logger.error(f"Failed to load plugins: {e}", exc_info=True)
         if console:
-            console.print(f"[red]Error:[/red] Failed to load tools: {e}")
+            console.print(f"[error]Error:[/] Failed to load tools: {e}")
         registered_tools = []
 
     # Add MCP tools to the list of registered tools
@@ -1201,7 +1198,7 @@ def initialize_llm_agent(
     except Exception as e:
         logger.error(f"Failed to initialize QXLLMAgent: {e}", exc_info=True)
         if console:
-            console.print(f"[red]Error:[/red] Init LLM Agent: {e}")
+            console.print(f"[error]Error:[/] Init LLM Agent: {e}")
         return None
 
 
@@ -1222,5 +1219,5 @@ async def query_llm(
         return result
     except Exception as e:
         logger.error(f"Error during LLM query: {e}", exc_info=True)
-        console.print(f"[red]Error:[/red] LLM query: {e}")
+        console.print(f"[error]Error:[/] LLM query: {e}")
         return None
