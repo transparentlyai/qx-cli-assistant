@@ -185,7 +185,7 @@ async def write_file_tool(
             if operation == "Create file"
             else "Failed to update file."
         )
-        approval_handler.print_outcome(outcome_msg, error, success=False)
+        approval_handler.print_outcome("Write", f"{outcome_msg} {error}", success=False)
         return WriteFilePluginOutput(path=original_path, success=False, message=error)
     else:
         outcome_msg = (
