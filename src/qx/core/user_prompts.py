@@ -377,40 +377,16 @@ async def get_user_choice_from_options_async(
             # `processed_valid_choices` is the list of allowed characters e.g. ['a', 'd', 'c']
             # `processed_default_choice` is the default character if one was validly provided.
 
-            # Example using Prompt.ask (to be run in a thread for async compatibility):
-            # user_input = await asyncio.to_thread(
-            #     Prompt.ask,
-            #     prompt_text_with_options, # This is the full prompt text
-            #     choices=processed_valid_choices, # List of allowed characters
-            #     default=processed_default_choice, # The default character, if any
-            #     show_choices=False, # Set to False because choices are in prompt_text_with_options
-            #     console=console
-            # )
-            # return user_input.lower() if user_input else None
-
-            # ---MAURO: REPLACE THIS BLOCK WITH YOUR asyncio.to_thread(Prompt.ask, ...) CALL ---
-            console.print(
-                "\n[bold red]MAURO: Implement `Prompt.ask` call in `get_user_choice_from_options_async`[/bold red]"
+            # Use Prompt.ask for interactive user input
+            user_input = await asyncio.to_thread(
+                Prompt.ask,
+                prompt_text_with_options,  # This is the full prompt text
+                choices=processed_valid_choices,  # List of allowed characters
+                default=processed_default_choice,  # The default character, if any
+                show_choices=False,  # Set to False because choices are in prompt_text_with_options
+                console=console
             )
-            console.print(f"[dim]Prompt would be: {prompt_text_with_options}[/dim]")
-            console.print(
-                f"[dim]Choices would be: {processed_valid_choices}, Default: {processed_default_choice}[/dim]"
-            )
-            # Simulate a choice for now to allow flow to continue for testing structure.
-            # This simulation should be removed once Prompt.ask is implemented.
-            if processed_default_choice:
-                simulated_choice = processed_default_choice
-            elif "c" in processed_valid_choices:  # Prefer cancel if no default
-                simulated_choice = "c"
-            elif processed_valid_choices:  # Pick first available
-                simulated_choice = processed_valid_choices[0]
-            else:  # Should not be reached
-                return None
-            console.print(
-                f"[italic yellow](Simulating choice: '{simulated_choice}' - waiting for real implementation)[/]"
-            )
-            return simulated_choice
-            # --- END OF BLOCK TO REPLACE ---
+            return user_input.lower() if user_input else None
 
         except (EOFError, KeyboardInterrupt):
             logger.warning("User cancelled input via EOF/KeyboardInterrupt.")

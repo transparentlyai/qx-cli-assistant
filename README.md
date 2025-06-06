@@ -31,13 +31,50 @@ uv run qx
 
 ### Configuration
 
-Create a configuration file at one of these locations (in order of priority):
+QX uses a **hierarchical configuration system** that loads settings from multiple sources in order of priority. Later sources override earlier ones, allowing for flexible system-wide, user-specific, and project-specific configurations.
 
-1. `<project-directory>/.Q/qx.conf` (project-level, highest priority)
-2. `~/.config/qx/qx.conf` (user-level)
-3. `/etc/qx/qx.conf` (system-wide, lowest priority)
+#### Configuration Hierarchy (Lowest to Highest Priority)
 
-**Minimal Configuration:**
+1. **📁 System-wide**: `/etc/qx/qx.conf` - Global defaults for all users
+2. **👤 User-level**: `~/.config/qx/qx.conf` - Personal user settings
+3. **🚀 Project-level**: `<project-directory>/.Q/qx.conf` - **Highest priority**, project-specific overrides
+
+#### How It Works
+
+- **Cascading Override**: Each level inherits from the previous and can override any setting
+- **Environment Variables**: Always take precedence over all configuration files
+- **Selective Override**: You only need to specify the settings you want to change at each level
+
+#### Example Hierarchy Setup
+
+**System-wide** (`/etc/qx/qx.conf`) - Organization defaults:
+```bash
+# Company-wide defaults
+QX_MODEL_NAME=openrouter/openai/gpt-4o-mini  # Cost-effective default
+QX_NUM_RETRIES=3
+QX_REQUEST_TIMEOUT=60
+```
+
+**User-level** (`~/.config/qx/qx.conf`) - Personal preferences:
+```bash
+# Personal API key and preferences
+OPENROUTER_API_KEY=sk-or-v1-your_personal_key_here
+QX_MODEL_NAME=openrouter/anthropic/claude-3.5-sonnet  # Overrides system default
+QX_ENABLE_STREAMING=true
+```
+
+**Project-level** (`myproject/.Q/qx.conf`) - Project-specific needs:
+```bash
+# Project-specific overrides for this codebase
+QX_MODEL_NAME=openrouter/openai/gpt-4o  # High-performance model for this project
+QX_FALLBACK_MODELS=openrouter/anthropic/claude-3.5-sonnet
+QX_PROJECT_CONTEXT="This is a Python web application using FastAPI"
+```
+
+#### Minimal Configuration
+
+The only required setting is a valid API key and model. Create any of the above files with:
+
 ```bash
 # Model Configuration (LiteLLM format)
 QX_MODEL_NAME=openrouter/anthropic/claude-3.5-sonnet
@@ -48,7 +85,35 @@ OPENROUTER_API_KEY=sk-or-v1-your_openrouter_api_key_here
 # ANTHROPIC_API_KEY=sk-ant-your_anthropic_api_key_here
 ```
 
-For a complete configuration example with reliability features, see [`qx.conf.example`](qx.conf.example).
+#### Configuration Discovery
+
+QX automatically discovers and loads configurations in this order:
+1. **System defaults** (`/etc/qx/qx.conf`) - Baseline configuration
+2. **User preferences** (`~/.config/qx/qx.conf`) - Personal overrides  
+3. **Project settings** (`<project>/.Q/qx.conf`) - Project-specific overrides
+4. **Environment variables** - Runtime overrides (highest priority)
+
+#### Environment Variable Overrides
+
+Any configuration file setting can be overridden at runtime using environment variables:
+
+```bash
+# Override model for a single session
+QX_MODEL_NAME=openrouter/openai/gpt-4o uv run qx
+
+# Use different API key temporarily  
+OPENROUTER_API_KEY=sk-different-key uv run qx
+
+# Enable debug logging
+QX_LOG_LEVEL=DEBUG uv run qx
+
+# Test with fallback models
+QX_FALLBACK_MODELS=gpt-4o,claude-3.5-sonnet uv run qx
+```
+
+This hierarchical system allows for great flexibility - you can set organization defaults, personal preferences, project-specific settings, and runtime overrides that all work together seamlessly.
+
+For a complete configuration example with all reliability features, see [`qx.conf.example`](qx.conf.example).
 
 ## 💡 Usage
 
