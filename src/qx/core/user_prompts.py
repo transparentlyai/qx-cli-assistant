@@ -173,7 +173,7 @@ async def _request_confirmation_textual(
             default=default_choice_key,
         )
         if user_selected_key is None:  # User cancelled (e.g. Esc in Textual dialog)
-            console.print("[info]Operation cancelled or timed out.[/info]")
+            console.print("[info]Operation cancelled.[/info]")
             return ("cancelled", None)
         if user_selected_key == "y":
             return ("approved", current_value_for_modification)
@@ -394,7 +394,16 @@ async def get_user_choice_from_options_async(
                 show_choices=False,  # Set to False because choices are in prompt_text_with_options
                 console=console
             )
-            return user_input.lower() if user_input else None
+            
+            if user_input and user_input.strip():
+                return user_input.lower()
+            elif not processed_default_choice:
+                # No default set and empty input - ask again
+                console.print("[dim red]Please select one of the available options.[/dim red]")
+                continue
+            else:
+                # Has default and empty input - use default
+                return processed_default_choice
 
         except (EOFError, KeyboardInterrupt):
             logger.warning("User cancelled input via EOF/KeyboardInterrupt.")

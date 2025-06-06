@@ -254,7 +254,7 @@ async def execute_shell_tool(
             operation="Execute Shell Command",
             parameter_name="command",
             parameter_value=command,
-            prompt_message=f"Allow Qx to execute command: '{command}'?",
+            prompt_message=f"Allow [primary]Qx[/] to execute command: [highlight]'{command}'[/]?",
         )
 
     if status not in ["approved", "session_approved"]:
