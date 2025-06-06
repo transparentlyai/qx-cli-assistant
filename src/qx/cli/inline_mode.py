@@ -93,7 +93,9 @@ async def _handle_llm_interaction(
             print(output_content)
         elif not agent.enable_streaming and output_content.strip():
             themed_console.print()
-            themed_console.print(Markdown(output_content, code_theme="rrt"), markup=True)
+            themed_console.print(
+                Markdown(output_content, code_theme="rrt"), markup=True
+            )
             themed_console.print()
         return (
             run_result.all_messages()
@@ -124,7 +126,7 @@ async def _run_inline_mode(
 
     @bindings.add("c-c")
     def _(event):
-        if (task := asyncio.current_task()):
+        if task := asyncio.current_task():
             task.cancel()
         event.current_buffer.reset()
         event.app.exit(exception=KeyboardInterrupt, style="class:aborting")
@@ -181,11 +183,13 @@ async def _run_inline_mode(
 
         async with _approve_all_lock:
             user_prompts._approve_all_active = not user_prompts._approve_all_active
-            status = (
-                "activated" if user_prompts._approve_all_active else "deactivated"
-            )
+            status = "activated" if user_prompts._approve_all_active else "deactivated"
             style = "success" if user_prompts._approve_all_active else "warning"
-            run_in_terminal(lambda: themed_console.print(f"✓ 'Approve All' mode {status}.", style=style))
+            run_in_terminal(
+                lambda: themed_console.print(
+                    f"✓ 'Approve All' mode {status}.", style=style
+                )
+            )
         event.app.invalidate()
 
     @bindings.add("c-t")
@@ -196,7 +200,11 @@ async def _run_inline_mode(
             user_prompts._show_thinking_active = not user_prompts._show_thinking_active
             status = "enabled" if user_prompts._show_thinking_active else "disabled"
             style = "success" if user_prompts._show_thinking_active else "warning"
-            run_in_terminal(lambda: themed_console.print(f"✓ 'Show Thinking' mode {status}.", style=style))
+            run_in_terminal(
+                lambda: themed_console.print(
+                    f"✓ 'Show Thinking' mode {status}.", style=style
+                )
+            )
         event.app.invalidate()
 
     session: PromptSession[str] = PromptSession(
@@ -221,7 +229,7 @@ async def _run_inline_mode(
                 is_multiline_mode[0] = False
 
             current_prompt = (
-                HTML('<style fg="#0087ff">MULTILINE⏵</style> ')
+                HTML('<style fg="#0087ff">Qm⏵</style> ')
                 if is_multiline_mode[0]
                 else HTML('<style fg="#ff5f00">Qx⏵</style> ')
             )
