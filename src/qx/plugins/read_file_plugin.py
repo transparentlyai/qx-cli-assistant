@@ -89,7 +89,7 @@ async def read_file_tool(
             operation="Read file",
             parameter_name="path",
             parameter_value=str(absolute_path),
-            prompt_message=f"Allow Qx to read file: '{absolute_path}'?",
+            prompt_message=f"Allow [primary]Qx[/] to read file: [highlight]'{absolute_path}'[/]?",
         )
 
     if status not in ["approved", "session_approved"]:

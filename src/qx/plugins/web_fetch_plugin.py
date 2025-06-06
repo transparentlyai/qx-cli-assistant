@@ -48,7 +48,7 @@ async def web_fetch_tool(
         operation="Web Fetch",
         parameter_name="url",
         parameter_value=url,
-        prompt_message=f"Allow Qx to fetch content from: '{url}'?",
+        prompt_message=f"Allow [primary]Qx[/] to fetch content from: [highlight]'{url}'[/]?",
     )
 
     if status not in ["approved", "session_approved"]:

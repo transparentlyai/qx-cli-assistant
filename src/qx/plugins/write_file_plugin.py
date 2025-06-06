@@ -21,6 +21,58 @@ HEAD_LINES = 20
 TAIL_LINES = 20
 
 
+def _get_lexer_from_path(file_path: Path) -> str:
+    """Determine the appropriate lexer based on file extension."""
+    suffix = file_path.suffix.lower()
+    lexer_map = {
+        '.py': 'python',
+        '.js': 'javascript',
+        '.ts': 'typescript',
+        '.jsx': 'jsx',
+        '.tsx': 'tsx',
+        '.html': 'html',
+        '.css': 'css',
+        '.scss': 'scss',
+        '.less': 'less',
+        '.json': 'json',
+        '.yaml': 'yaml',
+        '.yml': 'yaml',
+        '.xml': 'xml',
+        '.md': 'markdown',
+        '.sh': 'bash',
+        '.bash': 'bash',
+        '.zsh': 'zsh',
+        '.fish': 'fish',
+        '.rs': 'rust',
+        '.go': 'go',
+        '.java': 'java',
+        '.c': 'c',
+        '.cpp': 'cpp',
+        '.cc': 'cpp',
+        '.cxx': 'cpp',
+        '.h': 'c',
+        '.hpp': 'cpp',
+        '.sql': 'sql',
+        '.r': 'r',
+        '.rb': 'ruby',
+        '.php': 'php',
+        '.swift': 'swift',
+        '.kt': 'kotlin',
+        '.scala': 'scala',
+        '.clj': 'clojure',
+        '.vim': 'vim',
+        '.lua': 'lua',
+        '.pl': 'perl',
+        '.ps1': 'powershell',
+        '.dockerfile': 'dockerfile',
+        '.toml': 'toml',
+        '.ini': 'ini',
+        '.cfg': 'ini',
+        '.conf': 'ini',
+    }
+    return lexer_map.get(suffix, 'text')
+
+
 def is_path_allowed(
     resolved_path: Path, project_root: Optional[Path], user_home: Path
 ) -> bool:
@@ -50,9 +102,10 @@ async def _write_file_core_logic(path_str: str, content: str) -> Optional[str]:
 
 
 async def _generate_write_preview(
-    file_path_str: str, new_content: str, theme: str = "rrt"
+    file_path_str: str, new_content: str
 ) -> Union[Syntax, Markdown]:
     path = Path(os.path.expanduser(file_path_str))
+    lexer = _get_lexer_from_path(path)
 
     if path.exists() and path.is_file():
         try:
@@ -65,7 +118,7 @@ async def _generate_write_preview(
                 fromfile=f"a/{path.name}",
                 tofile=f"b/{path.name}",
             )
-            return Syntax("".join(diff), "diff", theme=theme)
+            return Syntax("".join(diff), "diff", theme="vim", line_numbers=False)
         except Exception as e:
             logger.error(f"Error generating diff for {path}: {e}")
             # Fallback to full content preview on error
@@ -75,8 +128,8 @@ async def _generate_write_preview(
         preview = (
             "\n".join(lines[:HEAD_LINES]) + "\n...\n" + "\n".join(lines[-TAIL_LINES:])
         )
-        return Syntax(preview, "auto", theme=theme, line_numbers=True, start_line=1)
-    return Syntax(new_content, "auto", theme=theme, line_numbers=True)
+        return Syntax(preview, lexer, theme="rrt", line_numbers=True, start_line=1)
+    return Syntax(new_content, lexer, theme="rrt", line_numbers=True)
 
 
 class WriteFilePluginInput(BaseModel):
@@ -115,7 +168,7 @@ async def write_file_tool(
         operation=operation,
         parameter_name="path",
         parameter_value=str(absolute_path),
-        prompt_message=f"Allow Qx to write to file: '{absolute_path}'?",
+        prompt_message=f"Allow [primary]Qx[/] to write to file: [highlight]'{absolute_path}'[/]?",
         content_to_display=preview,
     )
 

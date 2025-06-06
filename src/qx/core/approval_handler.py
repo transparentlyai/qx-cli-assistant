@@ -62,16 +62,21 @@ class ApprovalHandler:
 
         option_map = {key: status for key, _, status in options}
         valid_keys = [key for key, _, _ in options]
-        display_texts = [text for _, text, _ in options]
+        
+        # Color the first letter of each option
+        colored_display_texts = []
+        for key, text, _ in options:
+            colored_text = f"[highlight]{text[0]}[/highlight]{text[1:]}"
+            colored_display_texts.append(colored_text)
 
-        prompt_choices = ", ".join(display_texts)
-        full_prompt_text = f"{prompt_message}\n{prompt_choices}?: "
+        prompt_choices = ", ".join(colored_display_texts)
+        full_prompt_text = f"{prompt_message} ({prompt_choices}) "
 
         chosen_key = await get_user_choice_from_options_async(
             self.console,
             full_prompt_text,
             valid_keys,
-            default_choice="n",
+            default_choice=None,
         )
 
         if chosen_key and chosen_key in option_map:
