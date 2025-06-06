@@ -1219,11 +1219,14 @@ def initialize_llm_agent(
             "high",
             "medium",
             "low",
+            "none",
         ]:
             logger.warning(
-                f"Invalid value for QX_MODEL_REASONING_EFFORT: '{reasoning_effort}'. Expected 'high', 'medium', or 'low'. Setting to None."
+                f"Invalid value for QX_MODEL_REASONING_EFFORT: '{reasoning_effort}'. Expected 'high', 'medium', 'low', or 'none'. Setting to None."
             )
             reasoning_effort = None
+        elif reasoning_effort and reasoning_effort.lower() == "none":
+            reasoning_effort = None  # Disable reasoning when "none" is specified
 
         # Use a default console if none provided
         effective_console = console if console is not None else RichConsoleClass()
