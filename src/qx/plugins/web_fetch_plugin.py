@@ -13,9 +13,11 @@ logger = logging.getLogger(__name__)
 MAX_CONTENT_LENGTH = 250000
 REQUEST_TIMEOUT = 10
 
+
 class WebFetchPluginInput(BaseModel):
     url: str = Field(..., description="The URL to fetch content from.")
     format: str = Field("markdown", description="Output format: 'markdown' or 'raw'.")
+
 
 class WebFetchPluginOutput(BaseModel):
     url: str
@@ -23,6 +25,7 @@ class WebFetchPluginOutput(BaseModel):
     error: Optional[str] = None
     status_code: Optional[int] = None
     truncated: bool = False
+
 
 async def web_fetch_tool(
     console: RichConsole, args: WebFetchPluginInput
@@ -68,12 +71,19 @@ async def web_fetch_tool(
             final_content = content
             if output_format == "markdown":
                 try:
-                    from markdownify import markdownify as md
+                    from markdownify import markdownify as md  # type: ignore
+
                     final_content = md(content)
                 except ImportError:
-                    approval_handler.print_outcome("Conversion", "Failed. `markdownify` not installed.", success=False)
+                    approval_handler.print_outcome(
+                        "Conversion",
+                        "Failed. `markdownify` not installed.",
+                        success=False,
+                    )
                 except Exception as e:
-                    approval_handler.print_outcome("Conversion", f"Failed. {e}", success=False)
+                    approval_handler.print_outcome(
+                        "Conversion", f"Failed. {e}", success=False
+                    )
 
             approval_handler.print_outcome("Fetch", "Successfully completed.")
             return WebFetchPluginOutput(
@@ -86,7 +96,9 @@ async def web_fetch_tool(
     except httpx.HTTPStatusError as e:
         err_msg = f"HTTP {e.response.status_code} error for {url}"
         approval_handler.print_outcome("Fetch", err_msg, success=False)
-        return WebFetchPluginOutput(url=url, error=err_msg, status_code=e.response.status_code)
+        return WebFetchPluginOutput(
+            url=url, error=err_msg, status_code=e.response.status_code
+        )
     except Exception as e:
         err_msg = f"An unexpected error occurred: {e}"
         approval_handler.print_outcome("Fetch", err_msg, success=False)
