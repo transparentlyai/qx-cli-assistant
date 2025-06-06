@@ -37,6 +37,7 @@ OPENROUTER_API_KEY=sk-or-v1-your_openrouter_api_key_here
 QX_MODEL_TEMPERATURE=0.7
 QX_MODEL_MAX_TOKENS=4096
 QX_ENABLE_STREAMING=true
+QX_SHOW_SPINNER=true
 """
 
 CONFIG_LOCATIONS = """
@@ -146,6 +147,10 @@ class ConfigManager:
         # Explicitly ensure all QX_ prefixed configurations are in environment
         self._export_qx_configurations(original_env)
 
+        # Set default for QX_SHOW_SPINNER if not set
+        if os.getenv("QX_SHOW_SPINNER") is None:
+            os.environ["QX_SHOW_SPINNER"] = "true"
+
         # Check for minimal required variables
         model_name = os.getenv("QX_MODEL_NAME")
         api_keys = [
@@ -218,7 +223,7 @@ class ConfigManager:
                         mode="w", delete=False, encoding="utf-8"
                     ) as temp_ignore_file:
                         temp_ignore_file.write("\n".join(ignore_patterns))
-                    temp_ignore_file_path = Path(temp_ignore_file.name)
+                        temp_ignore_file_path = Path(temp_ignore_file.name)
 
                     rg_command = [
                         "rg",

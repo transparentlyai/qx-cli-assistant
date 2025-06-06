@@ -22,6 +22,7 @@ from qx.cli.theme import themed_console
 
 from qx.core.mcp_manager import MCPManager
 from qx.core.plugin_manager import PluginManager
+from qx.core.user_prompts import is_show_thinking_active
 
 
 class ConsoleProtocol(Protocol):
@@ -31,7 +32,6 @@ class ConsoleProtocol(Protocol):
 RichConsole = ConsoleProtocol  # Type alias for backward compatibility
 
 logger = logging.getLogger(__name__)
-
 
 def load_and_format_system_prompt() -> str:
     """
@@ -558,7 +558,7 @@ class QXLLMAgent:
 
                         # Display reasoning content in faded color
                         reasoning_text = delta.reasoning
-                        if reasoning_text and reasoning_text.strip():
+                        if reasoning_text and reasoning_text.strip() and await is_show_thinking_active():
                             from rich.console import Console
 
                             reasoning_console = Console()

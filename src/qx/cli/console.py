@@ -1,3 +1,5 @@
+import os
+
 def show_spinner(
     message: str = "Thinking...",
     spinner_name: str = "dots",
@@ -6,9 +8,9 @@ def show_spinner(
 ):
     """
     Show a spinner message in the console.
-    Just prints a simple message now.
+    Respects the QX_SHOW_SPINNER environment variable.
     """
-    from qx.cli.theme import themed_console
-
-    themed_console.print(message, style="spinner")
+    if os.getenv("QX_SHOW_SPINNER", "true").lower() == "true":
+        from qx.cli.theme import themed_console
+        themed_console.print(message, style="spinner")
     return None  # No status object to return
