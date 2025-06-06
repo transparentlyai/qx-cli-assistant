@@ -1,355 +1,136 @@
-import fnmatch  # For command pattern matching
+import asyncio
+import fnmatch
 import logging
 import subprocess
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
-from rich.console import Console as RichConsole  # Import RichConsole directly
+from rich.console import Console as RichConsole
+from rich.panel import Panel
+from rich.text import Text
 
-# Removed: from qx.core.user_prompts import request_confirmation
+from qx.core.approval_handler import ApprovalHandler
 
 logger = logging.getLogger(__name__)
 
-# --- Default command patterns (adapted from qx.core.constants) ---
 DEFAULT_PROHIBITED_SHELL_PATTERNS: List[str] = [
-    "sudo *",
-    "su *",
-    "chmod 777 *",
-    "chmod -R 777 *",
-    "rm -rf /*",
-    "dd if=/dev/zero of=/dev/*",
-    "> /dev/sda",
-    "mkfs.*",
-    ":(){:|:&};:",
-    "mv /* /dev/null",
-    "wget * | bash",
-    "curl * | bash",
-    "wget * | sh",
-    "curl * | sh",
-    "*(){ :;};*",
-    "echo * > /etc/passwd",
-    "echo * > /etc/shadow",
-    "rm -rf ~",
-    "rm -rf .",
-    "find / -delete",
-    "find . -delete",
-    "shred * /dev/*",
-    "wipe /dev/*",
-    "fdisk /dev/*",
-    "parted /dev/*",
-    "gparted /dev/*",
-    "userdel root",
-    "groupdel root",
-    "passwd -d root",
-    "passwd -l root",
-    "chown root* /*",
-    "chown -R * /*",
-    "chattr -i *",
-    "chattr +i /*",
-    "reboot",
-    "shutdown *",
-    "halt",
-    "poweroff",
-    "init 0",
-    "init 6",
-    "iptables -F",
-    "iptables -X",
-    "iptables -P INPUT DROP",
-    "iptables -P FORWARD DROP",
-    "iptables -P OUTPUT DROP",
-    "ufw disable",
-    "systemctl stop firewalld",
-    "systemctl disable firewalld",
-    "insmod *",
-    "rmmod *",
-    "modprobe *",
-    "sysctl *",
-    "echo * > /proc/sys/*",
-    "* | base64 -d | bash",
-    "* | base64 -d | sh",
-    "history -c",
-    "echo > ~/.bash_history",
-    "kill -9 1",
-    "pkill init",
-    "mount -o remount,ro /",
+    "sudo *", "su *", "chmod 777 *", "chmod -R 777 *", "rm -rf /*", 
+    "dd if=/dev/zero of=/dev/*", "> /dev/sda", "mkfs.*", ":(){:|:&};:",
+    "mv /* /dev/null", "wget * | bash", "curl * | bash", "wget * | sh",
+    "curl * | sh", "*(){ :;};*", "echo * > /etc/passwd", "echo * > /etc/shadow",
+    "rm -rf ~", "rm -rf .", "find / -delete", "find . -delete", "shred * /dev/*",
+    "wipe /dev/*", "fdisk /dev/*", "parted /dev/*", "gparted /dev/*", "userdel root",
+    "groupdel root", "passwd -d root", "passwd -l root", "chown root* /*",
+    "chown -R * /*", "chattr -i *", "chattr +i /*", "reboot", "shutdown *",
+    "halt", "poweroff", "init 0", "init 6", "iptables -F", "iptables -X",
+    "iptables -P INPUT DROP", "iptables -P FORWARD DROP", "iptables -P OUTPUT DROP",
+    "ufw disable", "systemctl stop firewalld", "systemctl disable firewalld",
+    "insmod *", "rmmod *", "modprobe *", "sysctl *", "echo * > /proc/sys/*",
+    "* | base64 -d | bash", "* | base64 -d | sh", "history -c",
+    "echo > ~/.bash_history", "kill -9 1", "pkill init", "mount -o remount,ro /",
     "mount /dev/sd* /mnt; rm -rf /mnt/*",
 ]
 DEFAULT_AUTO_APPROVED_SHELL_PATTERNS: List[str] = [
-    "ls",
-    "ls *",
-    "cd",
-    "cd *",
-    "pwd",
-    "echo",
-    "echo *",
-    "cat",
-    "cat *",
-    "head",
-    "head *",
-    "tail",
-    "tail *",
-    "grep",
-    "grep *",
-    "find",
-    "find *",
-    "mkdir",
-    "mkdir *",
-    "touch",
-    "touch *",
-    "cp",
-    "cp *",
-    "mv",
-    "mv *",
-    "python --version",
-    "python -m *",
-    "python3 --version",
-    "python3 -m *",
-    "pip list",
-    "pip show *",
-    "pip freeze",
-    "uv list",
-    "uv pip list",
-    "uv pip show *",
-    "uv pip freeze",
-    "cloc",
-    "cloc *",
-    "git",
-    "git *",
-    "date",
-    "cal",
-    "uptime",
-    "whoami",
-    "id",
-    "uname",
-    "uname *",
-    "df",
-    "df *",
-    "du",
-    "du *",
-    "wc",
-    "wc *",
-    "less",
-    "less *",
-    "more",
-    "more *",
-    "diff",
-    "diff *",
-    "comm",
-    "comm *",
-    "sort",
-    "sort *",
-    "uniq",
-    "uniq *",
-    "ps",
-    "ps *",
-    "top",
-    "env",
-    "printenv",
-    "printenv *",
-    "export -p",
-    "man",
-    "man *",
-    "info",
-    "info *",
-    "tldr",
-    "tldr *",
-    "* --help",
-    "stat",
-    "stat *",
-    "which",
-    "which *",
-    "whereis",
-    "whereis *",
-    "type",
-    "type *",
-    "history",
-    "clear",
-    "ping",
-    "ping *",
-    "ip",
-    "ip *",
-    "ifconfig",
-    "ifconfig *",
-    "netstat",
-    "netstat *",
-    "ss",
-    "ss *",
-    "host",
-    "host *",
-    "dig",
-    "dig *",
-    "nslookup",
-    "nslookup *",
-    "tar -tvf *",
-    "zipinfo *",
-    "unzip -l *",
-    "gzip -l *",
-    "gunzip -l *",
-    "zcat *",
-    "bzcat *",
-    "xzcat *",
-    "basename *",
-    "dirname *",
-    "readlink *",
-    "test *",
-    "[ * ]",
-    "alias",
-    "jobs",
-    "file",
+    "ls", "ls *", "cd", "cd *", "pwd", "echo", "echo *", "cat", "cat *",
+    "head", "head *", "tail", "tail *", "grep", "grep *", "find", "find *",
+    "mkdir", "mkdir *", "touch", "touch *", "cp", "cp *", "mv", "mv *",
+    "python --version", "python -m *", "python3 --version", "python3 -m *",
+    "pip list", "pip show *", "pip freeze", "uv list", "uv pip list",
+    "uv pip show *", "uv pip freeze", "cloc", "cloc *", "git", "git *",
+    "date", "cal", "uptime", "whoami", "id", "uname", "uname *", "df", "df *",
+    "du", "du *", "wc", "wc *", "less", "less *", "more", "more *", "diff",
+    "diff *", "comm", "comm *", "sort", "sort *", "uniq", "uniq *", "ps",
+    "ps *", "top", "env", "printenv", "printenv *", "export -p", "man",
+    "man *", "info", "info *", "tldr", "tldr *", "* --help", "stat", "stat *",
+    "which", "which *", "whereis", "whereis *", "type", "type *", "history",
+    "clear", "ping", "ping *", "ip", "ip *", "ifconfig", "ifconfig *",
+    "netstat", "netstat *", "ss", "ss *", "host", "host *", "dig", "dig *",
+    "nslookup", "nslookup *", "tar -tvf *", "zipinfo *", "unzip -l *",
+    "gzip -l *", "gunzip -l *", "zcat *", "bzcat *", "xzcat *", "basename *",
+    "dirname *", "readlink *", "test *", "[ * ]", "alias", "jobs", "file",
     "file *",
 ]
-# --- End of command patterns ---
-
 
 class ExecuteShellPluginInput(BaseModel):
-    command: str = Field(
-        ..., description="The shell command to execute. Non-interactive commands only."
-    )
-
+    command: str = Field(..., description="The shell command to execute.")
 
 class ExecuteShellPluginOutput(BaseModel):
-    command: str = Field(description="The command that was executed.")
-    stdout: Optional[str] = Field(
-        None,
-        description="Standard output from the command. Only present if command was executed.",
-    )
-    stderr: Optional[str] = Field(
-        None,
-        description="Standard error from the command. Only present if command was executed.",
-    )
-    return_code: Optional[int] = Field(
-        None,
-        description="Exit code from command execution. 0 indicates success, non-zero indicates failure. None if command was not executed.",
-    )
-    error: Optional[str] = Field(
-        None,
-        description="Error message explaining why command was not executed (e.g., 'prohibited', 'denied by user', 'empty command'). None if command was executed.",
-    )
-
+    command: str
+    stdout: Optional[str] = None
+    stderr: Optional[str] = None
+    return_code: Optional[int] = None
+    error: Optional[str] = None
 
 def _is_command_prohibited(command: str) -> bool:
-    for pattern in DEFAULT_PROHIBITED_SHELL_PATTERNS:
-        if fnmatch.fnmatch(command, pattern):
-            logger.warning(
-                f"Command '{command}' matches prohibited pattern '{pattern}'."
-            )
-            return True
-    return False
-
+    return any(fnmatch.fnmatch(command, pattern) for pattern in DEFAULT_PROHIBITED_SHELL_PATTERNS)
 
 def _is_command_auto_approved(command: str) -> bool:
-    for pattern in DEFAULT_AUTO_APPROVED_SHELL_PATTERNS:
-        if fnmatch.fnmatch(command, pattern):
-            logger.debug(
-                f"Command '{command}' matches auto-approved pattern '{pattern}'."
-            )
-            return True
-    return False
-
+    return any(fnmatch.fnmatch(command, pattern) for pattern in DEFAULT_AUTO_APPROVED_SHELL_PATTERNS)
 
 async def execute_shell_tool(
     console: RichConsole, args: ExecuteShellPluginInput
 ) -> ExecuteShellPluginOutput:
-    """Tool for executing shell commands.
+    approval_handler = ApprovalHandler(console)
+    command = args.command.strip()
 
-    Executes non-interactive shell commands. Approval is handled by the terminal layer.
-    - Prohibited commands are blocked.
-    - Auto-approved patterns are logged as such.
+    if not command:
+        err_msg = "Empty command provided."
+        console.print(f"Execute Shell Command (Error): {err_msg}")
+        return ExecuteShellPluginOutput(command="", error=err_msg)
 
-    Returns structured output with:
-    - command: The actual command executed
-    - stdout/stderr: Command output (only if executed)
-    - return_code: Exit code (0=success, only if executed)
-    - error: Explanation if command was not executed
-    """
-    command_to_execute = args.command.strip()
+    if _is_command_prohibited(command):
+        err_msg = f"Command '{command}' is prohibited by policy."
+        console.print(f"Execute Shell Command (Denied by Policy): {command}")
+        approval_handler.print_outcome("Execution", "Failed. Command is prohibited.", success=False)
+        return ExecuteShellPluginOutput(command=command, error=err_msg)
 
-    if not command_to_execute:
-        err_msg = "Error: Empty command provided."
-        logger.error(err_msg)
-        console.print(f"[error]{err_msg}[/]")
-        return ExecuteShellPluginOutput(
-            command="", stdout=None, stderr=None, return_code=None, error=err_msg
-        )
-
-    if _is_command_prohibited(command_to_execute):
-        err_msg = f"Error: Command '{command_to_execute}' is prohibited by policy."
-        logger.error(err_msg)
-        console.print(f"[error]Command prohibited by policy:[/] '{command_to_execute}'")
-        return ExecuteShellPluginOutput(
-            command=command_to_execute,
-            stdout=None,
-            stderr=None,
-            return_code=None,
-            error=err_msg,
-        )
-
-    # Approval is now assumed to be handled by the terminal layer.
-    # We still check for auto-approved patterns for logging/messaging.
-    is_auto_approved = _is_command_auto_approved(command_to_execute)
-
-    if is_auto_approved:
-        logger.debug(
-            f"Command '{command_to_execute}' matches an auto-approved pattern. Executing."
-        )
-        console.print(
-            f"[success]AUTO-APPROVED (PATTERN):[/] Executing: [info]'{command_to_execute}'[/]"
-        )
+    status = "approved"
+    if _is_command_auto_approved(command):
+        console.print(f"Execute Shell Command (Auto-approved): {command}")
     else:
-        logger.debug(
-            f"Command '{command_to_execute}' requires approval (handled by terminal). Executing."
+        status, _ = await approval_handler.request_approval(
+            operation="Execute Shell Command",
+            parameter_name="command",
+            parameter_value=command,
+            prompt_message=f"Allow Qx to execute command: '{command}'?",
         )
-        console.print(f"[info]Executing command:[/info] '{command_to_execute}'")
+
+    if status not in ["approved", "session_approved"]:
+        err_msg = "Operation denied by user."
+        approval_handler.print_outcome("Execution", "Denied by user.", success=False)
+        return ExecuteShellPluginOutput(command=command, error=err_msg)
 
     try:
-        process = subprocess.run(
-            command_to_execute, shell=True, capture_output=True, text=True, check=False
-        )
-        logger.debug(
-            f"Command '{command_to_execute}' executed. Return code: {process.returncode}"
-        )
+        def run_sync_command():
+            return subprocess.run(
+                command, shell=True, capture_output=True, text=True, check=False
+            )
 
+        process = await asyncio.to_thread(run_sync_command)
+        
         stdout = process.stdout.strip() if process.stdout else None
         stderr = process.stderr.strip() if process.stderr else None
+        return_code = process.returncode
 
-        if process.returncode == 0:
-            if (
-                not is_auto_approved
-            ):  # Only print success if not already covered by auto-approve message
-                console.print(
-                    f"[success]Command executed successfully:[/success] '{command_to_execute}'"
-                )
-            return ExecuteShellPluginOutput(
-                command=command_to_execute,
-                stdout=stdout,
-                stderr=stderr,
-                return_code=process.returncode,
-                error=None,
-            )
+        if return_code == 0:
+            approval_handler.print_outcome("Command", "Executed successfully.")
         else:
-            console.print(
-                f"[warning]Command '{command_to_execute}' finished with return code {process.returncode}.[/warning]"
-            )
-            return ExecuteShellPluginOutput(
-                command=command_to_execute,
-                stdout=stdout,
-                stderr=stderr,
-                return_code=process.returncode,
-                error=None,  # Error is for non-execution, stderr for command errors
-            )
+            approval_handler.print_outcome("Command", f"Failed with return code {return_code}.", success=False)
+
+        if stdout:
+            console.print(Panel(Text(stdout), title="[bold green]stdout[/]", border_style="green", expand=False))
+        if stderr:
+            console.print(Panel(Text(stderr), title="[bold red]stderr[/]", border_style="red", expand=False))
+
+        return ExecuteShellPluginOutput(
+            command=command,
+            stdout=stdout,
+            stderr=stderr,
+            return_code=return_code,
+        )
 
     except Exception as e:
-        logger.error(
-            f"Failed to execute command '{command_to_execute}': {e}", exc_info=True
-        )
-        err_msg = f"Error: Failed to execute command '{command_to_execute}': {e}"
-        console.print(
-            f"[error]Failed to execute command '{command_to_execute}':[/] {e}"
-        )
-        return ExecuteShellPluginOutput(
-            command=command_to_execute,
-            stdout=None,
-            stderr=None,
-            return_code=None,
-            error=err_msg,
-        )
+        logger.error(f"Failed to execute command '{command}': {e}", exc_info=True)
+        err_msg = f"Failed to execute command: {e}"
+        approval_handler.print_outcome("Execution", err_msg, success=False)
+        return ExecuteShellPluginOutput(command=command, error=err_msg)
