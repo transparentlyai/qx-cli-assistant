@@ -42,6 +42,41 @@ QX_ALLOW_PROVIDER_FALLBACK=true
 # Streaming Configuration
 QX_ENABLE_STREAMING=true
 
+# === RELIABILITY & RESILIENCE SETTINGS ===
+
+# Retry Configuration
+QX_NUM_RETRIES=3              # Number of retry attempts for failed requests
+QX_RETRY_DELAY=1.0            # Base delay between retries in seconds
+QX_MAX_RETRY_DELAY=60.0       # Maximum delay between retries
+QX_BACKOFF_FACTOR=2.0         # Exponential backoff multiplier
+
+# Fallback Configuration  
+QX_FALLBACK_MODELS=gpt-4o,claude-3-5-sonnet-20241022,gemini-1.5-pro
+QX_FALLBACK_TIMEOUT=45        # Total timeout for fallback attempts (seconds)
+QX_FALLBACK_COOLDOWN=60       # Cooldown period for rate-limited models (seconds)
+
+# Context Window Fallback Mapping (JSON format)
+# Maps models to their larger context equivalents
+QX_CONTEXT_WINDOW_FALLBACKS={"gpt-3.5-turbo":"gpt-3.5-turbo-16k","gpt-4":"gpt-4-32k","claude-3-haiku":"claude-3-sonnet"}
+
+# Multiple API Key Fallbacks (JSON format)
+# Backup API keys for the same provider
+QX_FALLBACK_API_KEYS={"openai":["sk-backup1","sk-backup2"],"anthropic":["sk-ant-backup1"]}
+
+# Multiple API Base Fallbacks (JSON format)  
+# Backup API endpoints for the same provider
+QX_FALLBACK_API_BASES={"azure":[{"api_key":"key1","api_base":"https://backup1.azure.com"},{"api_key":"key2","api_base":"https://backup2.azure.com"}]}
+
+# Circuit Breaker Settings
+QX_CIRCUIT_BREAKER_ENABLED=true
+QX_CIRCUIT_BREAKER_THRESHOLD=5    # Number of failures before opening circuit
+QX_CIRCUIT_BREAKER_TIMEOUT=300    # Circuit breaker timeout in seconds
+
+# Request Timeout Settings
+QX_REQUEST_TIMEOUT=120            # Individual request timeout (seconds)
+QX_CONNECT_TIMEOUT=30             # Connection timeout (seconds)
+QX_READ_TIMEOUT=300               # Read timeout for streaming (seconds)
+
 # Logging Configuration
 QX_LOG_LEVEL=INFO  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
 QX_LOG_SENT=false  # Log messages sent to LLM
@@ -81,7 +116,26 @@ QX_DEBUG_STREAMING=false  # Debug streaming issues
 # QX_USER_CONTEXT=     # Loaded from ~/.config/qx/user.md
 # QX_PROJECT_FILES=    # Auto-generated project file tree
 
-# Performance Tuning
-# QX_HTTP_TIMEOUT=300
-# QX_MAX_RETRIES=3
-# QX_RETRY_DELAY=1
+# Performance Tuning (deprecated - use reliability settings above)
+# QX_HTTP_TIMEOUT=300  # Use QX_REQUEST_TIMEOUT instead
+# QX_MAX_RETRIES=3     # Use QX_NUM_RETRIES instead
+# QX_RETRY_DELAY=1     # Use QX_RETRY_DELAY instead
+
+# === ADVANCED RELIABILITY EXAMPLES ===
+
+# Example 1: High Availability Setup
+# QX_FALLBACK_MODELS=openrouter/openai/gpt-4o,openrouter/anthropic/claude-3.5-sonnet,openrouter/google/gemini-1.5-pro
+# QX_NUM_RETRIES=5
+# QX_FALLBACK_TIMEOUT=60
+
+# Example 2: Cost-Optimized with Fallbacks  
+# QX_MODEL_NAME=openrouter/meta-llama/llama-3.1-8b-instruct
+# QX_FALLBACK_MODELS=openrouter/openai/gpt-3.5-turbo,openrouter/openai/gpt-4o-mini
+
+# Example 3: Context Window Auto-Scaling
+# QX_MODEL_NAME=gpt-3.5-turbo
+# QX_CONTEXT_WINDOW_FALLBACKS={"gpt-3.5-turbo":"gpt-3.5-turbo-16k","gpt-4":"gpt-4-32k"}
+
+# Example 4: Multi-Region Azure Setup
+# QX_MODEL_NAME=azure/gpt-4
+# QX_FALLBACK_API_BASES={"azure":[{"api_key":"key1","api_base":"https://east.openai.azure.com"},{"api_key":"key2","api_base":"https://west.openai.azure.com"}]}
