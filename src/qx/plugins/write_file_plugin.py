@@ -12,6 +12,7 @@ from rich.syntax import Syntax
 
 from qx.core.approval_handler import ApprovalHandler
 from qx.core.paths import USER_HOME_DIR, _find_project_root
+from qx.cli.console import themed_console
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +78,7 @@ class WriteFilePluginOutput(BaseModel):
     message: str
 
 async def write_file_tool(console: Console, args: WriteFilePluginInput) -> WriteFilePluginOutput:
-    approval_handler = ApprovalHandler(console)
+    approval_handler = ApprovalHandler(themed_console)
     original_path = args.path
     expanded_path = os.path.expanduser(original_path)
     absolute_path = Path(expanded_path).resolve()
@@ -86,7 +87,7 @@ async def write_file_tool(console: Console, args: WriteFilePluginInput) -> Write
 
     if not is_path_allowed(absolute_path, project_root, USER_HOME_DIR):
         err_msg = f"Access denied by policy for path: {absolute_path}"
-        console.print(f"Write (Denied by Policy) path: {absolute_path}")
+        themed_console.print(f"Write (Denied by Policy) path: {absolute_path}")
         approval_handler.print_outcome("Write", "Failed. Policy violation.", success=False)
         return WriteFilePluginOutput(path=original_path, success=False, message=err_msg)
 
