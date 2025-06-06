@@ -20,15 +20,23 @@ MAX_PREVIEW_LINES = 50
 HEAD_LINES = 20
 TAIL_LINES = 20
 
+
 def is_path_allowed(
     resolved_path: Path, project_root: Optional[Path], user_home: Path
 ) -> bool:
     path_to_check = resolved_path.resolve()
-    if project_root and (path_to_check == project_root.resolve() or project_root.resolve() in path_to_check.parents):
+    if project_root and (
+        path_to_check == project_root.resolve()
+        or project_root.resolve() in path_to_check.parents
+    ):
         return True
-    if path_to_check == user_home.resolve() or user_home.resolve() in path_to_check.parents:
+    if (
+        path_to_check == user_home.resolve()
+        or user_home.resolve() in path_to_check.parents
+    ):
         return True
     return False
+
 
 async def _write_file_core_logic(path_str: str, content: str) -> Optional[str]:
     try:
@@ -39,6 +47,7 @@ async def _write_file_core_logic(path_str: str, content: str) -> Optional[str]:
     except Exception as e:
         logger.error(f"Error writing to file '{path_str}': {e}", exc_info=True)
         return str(e)
+
 
 async def _generate_write_preview(
     file_path_str: str, new_content: str, theme: str = "rrt"
@@ -63,20 +72,27 @@ async def _generate_write_preview(
 
     lines = new_content.splitlines()
     if len(lines) > MAX_PREVIEW_LINES:
-        preview = "\n".join(lines[:HEAD_LINES]) + "\n...\n" + "\n".join(lines[-TAIL_LINES:])
-        return Syntax(preview, lexer_name="auto", theme=theme, line_numbers=True, start_line=1)
-    return Syntax(new_content, lexer_name="auto", theme=theme, line_numbers=True)
+        preview = (
+            "\n".join(lines[:HEAD_LINES]) + "\n...\n" + "\n".join(lines[-TAIL_LINES:])
+        )
+        return Syntax(preview, "auto", theme=theme, line_numbers=True, start_line=1)
+    return Syntax(new_content, "auto", theme=theme, line_numbers=True)
+
 
 class WriteFilePluginInput(BaseModel):
     path: str = Field(..., description="Path to the file to write.")
     content: str = Field(..., description="Raw content to write to the file.")
+
 
 class WriteFilePluginOutput(BaseModel):
     path: str
     success: bool
     message: str
 
-async def write_file_tool(console: Console, args: WriteFilePluginInput) -> WriteFilePluginOutput:
+
+async def write_file_tool(
+    console: Console, args: WriteFilePluginInput
+) -> WriteFilePluginOutput:
     approval_handler = ApprovalHandler(themed_console)
     original_path = args.path
     expanded_path = os.path.expanduser(original_path)
@@ -87,7 +103,9 @@ async def write_file_tool(console: Console, args: WriteFilePluginInput) -> Write
     if not is_path_allowed(absolute_path, project_root, USER_HOME_DIR):
         err_msg = f"Access denied by policy for path: {absolute_path}"
         themed_console.print(f"Write (Denied by Policy) path: {absolute_path}")
-        approval_handler.print_outcome("Write", "Failed. Policy violation.", success=False)
+        approval_handler.print_outcome(
+            "Write", "Failed. Policy violation.", success=False
+        )
         return WriteFilePluginOutput(path=original_path, success=False, message=err_msg)
 
     operation = "Update file" if absolute_path.exists() else "Create file"
@@ -109,10 +127,20 @@ async def write_file_tool(console: Console, args: WriteFilePluginInput) -> Write
     error = await _write_file_core_logic(str(absolute_path), args.content)
 
     if error:
-        outcome_msg = "Failed to create file." if operation == "Create file" else "Failed to update file."
+        outcome_msg = (
+            "Failed to create file."
+            if operation == "Create file"
+            else "Failed to update file."
+        )
         approval_handler.print_outcome(outcome_msg, error, success=False)
         return WriteFilePluginOutput(path=original_path, success=False, message=error)
     else:
-        outcome_msg = "File successfully created." if operation == "Create file" else "File successfully updated."
+        outcome_msg = (
+            "File successfully created."
+            if operation == "Create file"
+            else "File successfully updated."
+        )
         approval_handler.print_outcome("File", outcome_msg, success=True)
-        return WriteFilePluginOutput(path=original_path, success=True, message=outcome_msg)
+        return WriteFilePluginOutput(
+            path=original_path, success=True, message=outcome_msg
+        )

@@ -72,10 +72,14 @@ async def read_file_tool(
     if not is_path_allowed(absolute_path, project_root, USER_HOME_DIR):
         err_msg = f"Access denied by policy for path: {absolute_path}"
         themed_console.print(f"Read (Denied by Policy) path: {absolute_path}")
-        approval_handler.print_outcome("Read", "Failed. Policy violation.", success=False)
+        approval_handler.print_outcome(
+            "Read", "Failed. Policy violation.", success=False
+        )
         return ReadFilePluginOutput(path=original_path, error=err_msg)
 
-    is_in_project = project_root and (absolute_path == project_root or project_root in absolute_path.parents)
+    is_in_project = project_root and (
+        absolute_path == project_root or project_root in absolute_path.parents
+    )
 
     if is_in_project:
         themed_console.print(f"Read (Auto-approved) path: {absolute_path}")

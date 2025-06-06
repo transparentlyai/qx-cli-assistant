@@ -1,8 +1,11 @@
-from typing import List, Tuple, Optional, Any, Dict
+from typing import Tuple, Optional, Any
 
 from rich.console import Console
 
-from qx.core.user_prompts import get_user_choice_from_options_async, is_approve_all_active
+from qx.core.user_prompts import (
+    get_user_choice_from_options_async,
+    is_approve_all_active,
+)
 
 
 class ApprovalHandler:
@@ -56,7 +59,7 @@ class ApprovalHandler:
             ("a", "All", "session_approved"),
             ("c", "Cancel", "cancelled"),
         ]
-        
+
         option_map = {key: status for key, _, status in options}
         valid_keys = [key for key, _, _ in options]
         display_texts = [text for _, text, _ in options]
