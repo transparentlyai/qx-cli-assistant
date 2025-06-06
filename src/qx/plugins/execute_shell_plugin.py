@@ -6,8 +6,6 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 from rich.console import Console as RichConsole
-from rich.panel import Panel
-from rich.text import Text
 
 from qx.core.approval_handler import ApprovalHandler
 from qx.cli.console import themed_console
@@ -285,23 +283,9 @@ async def execute_shell_tool(
             )
 
         if stdout:
-            themed_console.print(
-                Panel(
-                    Text(stdout),
-                    title="[bold green]stdout[/]",
-                    border_style="green",
-                    expand=False,
-                )
-            )
+            themed_console.print(stdout, style="dim white")
         if stderr:
-            themed_console.print(
-                Panel(
-                    Text(stderr),
-                    title="[bold red]stderr[/]",
-                    border_style="red",
-                    expand=False,
-                )
-            )
+            themed_console.print(stderr, style="dim red")
 
         return ExecuteShellPluginOutput(
             command=command,
