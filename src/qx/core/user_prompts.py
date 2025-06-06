@@ -12,6 +12,9 @@ logger = logging.getLogger(__name__)
 _approve_all_active: bool = False
 _approve_all_lock = asyncio.Lock()
 
+_show_thinking_active: bool = True
+_show_thinking_lock = asyncio.Lock()
+
 CHOICE_YES = ("y", "Yes", "yes")
 CHOICE_NO = ("n", "No", "no")
 CHOICE_APPROVE_ALL = ("a", "Approve All", "all")
@@ -62,6 +65,11 @@ async def is_approve_all_active() -> bool:
     global _approve_all_active
     async with _approve_all_lock:
         return _approve_all_active
+
+async def is_show_thinking_active() -> bool:
+    global _show_thinking_active
+    async with _show_thinking_lock:
+        return _show_thinking_active
 
 
 async def _ask_basic_confirmation(
