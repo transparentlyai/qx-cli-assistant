@@ -10,6 +10,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from qx.core.approval_handler import ApprovalHandler
+from qx.cli.console import themed_console
 
 logger = logging.getLogger(__name__)
 
@@ -70,23 +71,23 @@ def _is_command_auto_approved(command: str) -> bool:
 async def execute_shell_tool(
     console: RichConsole, args: ExecuteShellPluginInput
 ) -> ExecuteShellPluginOutput:
-    approval_handler = ApprovalHandler(console)
+    approval_handler = ApprovalHandler(themed_console)
     command = args.command.strip()
 
     if not command:
         err_msg = "Empty command provided."
-        console.print(f"Execute Shell Command (Error): {err_msg}")
+        themed_console.print(f"Execute Shell Command (Error): {err_msg}")
         return ExecuteShellPluginOutput(command="", error=err_msg)
 
     if _is_command_prohibited(command):
         err_msg = f"Command '{command}' is prohibited by policy."
-        console.print(f"Execute Shell Command (Denied by Policy): {command}")
+        themed_console.print(f"Execute Shell Command (Denied by Policy): {command}")
         approval_handler.print_outcome("Execution", "Failed. Command is prohibited.", success=False)
         return ExecuteShellPluginOutput(command=command, error=err_msg)
 
     status = "approved"
     if _is_command_auto_approved(command):
-        console.print(f"Execute Shell Command (Auto-approved): {command}")
+        themed_console.print(f"Execute Shell Command (Auto-approved): {command}")
     else:
         status, _ = await approval_handler.request_approval(
             operation="Execute Shell Command",
@@ -118,9 +119,9 @@ async def execute_shell_tool(
             approval_handler.print_outcome("Command", f"Failed with return code {return_code}.", success=False)
 
         if stdout:
-            console.print(Panel(Text(stdout), title="[bold green]stdout[/]", border_style="green", expand=False))
+            themed_console.print(Panel(Text(stdout), title="[bold green]stdout[/]", border_style="green", expand=False))
         if stderr:
-            console.print(Panel(Text(stderr), title="[bold red]stderr[/]", border_style="red", expand=False))
+            themed_console.print(Panel(Text(stderr), title="[bold red]stderr[/]", border_style="red", expand=False))
 
         return ExecuteShellPluginOutput(
             command=command,

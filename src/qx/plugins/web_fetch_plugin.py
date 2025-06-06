@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from rich.console import Console as RichConsole
 
 from qx.core.approval_handler import ApprovalHandler
+from qx.cli.console import themed_console
 
 logger = logging.getLogger(__name__)
 
@@ -26,18 +27,18 @@ class WebFetchPluginOutput(BaseModel):
 async def web_fetch_tool(
     console: RichConsole, args: WebFetchPluginInput
 ) -> WebFetchPluginOutput:
-    approval_handler = ApprovalHandler(console)
+    approval_handler = ApprovalHandler(themed_console)
     url = args.url.strip()
     output_format = args.format.lower()
 
     if not url:
         err_msg = "Empty URL provided."
-        console.print(f"Web Fetch (Error): {err_msg}")
+        themed_console.print(f"Web Fetch (Error): {err_msg}")
         return WebFetchPluginOutput(url="", error=err_msg)
 
     if output_format not in ["markdown", "raw"]:
         err_msg = f"Invalid format '{output_format}'. Use 'markdown' or 'raw'."
-        console.print(f"Web Fetch (Error): {err_msg}")
+        themed_console.print(f"Web Fetch (Error): {err_msg}")
         return WebFetchPluginOutput(url=url, error=err_msg)
 
     status, _ = await approval_handler.request_approval(
@@ -62,7 +63,7 @@ async def web_fetch_tool(
             if len(content) > MAX_CONTENT_LENGTH:
                 content = content[:MAX_CONTENT_LENGTH]
                 truncated = True
-                console.print("  └─ Note: Content truncated.")
+                themed_console.print("  └─ Note: Content truncated.")
 
             final_content = content
             if output_format == "markdown":
