@@ -44,7 +44,6 @@ async def _generate_write_preview(
     file_path_str: str, new_content: str, theme: str = "rrt"
 ) -> Union[Syntax, Markdown]:
     path = Path(os.path.expanduser(file_path_str))
-    lexer = Syntax.get_lexer_for_filename(path.name, code="")
 
     if path.exists() and path.is_file():
         try:
@@ -65,8 +64,8 @@ async def _generate_write_preview(
     lines = new_content.splitlines()
     if len(lines) > MAX_PREVIEW_LINES:
         preview = "\n".join(lines[:HEAD_LINES]) + "\n...\n" + "\n".join(lines[-TAIL_LINES:])
-        return Syntax(preview, lexer, theme=theme, line_numbers=True, start_line=1)
-    return Syntax(new_content, lexer, theme=theme, line_numbers=True)
+        return Syntax(preview, lexer_name="auto", theme=theme, line_numbers=True, start_line=1)
+    return Syntax(new_content, lexer_name="auto", theme=theme, line_numbers=True)
 
 class WriteFilePluginInput(BaseModel):
     path: str = Field(..., description="Path to the file to write.")
