@@ -50,7 +50,7 @@ async def _write_file_core_logic(path_str: str, content: str) -> Optional[str]:
 
 
 async def _generate_write_preview(
-    file_path_str: str, new_content: str, theme: str = "rrt"
+    file_path_str: str, new_content: str
 ) -> Union[Syntax, Markdown]:
     path = Path(os.path.expanduser(file_path_str))
 
@@ -65,7 +65,7 @@ async def _generate_write_preview(
                 fromfile=f"a/{path.name}",
                 tofile=f"b/{path.name}",
             )
-            return Syntax("".join(diff), "diff", theme=theme)
+            return Syntax("".join(diff), "diff", theme="vim", line_numbers=False)
         except Exception as e:
             logger.error(f"Error generating diff for {path}: {e}")
             # Fallback to full content preview on error
@@ -75,8 +75,8 @@ async def _generate_write_preview(
         preview = (
             "\n".join(lines[:HEAD_LINES]) + "\n...\n" + "\n".join(lines[-TAIL_LINES:])
         )
-        return Syntax(preview, "auto", theme=theme, line_numbers=True, start_line=1)
-    return Syntax(new_content, "auto", theme=theme, line_numbers=True)
+        return Syntax(preview, "auto", theme="rrt", line_numbers=True, start_line=1)
+    return Syntax(new_content, "auto", theme="rrt", line_numbers=True)
 
 
 class WriteFilePluginInput(BaseModel):
