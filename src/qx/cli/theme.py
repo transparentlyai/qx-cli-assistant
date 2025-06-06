@@ -61,6 +61,7 @@ custom_theme = Theme(
         "repr.bool_true": "bold green",
         "repr.bool_false": "bold red",
         "repr.none": "magenta",
+        "numbers": "blue",  # Added new style for numbers
     }
 )
 
@@ -124,6 +125,9 @@ if __name__ == "__main__":
     console.print(True, style="repr.bool_true")
     console.print(False, style="repr.bool_false")
     console.print(None, style="repr.none")
+    console.print(
+        "This is a [numbers]12345[/] number.", style="numbers"
+    )  # Added example for new style
 
     console.print("-" * 40, style="rule.line")
     console.print("Theme demonstration complete.", style="app.title")

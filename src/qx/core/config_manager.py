@@ -25,10 +25,18 @@ MINIMAL_CONFIG_EXAMPLE = """
 # 2. ~/.config/qx/qx.conf (user-level)
 # 3. <project-directory>/.Q/qx.conf (highest priority)
 
-QX_MODEL_NAME=openrouter/openai/gpt-4o
-OPENROUTER_API_KEY=sk-your_openrouter_api_key_here
-QX_MODEL_PROVIDER=Together # Optional: Specify preferred provider(s), comma-separated
-QX_ALLOW_PROVIDER_FALLBACK=False # Optional: Set to true/false to allow/disallow fallbacks
+# Model Configuration (LiteLLM format)
+QX_MODEL_NAME=openrouter/anthropic/claude-3.5-sonnet
+
+# API Key (choose one based on your provider)
+OPENROUTER_API_KEY=sk-or-v1-your_openrouter_api_key_here
+# OPENAI_API_KEY=sk-your_openai_api_key_here
+# ANTHROPIC_API_KEY=sk-ant-your_anthropic_api_key_here
+
+# Optional settings
+QX_MODEL_TEMPERATURE=0.7
+QX_MODEL_MAX_TOKENS=4096
+QX_ENABLE_STREAMING=true
 """
 
 CONFIG_LOCATIONS = """
@@ -131,12 +139,26 @@ class ConfigManager:
         self._export_qx_configurations(original_env)
 
         # Check for minimal required variables
-        if not os.getenv("QX_MODEL_NAME") or not os.getenv("OPENROUTER_API_KEY"):
+        model_name = os.getenv("QX_MODEL_NAME")
+        api_keys = [
+            "OPENROUTER_API_KEY",
+            "OPENAI_API_KEY", 
+            "ANTHROPIC_API_KEY",
+            "AZURE_API_KEY",
+            "GOOGLE_API_KEY"
+        ]
+        has_api_key = any(os.getenv(key) for key in api_keys)
+        
+        if not model_name or not has_api_key:
             from qx.cli.theme import themed_console
 
             themed_console.print(
                 "[error]Error: Missing essential configuration variables.[/]"
             )
+            if not model_name:
+                themed_console.print("Missing QX_MODEL_NAME")
+            if not has_api_key:
+                themed_console.print(f"Missing API key. Set one of: {', '.join(api_keys)}")
             themed_console.print(MINIMAL_CONFIG_EXAMPLE)
             themed_console.print(CONFIG_LOCATIONS)
             sys.exit(1)

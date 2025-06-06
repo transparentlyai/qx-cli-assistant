@@ -6,12 +6,12 @@ from pathlib import Path
 from typing import Optional, Union
 
 from pydantic import BaseModel, Field
-from rich.console import Console as RichConsole
+from rich.console import Console  # Corrected import
 from rich.markdown import Markdown
 from rich.syntax import Syntax
 
 from qx.core.paths import USER_HOME_DIR, _find_project_root
-from qx.core.user_prompts import request_confirmation
+from qx.core.approval_handler import ApprovalHandler  # New import
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,6 @@ def is_path_allowed(
 # --- End of duplicated is_path_allowed ---
 
 
-# --- Copied and adapted from src/qx/tools/write_file.py (write_file_impl) ---
 async def _write_file_core_logic(path_str: str, content: str) -> Optional[str]:
     """
     Core logic to write content to a file. Does not handle approval.
@@ -61,13 +60,10 @@ async def _write_file_core_logic(path_str: str, content: str) -> Optional[str]:
         else:
             absolute_path = absolute_path.resolve()
 
-        # is_path_allowed check is done before calling this core logic in the plugin
-        # but can be kept here as a safeguard if this function were ever called directly.
         if not is_path_allowed(absolute_path, project_root, USER_HOME_DIR):
             logger.error(f"Write access denied by policy (core logic): {absolute_path}")
             return f"Error: Access denied by policy for path: {absolute_path}"
 
-        # Run blocking I/O operations in a thread pool to avoid blocking the event loop
         def _write_file_sync():
             absolute_path.parent.mkdir(parents=True, exist_ok=True)
             absolute_path.write_text(content, encoding="utf-8")
@@ -86,56 +82,42 @@ async def _write_file_core_logic(path_str: str, content: str) -> Optional[str]:
         return f"Error writing to file '{path_str}': {e}"
 
 
-# --- End of _write_file_core_logic ---
-
-
-# --- Adapted from ApprovalManager._get_file_preview_renderables for write_file ---
 async def _generate_write_preview(
     file_path_str: str,
     new_content: str,
-    diff_theme: str = "vim",  # Theme for diffs
-    new_file_theme: str = "rrt",  # Theme for new files
+    diff_theme: str = "vim",
+    new_file_theme: str = "rrt",
 ) -> Union[Syntax, Markdown]:
-    """
-    Generates a rich renderable preview for file write (diff or new content).
-    """
     file_path = Path(os.path.expanduser(file_path_str))
-
-    # Determine lexer based on file extension
-    lexer_name = file_path.suffix.lstrip(".")
-    if not lexer_name:  # Default to text if no extension
-        lexer_name = "text"
-    elif lexer_name == "py":  # Common case
+    lexer_name = file_path.suffix.lstrip(".") or "text"
+    if lexer_name == "py":
         lexer_name = "python"
-    elif lexer_name == "md":  # Markdown
+    elif lexer_name == "md":
         lexer_name = "markdown"
-    # Add more specific mappings if needed
 
     if file_path.exists() and file_path.is_file():
         try:
-            # Run blocking I/O in thread pool
             old_content = await asyncio.to_thread(file_path.read_text, encoding="utf-8")
             if old_content == new_content:
                 return Markdown(
                     "[bold yellow]No changes detected - file content is identical.[/bold yellow]"
                 )
-
             old_lines = old_content.splitlines(keepends=True)
             new_lines = new_content.splitlines(keepends=True)
             diff_lines = list(
                 difflib.unified_diff(
                     old_lines,
                     new_lines,
-                    fromfile=f"a/{file_path_str}",  # Standard diff format
-                    tofile=f"b/{file_path_str}",  # Standard diff format
+                    fromfile=f"a/{file_path_str}",
+                    tofile=f"b/{file_path_str}",
                     lineterm="\n",
                     n=3,
                 )
             )
             if diff_lines:
-                # Use Syntax directly for diff highlighting
-                diff_text = "".join(diff_lines)
-                return Syntax(diff_text, "diff", theme=diff_theme, line_numbers=False)
+                return Syntax(
+                    "".join(diff_lines), "diff", theme=diff_theme, line_numbers=False
+                )
             return Markdown(
                 "[bold yellow]No textual changes detected in diff.[/bold yellow]"
             )
@@ -143,35 +125,21 @@ async def _generate_write_preview(
             logger.error(
                 f"Error generating diff for {file_path_str}: {e}", exc_info=True
             )
-            # Fallback to showing new content if diff fails
 
-    # Show new content if file doesn't exist or diff failed
     all_lines = new_content.splitlines()
     line_count = len(all_lines)
-
     if line_count > MAX_PREVIEW_LINES:
         head_str = "\n".join(all_lines[:HEAD_LINES])
         tail_str = "\n".join(all_lines[-TAIL_LINES:])
-        display_content_str = (
-            f"{head_str}\n\n"
-            f"... {line_count - HEAD_LINES - TAIL_LINES} more lines ...\n\n"
-            f"{tail_str}"
-        )
-        # Use Syntax for truncated new content
+        display_content_str = f"{head_str}\n\n... {line_count - HEAD_LINES - TAIL_LINES} more lines ...\n\n{tail_str}"
         return Syntax(
             display_content_str, lexer_name, theme=new_file_theme, line_numbers=True
         )
     else:
-        # Use Syntax for full new content
         return Syntax(new_content, lexer_name, theme=new_file_theme, line_numbers=True)
 
 
-# --- End of _generate_write_preview ---
-
-
 class WriteFilePluginInput(BaseModel):
-    """Input model for the WriteFilePluginTool."""
-
     path: str = Field(
         ...,
         description="Path to the file to write. Can be relative (from CWD), absolute, or start with '~'. Parent directories will be created if needed.",
@@ -180,8 +148,6 @@ class WriteFilePluginInput(BaseModel):
 
 
 class WriteFilePluginOutput(BaseModel):
-    """Output model for the WriteFilePluginTool."""
-
     path: str = Field(description="The path where content was written.")
     success: bool = Field(
         description="True if the write operation completed successfully, False otherwise."
@@ -191,24 +157,21 @@ class WriteFilePluginOutput(BaseModel):
     )
 
 
-async def write_file_tool(  # Made async
-    console: RichConsole, args: WriteFilePluginInput
+async def write_file_tool(
+    console: Console, args: WriteFilePluginInput
 ) -> WriteFilePluginOutput:
     """
     Use this tool to update and create files in the filesystem.
     Directories will be created if they do not exist based on the provided path.
-    Permissions are manageged by this tool.
+    Approval is handled by the terminal layer via ApprovalHandler.
     """
     original_path_arg = args.path
-    path_to_consider = os.path.expanduser(
-        original_path_arg
-    )  # Start with this for checks and prompts
+    path_to_consider = os.path.expanduser(original_path_arg)
 
     console.print(
         f"[info]Preparing to write to file:[/info] [info]'{path_to_consider}'[/]"
     )
 
-    # Preliminary security check
     current_working_dir = Path.cwd()
     project_root = _find_project_root(str(current_working_dir))
     absolute_path_to_evaluate = Path(path_to_consider)
@@ -231,38 +194,44 @@ async def write_file_tool(  # Made async
             path=path_to_consider, success=False, message=err_msg
         )
 
-    # Generate preview
+    # --- Approval Handling using ApprovalHandler ---
+    approval_handler = ApprovalHandler(console)
     preview_renderable = await _generate_write_preview(
         path_to_consider, args.content, diff_theme="vim", new_file_theme="rrt"
     )
 
+    approval_options = [
+        ("a", "Approve", "approved"),
+        ("d", "Deny", "denied"),
+        ("s", "Approve for Session", "session_approved"),
+    ]
+
     prompt_msg = f"Allow Qx to write to file: '{path_to_consider}'?"
-    decision_status, _ = await request_confirmation(  # Await
+
+    decision_status, _ = await approval_handler.request_approval(
         prompt_message=prompt_msg,
-        console=console,
+        options=approval_options,
         content_to_display=preview_renderable,
     )
+    # --- End of Approval Handling ---
 
     path_to_write: str
     if decision_status in ["approved", "session_approved"]:
         path_to_write = path_to_consider
-        if (
-            decision_status == "approved"
-        ):  # Only print if not session_approved (which prints its own message)
+        if decision_status == "approved":
             console.print(
                 f"[info]Proceeding to write to:[/info] [info]'{path_to_write}'[/]"
             )
-    else:  # denied or cancelled
+
+    else:
         error_message = (
             f"Write operation for '{path_to_consider}' was {decision_status} by user."
         )
         logger.warning(error_message)
-        # request_confirmation already prints a message for denied/cancelled
         return WriteFilePluginOutput(
             path=path_to_consider, success=False, message=error_message
         )
 
-    # Proceed to write
     error_from_impl = await _write_file_core_logic(path_to_write, args.content)
 
     if error_from_impl:
