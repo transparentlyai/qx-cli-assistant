@@ -119,21 +119,29 @@ class ConfigManager:
         self._ensure_directories_exist()
         self.mcp_manager.load_mcp_configs()
 
-        # Store original environment to track what we've loaded
+        # Store original environment variables to preserve user-set env vars
         original_env = dict(os.environ)
 
         # --- Hierarchical qx.conf loading ---
+        # Load in order: system -> user -> project
+        # Each level can override the previous, but environment variables have final priority
+        
         # 1. Server-level configuration (lowest priority)
         self._load_dotenv_if_exists(Path("/etc/qx/qx.conf"), override=False)
 
-        # 2. User-level configuration
+        # 2. User-level configuration (overrides system settings)
         self._load_dotenv_if_exists(QX_CONFIG_DIR / "qx.conf", override=True)
 
-        # 3. Project-level configuration (highest priority)
+        # 3. Project-level configuration (overrides user & system settings)
         cwd = Path.cwd()
         project_root = _find_project_root(str(cwd))
         if project_root:
             self._load_dotenv_if_exists(project_root / ".Q" / "qx.conf", override=True)
+        
+        # 4. Restore original environment variables (highest priority)
+        # This ensures that environment variables set by the user are never overridden
+        for key, value in original_env.items():
+            os.environ[key] = value
 
         # Explicitly ensure all QX_ prefixed configurations are in environment
         self._export_qx_configurations(original_env)
