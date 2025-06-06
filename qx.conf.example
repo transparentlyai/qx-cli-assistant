@@ -1,0 +1,87 @@
+# QX Configuration Example
+# Place this file in one of the following locations (in order of priority):
+# 1. /etc/qx/qx.conf (system-wide, lowest priority)
+# 2. ~/.config/qx/qx.conf (user-level)
+# 3. <project-directory>/.Q/qx.conf (project-level, highest priority)
+
+# === REQUIRED SETTINGS ===
+
+# Model Configuration - Use LiteLLM format
+# Format: provider/model-name or provider/organization/model-name
+QX_MODEL_NAME=openrouter/anthropic/claude-3.5-sonnet
+
+# API Keys (choose based on your provider)
+# For OpenRouter
+OPENROUTER_API_KEY=sk-or-v1-your_openrouter_api_key_here
+
+# For OpenAI (if using OpenAI directly)
+# OPENAI_API_KEY=sk-your_openai_api_key_here
+
+# For Anthropic (if using Anthropic directly)
+# ANTHROPIC_API_KEY=sk-ant-your_anthropic_api_key_here
+
+# For Azure OpenAI
+# AZURE_API_KEY=your_azure_api_key_here
+# AZURE_API_BASE=https://your-resource.openai.azure.com/
+# AZURE_API_VERSION=2024-02-01
+
+# === OPTIONAL SETTINGS ===
+
+# Model Parameters
+QX_MODEL_TEMPERATURE=0.7
+QX_MODEL_MAX_TOKENS=4096
+QX_MODEL_REASONING_EFFORT=medium  # Options: low, medium, high (for reasoning models)
+
+# Provider Configuration (LiteLLM specific)
+# Specify preferred provider order (comma-separated)
+QX_MODEL_PROVIDER=OpenRouter,OpenAI,Anthropic
+
+# Allow fallback to other providers if primary fails
+QX_ALLOW_PROVIDER_FALLBACK=true
+
+# Streaming Configuration
+QX_ENABLE_STREAMING=true
+
+# Logging Configuration
+QX_LOG_LEVEL=INFO  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+QX_LOG_SENT=false  # Log messages sent to LLM
+QX_LOG_RECEIVED=false  # Log responses from LLM
+QX_DEBUG_STREAMING=false  # Debug streaming issues
+
+# === EXAMPLE MODEL CONFIGURATIONS ===
+
+# OpenRouter Models (recommended - access to many providers)
+# QX_MODEL_NAME=openrouter/openai/gpt-4o
+# QX_MODEL_NAME=openrouter/anthropic/claude-3.5-sonnet
+# QX_MODEL_NAME=openrouter/google/gemini-2.5-flash-preview-05-20
+# QX_MODEL_NAME=openrouter/meta-llama/llama-3.1-405b-instruct
+
+# Direct Provider Models  
+# QX_MODEL_NAME=gpt-4o                    # OpenAI direct
+# QX_MODEL_NAME=claude-3-5-sonnet-20241022 # Anthropic direct
+# QX_MODEL_NAME=vertex_ai/gemini-1.5-pro  # Google Vertex AI
+# QX_MODEL_NAME=azure/gpt-4o              # Azure OpenAI
+
+# Local Models
+# QX_MODEL_NAME=ollama/llama3.2
+# QX_MODEL_NAME=vllm/meta-llama/Llama-3.2-3B-Instruct
+
+# === COST TRACKING & OBSERVABILITY ===
+
+# LiteLLM Observability (optional)
+# LANGFUSE_PUBLIC_KEY=pk-lf-your_langfuse_public_key
+# LANGFUSE_SECRET_KEY=sk-lf-your_langfuse_secret_key
+# HELICONE_API_KEY=sk-helicone-your_helicone_api_key
+# LUNARY_PUBLIC_KEY=your_lunary_public_key
+
+# === ENVIRONMENT-SPECIFIC SETTINGS ===
+
+# Project Context (automatically loaded if present)
+# QX_PROJECT_CONTEXT=  # Loaded from .Q/project.md
+# QX_USER_CONTEXT=     # Loaded from ~/.config/qx/user.md
+# QX_PROJECT_FILES=    # Auto-generated project file tree
+
+# Performance Tuning
+# QX_HTTP_TIMEOUT=300
+# QX_MAX_RETRIES=3
+# QX_RETRY_DELAY=1

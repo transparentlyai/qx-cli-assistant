@@ -6,7 +6,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from rich.console import Console as RichConsole  # Import RichConsole directly
 
-from qx.core.user_prompts import request_confirmation
+# Removed: from qx.core.user_prompts import request_confirmation
 
 logger = logging.getLogger(__name__)
 
@@ -247,15 +247,14 @@ def _is_command_auto_approved(command: str) -> bool:
     return False
 
 
-async def execute_shell_tool(  # Made async
+async def execute_shell_tool(
     console: RichConsole, args: ExecuteShellPluginInput
 ) -> ExecuteShellPluginOutput:
     """Tool for executing shell commands.
 
-    Executes non-interactive shell commands with user approval flow:
-    - Auto-approved commands (ls, pwd, etc.) execute immediately
-    - Other commands require user confirmation
-    - Prohibited commands are blocked
+    Executes non-interactive shell commands. Approval is handled by the terminal layer.
+    - Prohibited commands are blocked.
+    - Auto-approved patterns are logged as such.
 
     Returns structured output with:
     - command: The actual command executed
@@ -263,11 +262,9 @@ async def execute_shell_tool(  # Made async
     - return_code: Exit code (0=success, only if executed)
     - error: Explanation if command was not executed
     """
-    # console is now directly available, no need for ctx.deps.console
+    command_to_execute = args.command.strip()
 
-    command_to_consider = args.command.strip()
-
-    if not command_to_consider:
+    if not command_to_execute:
         err_msg = "Error: Empty command provided."
         logger.error(err_msg)
         console.print(f"[error]{err_msg}[/]")
@@ -275,62 +272,33 @@ async def execute_shell_tool(  # Made async
             command="", stdout=None, stderr=None, return_code=None, error=err_msg
         )
 
-    if _is_command_prohibited(command_to_consider):
-        err_msg = f"Error: Command '{command_to_consider}' is prohibited by policy."
+    if _is_command_prohibited(command_to_execute):
+        err_msg = f"Error: Command '{command_to_execute}' is prohibited by policy."
         logger.error(err_msg)
-        console.print(
-            f"[error]Command prohibited by policy:[/] '{command_to_consider}'"
-        )
+        console.print(f"[error]Command prohibited by policy:[/] '{command_to_execute}'")
         return ExecuteShellPluginOutput(
-            command=command_to_consider,
+            command=command_to_execute,
             stdout=None,
             stderr=None,
             return_code=None,
             error=err_msg,
         )
 
-    command_to_execute = command_to_consider
-    needs_confirmation = not _is_command_auto_approved(command_to_consider)
+    # Approval is now assumed to be handled by the terminal layer.
+    # We still check for auto-approved patterns for logging/messaging.
+    is_auto_approved = _is_command_auto_approved(command_to_execute)
 
-    # Initialize decision_status to safe defaults
-    decision_status = (
-        "approved" if not needs_confirmation else "pending"
-    )  # "pending" is a placeholder, will be overwritten
-
-    if needs_confirmation:
-        prompt_msg = f"Allow Qx to execute shell command: '{command_to_consider}'?"
-        decision_status, _ = await request_confirmation(  # Await
-            prompt_message=prompt_msg, console=console
+    if is_auto_approved:
+        logger.debug(
+            f"Command '{command_to_execute}' matches an auto-approved pattern. Executing."
         )
-
-        if decision_status in ["approved", "session_approved"]:
-            command_to_execute = command_to_consider
-        else:  # denied or cancelled
-            error_message = f"Shell command execution for '{command_to_consider}' was {decision_status} by user."
-            logger.warning(error_message)
-            # request_confirmation already prints user decision (denied/cancelled)
-            return ExecuteShellPluginOutput(
-                command=command_to_consider,
-                stdout=None,
-                stderr=None,
-                return_code=None,
-                error=error_message,
-            )
-    else:  # Auto-approved
-        logger.debug(f"Command '{command_to_execute}' is auto-approved. Executing.")
         console.print(
             f"[success]AUTO-APPROVED (PATTERN):[/] Executing: [info]'{command_to_execute}'[/]"
         )
-
-    # If we reach here, command is approved (or auto-approved or session_approved) and not prohibited
-    # Message printing for execution start:
-    if not needs_confirmation:  # Auto-approved (already printed)
-        pass
-    elif (
-        decision_status == "session_approved"
-    ):  # Session approved (already printed by request_confirmation)
-        pass
-    else:  # Manually approved
+    else:
+        logger.debug(
+            f"Command '{command_to_execute}' requires approval (handled by terminal). Executing."
+        )
         console.print(f"[info]Executing command:[/info] '{command_to_execute}'")
 
     try:
@@ -345,8 +313,9 @@ async def execute_shell_tool(  # Made async
         stderr = process.stderr.strip() if process.stderr else None
 
         if process.returncode == 0:
-            # Avoid double printing success if already handled by session_approved or auto_approved messages
-            if not (decision_status == "session_approved" or not needs_confirmation):
+            if (
+                not is_auto_approved
+            ):  # Only print success if not already covered by auto-approve message
                 console.print(
                     f"[success]Command executed successfully:[/success] '{command_to_execute}'"
                 )
@@ -366,7 +335,7 @@ async def execute_shell_tool(  # Made async
                 stdout=stdout,
                 stderr=stderr,
                 return_code=process.returncode,
-                error=None,
+                error=None,  # Error is for non-execution, stderr for command errors
             )
 
     except Exception as e:

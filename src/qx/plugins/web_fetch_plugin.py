@@ -5,7 +5,7 @@ import httpx
 from pydantic import BaseModel, Field
 from rich.console import Console as RichConsole
 
-from qx.core.user_prompts import request_confirmation
+# Removed: from qx.core.user_prompts import request_confirmation
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ async def web_fetch_tool(
     Fetches content from a specified URL.
 
     Features:
-    - Always requires user approval before fetching
+    - Approval is handled by the terminal layer.
     - Supports HTML to Markdown conversion (default)
     - 10-second timeout for requests
     - Content truncated at 250,000 characters if needed
@@ -96,37 +96,13 @@ async def web_fetch_tool(
             truncated=False,
         )
 
-    console.print(
-        f"[info]Requesting permission to fetch URL:[/info] [info]'{url_to_fetch}'[/]"
-    )
-    prompt_msg = f"Allow Qx to fetch content from URL: '{url_to_fetch}'?"
-    decision_status, _ = await request_confirmation(
-        prompt_message=prompt_msg,
-        console=console,
-    )
-
-    if decision_status not in ["approved", "session_approved"]:
-        error_message = (
-            f"Web fetch operation for '{url_to_fetch}' was {decision_status} by user."
-        )
-        logger.warning(error_message)
-        # request_confirmation already prints a message for denied/cancelled
-        return WebFetchPluginOutput(
-            url=url_to_fetch,
-            content=None,
-            error=error_message,
-            status_code=None,
-            truncated=False,
-        )
-
+    # Approval is now assumed to be handled by the terminal layer.
     console.print(f"[info]Fetching content from:[/info] [info]'{url_to_fetch}'[/]")
 
     try:
-        # Use a simple HTTP client for now
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
             response = await client.get(url_to_fetch)
             response.raise_for_status()  # Raise an exception for 4xx/5xx responses
-            # URL fetched successfully
 
             content = response.text
             truncated = False
@@ -147,12 +123,12 @@ async def web_fetch_tool(
                     logger.warning(
                         "markdownify not installed. Cannot convert to markdown. Returning raw content."
                     )
-                    final_content = content
+                    # final_content remains content (raw)
                 except Exception as e:
                     logger.warning(
                         f"Could not convert content to markdown: {e}. Returning raw content."
                     )
-                    final_content = content  # Fallback to raw if conversion fails
+                    # final_content remains content (raw)
 
             logger.debug(
                 f"Successfully fetched URL: {url_to_fetch} (Status: {response.status_code}, Truncated: {truncated})"

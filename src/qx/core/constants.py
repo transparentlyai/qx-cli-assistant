@@ -1,8 +1,8 @@
 # qx/core/constants.py
 
 # Default model name if not specified by the user
-# This will now be an OpenRouter-compatible model string
-DEFAULT_MODEL = "google/gemini-2.5-flash-preview-05-20:thinking"
+# Using LiteLLM format for OpenRouter
+DEFAULT_MODEL = "openrouter/anthropic/claude-3.5-sonnet"
 
 # Default tree ignore patterns
 DEFAULT_TREE_IGNORE_PATTERNS = [

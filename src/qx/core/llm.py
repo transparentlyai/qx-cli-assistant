@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, Type, cast
 
 import httpx
-from openai import AsyncOpenAI
+import litellm
+from litellm import acompletion
 from openai.types.chat import (
     ChatCompletionMessageParam,
     ChatCompletionSystemMessageParam,
@@ -88,7 +89,7 @@ class QXLLMAgent:
         self._tool_functions: Dict[str, Callable] = {}
         self._openai_tools_schema: List[ChatCompletionToolParam] = []
         self._tool_input_models: Dict[str, Type[BaseModel]] = {}
-        self._http_client: Optional[httpx.AsyncClient] = None
+        self._message_cache: Dict[int, Dict[str, Any]] = {}  # Cache for serialized messages
 
         for func, schema, input_model_class in tools:
             self._tool_functions[func.__name__] = func
@@ -119,96 +120,79 @@ class QXLLMAgent:
                 f"QXLLMAgent: Registered tool function '{func.__name__}' with schema name '{function_def.get('name')}'"
             )
 
-        self.client = self._initialize_openai_client()
+        self._configure_litellm()
         logger.info(f"QXLLMAgent initialized with model: {self.model_name}")
         logger.info(f"Registered {len(self._tool_functions)} tool functions.")
 
-    async def _log_request(self, request: httpx.Request) -> None:
-        """Log HTTP request details for debugging."""
-        logger.debug(f"OpenRouter Request: {request.method} {request.url}")
-        # Don't log Authorization header for security
-        headers = {
-            k: v for k, v in request.headers.items() if k.lower() != "authorization"
-        }
-        logger.debug(f"Request Headers: {headers}")
-        if request.content:
-            try:
-                content = request.content.decode()
-                if content.startswith("{"):
-                    import json
-
-                    parsed = json.loads(content)
-                    logger.debug(f"Request Body: {json.dumps(parsed, indent=2)}")
+    def _serialize_messages_efficiently(
+        self, messages: List[ChatCompletionMessageParam]
+    ) -> List[Dict[str, Any]]:
+        """
+        Efficiently serialize messages to avoid repeated model_dump() calls.
+        Converts BaseModel messages to dicts once and caches the result.
+        """
+        serialized: List[Dict[str, Any]] = []
+        for msg in messages:
+            if isinstance(msg, BaseModel):
+                # Use object id as cache key
+                msg_id = id(msg)
+                if msg_id in self._message_cache:
+                    # Use cached version
+                    serialized.append(self._message_cache[msg_id])
                 else:
-                    logger.debug(f"Request Body: {content[:500]}...")
-            except Exception:
-                logger.debug(f"Request Body: {str(request.content)[:500]}...")
+                    # Convert BaseModel to dict and cache it
+                    msg_dict = msg.model_dump()
+                    self._message_cache[msg_id] = msg_dict
+                    serialized.append(msg_dict)
+                    # Limit cache size to prevent memory leaks
+                    if len(self._message_cache) > 1000:
+                        # Remove oldest entries (simple cleanup)
+                        oldest_keys = list(self._message_cache.keys())[:500]
+                        for key in oldest_keys:
+                            del self._message_cache[key]
+            else:
+                # Already a dict, use as-is
+                serialized.append(dict(msg) if hasattr(msg, "items") else msg)  # type: ignore
+        return serialized
 
-    async def _log_response(self, response: httpx.Response) -> None:
-        """Log HTTP response details for debugging."""
-        logger.debug(
-            f"OpenRouter Response: {response.status_code} {response.reason_phrase}"
-        )
-        logger.debug(f"Response Headers: {dict(response.headers)}")
-
-        # Skip content logging for streaming responses to avoid ResponseNotRead error
-        is_streaming = response.headers.get("content-type", "").startswith(
-            "text/event-stream"
-        )
-        if not is_streaming:
-            try:
-                if hasattr(response, "content") and response.content:
-                    content = response.content.decode()[:1000]  # First 1000 chars
-                    if content.strip().startswith("{"):
-                        import json
-
-                        parsed = json.loads(content)
-                        logger.debug(f"Response Body: {json.dumps(parsed, indent=2)}")
-                    else:
-                        logger.debug(f"Response Body: {content}...")
-            except Exception:
-                logger.debug("Could not log response body")
-
-    def _initialize_openai_client(self) -> AsyncOpenAI:
-        """Initializes the OpenAI client for OpenRouter."""
-        openrouter_api_key = os.environ.get("OPENROUTER_API_KEY")
-        if not openrouter_api_key:
-            from rich.console import Console
-
-            Console().print(
-                "[error]Error:[/] OPENROUTER_API_KEY environment variable not set."
-            )
-            raise ValueError("OPENROUTER_API_KEY not set.")
-
-        # Create HTTP client with proper configuration for streaming
-        # Add debug logging hooks if debug level is enabled
-        from typing import Dict, List, Callable, Any
-
-        event_hooks: Dict[str, List[Callable[..., Any]]] = {}
+    def _configure_litellm(self) -> None:
+        """Configure LiteLLM settings."""
+        # Set up debugging if enabled
         if os.environ.get("QX_LOG_LEVEL", "ERROR").upper() == "DEBUG":
-            event_hooks = {
-                "request": [self._log_request],
-                "response": [self._log_response],
-            }
+            litellm.set_verbose = True
+        
+        # Configure timeout settings
+        litellm.request_timeout = 300.0  # 5 minute timeout for requests
+        
+        # Configure retries
+        litellm.num_retries = int(os.environ.get("QX_MAX_RETRIES", "3"))
+        
+        # Configure drop unsupported params behavior
+        litellm.drop_params = True
+        
+        # Set up API key validation
+        self._validate_api_keys()
 
-        self._http_client = httpx.AsyncClient(
-            timeout=httpx.Timeout(
-                180.0, connect=15.0, read=180.0, write=30.0
-            ),  # Timeouts for streaming
-            limits=httpx.Limits(
-                max_connections=10,
-                max_keepalive_connections=5,
-                keepalive_expiry=60.0,  # Longer keepalive for streaming connections
-            ),
-            follow_redirects=True,
-            event_hooks=event_hooks,
-        )
-
-        return AsyncOpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=openrouter_api_key,
-            http_client=self._http_client,
-        )
+    def _validate_api_keys(self) -> None:
+        """Validate that required API keys are present."""
+        # Check for any provider API key
+        api_keys = [
+            "OPENROUTER_API_KEY",
+            "OPENAI_API_KEY", 
+            "ANTHROPIC_API_KEY",
+            "AZURE_API_KEY",
+            "GOOGLE_API_KEY"
+        ]
+        
+        has_valid_key = any(os.environ.get(key) for key in api_keys)
+        
+        if not has_valid_key:
+            from rich.console import Console
+            Console().print(
+                "[error]Error:[/] No valid API key found. Please set one of: " + 
+                ", ".join(api_keys)
+            )
+            raise ValueError("No valid API key found.")
 
     async def run(
         self,
@@ -312,45 +296,26 @@ class QXLLMAgent:
                         )
 
         # Parameters for the chat completion
+        # Optimize message serialization to avoid repeated model_dump() calls
+        serialized_messages = self._serialize_messages_efficiently(messages)
+
         chat_params: Dict[str, Any] = {
             "model": self.model_name,
-            "messages": [
-                msg.model_dump() if isinstance(msg, BaseModel) else msg
-                for msg in messages
-            ],
+            "messages": serialized_messages,
             "temperature": self.temperature,
-            "tools": self._openai_tools_schema,
-            "tool_choice": "auto",
+            "tools": self._openai_tools_schema if self._openai_tools_schema else None,
+            "tool_choice": "auto" if self._openai_tools_schema else None,
         }
 
         if self.max_output_tokens is not None:
             chat_params["max_tokens"] = self.max_output_tokens
 
-        # OpenRouter-specific parameters like 'reasoning' go into extra_body
-        extra_body_params = {}
+        # Handle reasoning effort (for o1 models)
         if self.reasoning_effort is not None:
-            # Pass reasoning_effort as 'effort' string
-            extra_body_params["reasoning"] = {"effort": self.reasoning_effort}
+            chat_params["reasoning_effort"] = self.reasoning_effort
 
-        # Add provider settings from environment variables
-        provider_name = os.environ.get("QX_MODEL_PROVIDER")
-        allow_fallbacks_str = os.environ.get("QX_ALLOW_PROVIDER_FALLBACK")
-
-        if provider_name or allow_fallbacks_str is not None:
-            provider_config: Dict[str, Any] = {}
-            if provider_name:
-                provider_config["order"] = [p.strip() for p in provider_name.split(",")]
-
-            if allow_fallbacks_str is not None:
-                # Convert string to boolean: "true", "1", "yes" -> True; otherwise False
-                allow_fallbacks = allow_fallbacks_str.lower() in ("true", "1", "yes")
-                provider_config["allow_fallbacks"] = allow_fallbacks
-
-            if provider_config:
-                extra_body_params["provider"] = provider_config
-
-        if extra_body_params:
-            chat_params["extra_body"] = extra_body_params
+        # Add timeout
+        chat_params["timeout"] = 300.0
 
         try:
             if self.enable_streaming:
@@ -365,7 +330,7 @@ class QXLLMAgent:
                 )
             else:
                 try:
-                    response = await self._make_api_call_with_retry(chat_params)
+                    response = await self._make_litellm_call(chat_params)
                     response_message = response.choices[0].message
                 except (asyncio.TimeoutError, httpx.TimeoutException):
                     # After retries failed, try "try again" message
@@ -477,7 +442,7 @@ class QXLLMAgent:
 
             with console.status("Thinking...", spinner="dots") as status:
                 try:
-                    stream = await self._make_api_call_with_retry(chat_params)
+                    stream = await self._make_litellm_call(chat_params)
                 except (asyncio.TimeoutError, httpx.TimeoutException):
                     status.stop()
                     return await self._handle_timeout_fallback(
@@ -682,7 +647,7 @@ class QXLLMAgent:
                 # Fall back to non-streaming
                 chat_params["stream"] = False
                 try:
-                    response = await self._make_api_call_with_retry(chat_params)
+                    response = await self._make_litellm_call(chat_params)
                     response_message = response.choices[0].message
                     messages.append(response_message)
 
@@ -961,10 +926,10 @@ class QXLLMAgent:
                 try:
                     return await asyncio.wait_for(
                         task_info["coroutine"],
-                        timeout=30.0,  # 30 second timeout per tool
+                        timeout=120.0,  # 2 minute timeout per tool to allow for complex operations
                     )
                 except asyncio.TimeoutError:
-                    error_msg = f"Tool '{task_info['function_name']}' timed out after 30 seconds"
+                    error_msg = f"Tool '{task_info['function_name']}' timed out after 2 minutes"
                     logger.error(error_msg)
                     return Exception(error_msg)
 
@@ -1026,6 +991,16 @@ class QXLLMAgent:
             )
             logger.debug("Tool response continuation completed successfully")
             return result
+        except (asyncio.TimeoutError, httpx.TimeoutException) as e:
+            # Handle timeout specifically to avoid excessive retries
+            logger.warning(f"Timeout during tool continuation: {e}")
+            self.console.print(
+                "[warning]Warning:[/] Tool execution completed but response generation timed out"
+            )
+            # Return partial result with tool responses included
+            return QXRunResult(
+                "Tool execution completed but response generation timed out", messages
+            )
         except Exception as e:
             logger.error(f"Error continuing after tool execution: {e}", exc_info=True)
             self.console.print(
@@ -1055,10 +1030,7 @@ class QXLLMAgent:
 
             fallback_params = {
                 "model": self.model_name,
-                "messages": [
-                    msg.model_dump() if isinstance(msg, BaseModel) else msg
-                    for msg in fallback_messages
-                ],
+                "messages": self._serialize_messages_efficiently(fallback_messages),
                 "temperature": self.temperature,
                 "tools": self._openai_tools_schema,
                 "tool_choice": "auto",
@@ -1068,7 +1040,11 @@ class QXLLMAgent:
             if self.max_output_tokens is not None:
                 fallback_params["max_tokens"] = self.max_output_tokens
 
-            response = await self.client.chat.completions.create(**fallback_params)  # type: ignore
+            # Use timeout for fallback but allow sufficient time for model response
+            response = await asyncio.wait_for(
+                acompletion(**fallback_params),
+                timeout=240.0  # 4 minute timeout for fallback (slightly less than main timeout)
+            )
             response_message = response.choices[0].message
             fallback_messages.append(response_message)
 
@@ -1088,35 +1064,20 @@ class QXLLMAgent:
             )
             return QXRunResult("Request timed out and retry failed", messages)
 
-    async def _make_api_call_with_retry(
-        self, chat_params: Dict[str, Any], max_retries: int = 2
-    ) -> Any:
-        """Make API call with timeout retry logic."""
-        for attempt in range(max_retries + 1):
-            try:
-                return await self.client.chat.completions.create(**chat_params)  # type: ignore
-            except (asyncio.TimeoutError, httpx.TimeoutException):
-                logger.warning(
-                    f"API call timeout on attempt {attempt + 1}/{max_retries + 1}"
-                )
-                if attempt == max_retries:
-                    logger.error(
-                        f"All {max_retries + 1} API call attempts failed due to timeout"
-                    )
-                    raise
-                self.console.print(
-                    f"[warning]Request timed out, retrying... (attempt {attempt + 2}/{max_retries + 1})[/]"
-                )
-                await asyncio.sleep(1)  # Brief delay before retry
-            except Exception as e:
-                logger.error(f"API call failed on attempt {attempt + 1}: {e}")
-                raise
+    async def _make_litellm_call(self, chat_params: Dict[str, Any]) -> Any:
+        """Make LiteLLM API call."""
+        try:
+            # Remove None values to clean up parameters
+            clean_params = {k: v for k, v in chat_params.items() if v is not None}
+            return await acompletion(**clean_params)
+        except Exception as e:
+            logger.error(f"LiteLLM API call failed: {e}")
+            raise
 
     async def cleanup(self):
-        """Clean up resources like HTTP client."""
-        if self._http_client:
-            await self._http_client.aclose()
-            self._http_client = None
+        """Clean up resources and message cache."""
+        # Clear message cache to free memory
+        self._message_cache.clear()
 
 
 class QXRunResult:
