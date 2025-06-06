@@ -1,3 +1,4 @@
+import asyncio
 from typing import Tuple, Optional, Any
 
 from rich.console import Console
@@ -5,6 +6,8 @@ from rich.console import Console
 from qx.core.user_prompts import (
     get_user_choice_from_options_async,
     is_approve_all_active,
+    _approve_all_active,
+    _approve_all_lock,
 )
 
 
@@ -43,7 +46,7 @@ class ApprovalHandler:
             A tuple of (status, chosen_key).
         """
         if await is_approve_all_active():
-            header = f"{operation} (Auto-approved) {parameter_name}: {parameter_value}"
+            header = f"{operation} (Auto-approved) {parameter_name}: [primary]'{parameter_value}'[/]"
             self.console.print(header)
             return "session_approved", "a"
 
@@ -80,6 +83,14 @@ class ApprovalHandler:
         )
 
         if chosen_key and chosen_key in option_map:
+            # Handle "All" option to activate session auto-approve
+            if chosen_key == "a":
+                # Import the module to modify the global variable properly
+                import qx.core.user_prompts as user_prompts
+                async with _approve_all_lock:
+                    user_prompts._approve_all_active = True
+                self.console.print("[info]'Approve All' activated for this session.[/info]")
+            
             status = option_map[chosen_key]
             return status, chosen_key
         else:

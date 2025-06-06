@@ -25,7 +25,7 @@ You wont stop until the requested task is done, or you have exhausted all option
     * `current_time_tool`: get current time
     * `execute_shell_tool`: run shell commands
 - Use the provided tools to read, write, search, and execute.  
-- Tools may run in parallel unless dependent.  
+- You must ruun tools in parallel unless dependent.  
 
 ## critical file content rules
 When using `write_file_tool`, provide raw, unescaped content:

@@ -15,9 +15,9 @@ custom_theme = Theme(
         "highlight": "bold yellow on black",
         "info": "cyan",
         "warning": "yellow",
-        "error": "bold red",
+        "error": "red",
         "debug": "dim white",
-        "success": "bold green",
+        "success": "green",
         "attention": "bold yellow",
         "critical": "bold bright_red",
         # UI elements

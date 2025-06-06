@@ -3,7 +3,8 @@ import logging
 from typing import List, Literal, Optional, Tuple, Any
 
 from rich.console import RenderableType  # Corrected import
-from rich.prompt import Prompt  # For interactive input
+import signal
+from rich.prompt import Prompt  # For Rich-compatible interactive input
 
 # Use Any to avoid type checking issues with Console
 RichConsole = Any  # Note: rich.console.Console is the actual type
@@ -21,6 +22,16 @@ CHOICE_APPROVE_ALL = ("a", "Approve All", "all")
 CHOICE_CANCEL = ("c", "Cancel", "cancel")
 
 ApprovalDecisionStatus = Literal["approved", "denied", "cancelled", "session_approved"]
+
+
+def _disable_ctrl_c():
+    """Temporarily disable Ctrl+C signal handling"""
+    return signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+
+def _restore_ctrl_c(old_handler):
+    """Restore previous Ctrl+C signal handling"""
+    signal.signal(signal.SIGINT, old_handler)
 
 
 async def _execute_prompt_with_live_suspend(
@@ -83,45 +94,37 @@ async def _ask_basic_confirmation(
     full_prompt = f"{prompt_message_text} ({choices_display_str}): "
 
     # This function is called by _request_confirmation_terminal
-    # which already checks for non-interactive. So Prompt.ask should be safe here.
+    # which already checks for non-interactive. So prompt_toolkit should be safe here.
     while True:
         try:
-            # Use Rich Prompt for better handling
-            user_input = await asyncio.to_thread(
-                Prompt.ask,
-                full_prompt,
-                choices=choices_str_list,  # Pass only the keys
-                show_choices=False,  # The prompt already shows them
-                console=console,
-            )
-
-            if not user_input:
-                # Should not happen with Prompt.ask if choices are enforced
-                console.print(
-                    "[warning]Empty input received. Please try again.[/warning]"
+            # Use Rich Prompt with disabled Ctrl+C for proper color support
+            old_handler = _disable_ctrl_c()
+            
+            try:
+                user_input = await asyncio.to_thread(
+                    Prompt.ask,
+                    full_prompt,
+                    choices=choices_str_list,
+                    show_choices=False,  # Choices are already in the prompt text
+                    console=console
                 )
-                continue
+            finally:
+                # Always restore Ctrl+C handling
+                _restore_ctrl_c(old_handler)
+                
+            # Rich Prompt.ask handles validation and returns valid choice
+            if user_input:
+                return user_input.lower()
 
-            user_input_lower = user_input.lower()
-            # Prompt.ask with choices should return one of the choices, so direct mapping is fine.
-            if user_input_lower in choices_str_list:
-                return user_input_lower  # Return the chosen key directly
-
-            # This part should ideally not be reached if Prompt.ask enforces choices
-            console.print(
-                f"[error]Invalid choice '{user_input_lower}'. Please enter one of: {choices_display_str}[/]"
-            )
-
-        except (EOFError, KeyboardInterrupt):
-            logger.warning(
-                "User cancelled confirmation prompt (_ask_basic_confirmation)."
-            )
-            console.print("\n[warning]Input cancelled.[/warning]")
-            return "c"  # Default to cancel
         except Exception as e:
+            # Restore Ctrl+C handling in case of any error
+            try:
+                _restore_ctrl_c(old_handler)
+            except:
+                pass  # old_handler might not be defined if error occurred early
             logger.error(f"Error in confirmation prompt: {e}", exc_info=True)
-            console.print(f"[error]Error: {e}[/]")
-            return "c"  # Default to cancel
+            console.print(f"[dim red]Error with prompt, please try again.[/dim red]")
+            continue
 
 
 def _is_textual_environment(console: RichConsole) -> bool:
@@ -379,37 +382,38 @@ async def get_user_choice_from_options_async(
 
     # Interactive mode:
     while True:
+        # Use Rich Prompt with disabled Ctrl+C for proper color support
         try:
-            # Mauro: This is where you'll use rich.prompt.Prompt.ask
-            # The `prompt_text_with_options` already contains the full string like "([a])Approve / ([d])Deny: "
-            # `processed_valid_choices` is the list of allowed characters e.g. ['a', 'd', 'c']
-            # `processed_default_choice` is the default character if one was validly provided.
-
-            # Use Prompt.ask for interactive user input
-            user_input = await asyncio.to_thread(
-                Prompt.ask,
-                prompt_text_with_options,  # This is the full prompt text
-                choices=processed_valid_choices,  # List of allowed characters
-                default=processed_default_choice,  # The default character, if any
-                show_choices=False,  # Set to False because choices are in prompt_text_with_options
-                console=console
-            )
+            # Temporarily disable Ctrl+C to prevent conflicts
+            old_handler = _disable_ctrl_c()
             
-            if user_input and user_input.strip():
+            try:
+                user_input = await asyncio.to_thread(
+                    Prompt.ask,
+                    prompt_text_with_options,
+                    choices=processed_valid_choices,
+                    default=processed_default_choice,
+                    show_choices=False,  # Choices are already in the prompt text
+                    console=console
+                )
+            finally:
+                # Always restore Ctrl+C handling
+                _restore_ctrl_c(old_handler)
+            
+            # Rich Prompt.ask handles validation and returns valid choice
+            if user_input:
                 return user_input.lower()
-            elif not processed_default_choice:
-                # No default set and empty input - ask again
+            else:
+                # Should not happen with choices validation, but just in case
                 console.print("[dim red]Please select one of the available options.[/dim red]")
                 continue
-            else:
-                # Has default and empty input - use default
-                return processed_default_choice
-
-        except (EOFError, KeyboardInterrupt):
-            logger.warning("User cancelled input via EOF/KeyboardInterrupt.")
-            console.print("\n[warning]Input cancelled.[/warning]")
-            return None  # Indicate cancellation
+                
         except Exception as e:
-            logger.error(f"Error during prompt: {e}", exc_info=True)
-            console.print(f"[error]An error occurred: {e}[/]")
-            return None  # Indicate error/cancellation
+            # Restore Ctrl+C handling in case of any error
+            try:
+                _restore_ctrl_c(old_handler)
+            except:
+                pass  # old_handler might not be defined if error occurred early
+            logger.error(f"Error during Rich prompt: {e}", exc_info=True)
+            console.print(f"[dim red]Error with prompt, please try again.[/dim red]")
+            continue
