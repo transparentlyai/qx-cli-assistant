@@ -14,3 +14,4 @@ wheels/
 .Q/sessions/
 .claude/
 tmp/
+.Q/qx.conf
