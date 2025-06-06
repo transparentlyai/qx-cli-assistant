@@ -83,6 +83,11 @@ QX_MODEL_NAME=openrouter/anthropic/claude-3.5-sonnet
 OPENROUTER_API_KEY=sk-or-v1-your_openrouter_api_key_here
 # OPENAI_API_KEY=sk-your_openai_api_key_here
 # ANTHROPIC_API_KEY=sk-ant-your_anthropic_api_key_here
+
+# Optional: Model parameters
+QX_MODEL_TEMPERATURE=0.7
+QX_MODEL_MAX_TOKENS=4096
+QX_MODEL_REASONING_EFFORT=medium  # For reasoning models (none, low, medium, high)
 ```
 
 #### Configuration Discovery
@@ -150,6 +155,7 @@ QX_FALLBACK_MODELS=gpt-4o,claude-3.5-sonnet uv run qx
 QX_MODEL_NAME=openrouter/anthropic/claude-3.5-sonnet  # Primary model
 QX_MODEL_TEMPERATURE=0.7                              # Sampling temperature  
 QX_MODEL_MAX_TOKENS=4096                             # Max output tokens
+QX_MODEL_REASONING_EFFORT=medium                     # Reasoning effort (none, low, medium, high)
 QX_ENABLE_STREAMING=true                             # Enable streaming responses
 ```
 

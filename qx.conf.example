@@ -30,7 +30,7 @@ OPENROUTER_API_KEY=sk-or-v1-your_openrouter_api_key_here
 # Model Parameters
 QX_MODEL_TEMPERATURE=0.7
 QX_MODEL_MAX_TOKENS=4096
-QX_MODEL_REASONING_EFFORT=medium  # Options: low, medium, high (for reasoning models)
+QX_MODEL_REASONING_EFFORT=medium  # Options: none, low, medium, high (for reasoning models)
 
 # Provider Configuration (LiteLLM specific)
 # Specify preferred provider order (comma-separated)
