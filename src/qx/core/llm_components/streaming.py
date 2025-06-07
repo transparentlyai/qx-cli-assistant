@@ -102,7 +102,7 @@ class StreamingHandler:
             console = Console()
 
             with console.status(
-                "", spinner="point", speed=2, refresh_per_second=25
+                "[dim]Processing[/dim]", spinner="point", speed=2, refresh_per_second=25
             ) as status:
                 try:
                     stream = await self._make_litellm_call(chat_params)
@@ -157,22 +157,28 @@ class StreamingHandler:
                     if hasattr(delta, "reasoning") and delta.reasoning:
                         reasoning_text = delta.reasoning
                         
-                        # Update spinner with current thinking message
-                        if reasoning_text and reasoning_text.strip():
-                            update_spinner_text(reasoning_text)
+                        # Check if we should display thinking messages
+                        show_thinking = await is_show_thinking_active()
                         
-                        # Display reasoning content in faded color
-                        if (
-                            reasoning_text
-                            and reasoning_text.strip()
-                            and await is_show_thinking_active()
-                        ):
-                            from rich.console import Console
-
-                            reasoning_console = Console()
-                            reasoning_console.print(
-                                f"[dim]{reasoning_text}[/dim]", end=""
-                            )
+                        if reasoning_text and reasoning_text.strip():
+                            if show_thinking:
+                                # Temporarily stop spinner to print thinking message cleanly
+                                was_spinning = not spinner_stopped
+                                if was_spinning:
+                                    status.stop()
+                                
+                                from rich.console import Console
+                                reasoning_console = Console()
+                                reasoning_console.print(
+                                    f"[dim]{reasoning_text}[/dim]", end=""
+                                )
+                                
+                                # Restart spinner if it was running
+                                if was_spinning:
+                                    status.start()
+                            else:
+                                # Update spinner with current thinking message if not displaying
+                                update_spinner_text(reasoning_text)
 
                     # Handle content streaming
                     if delta.content:
