@@ -8,7 +8,7 @@
 - if you need to create temporary scirpts, files, and other artifacts, use the ./tmp directory - remember to remove them after the task is done.
 - Do not use relative imports 
 
-Upon finishin the task, ensure the following: 
-2. Run mypy for type checking e.g. `mypy <file.py>`
-1. Compile code using `python -m py_compile <file.py>`
-2. Use ruff for linting and formatting e.g. `ruff check <file.py>` and `ruff format <file.py>`
+Upon finishin the task, **Only if you have updated or created a Python file** do: 
+1. Run mypy for type checking e.g. `mypy <file.py>`
+2. Compile code using `python -m py_compile <file.py>`
+3. Use ruff for linting and formatting e.g. `ruff check <file.py>` and `ruff format <file.py>`

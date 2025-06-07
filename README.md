@@ -12,6 +12,8 @@ QX is an intelligent command-line interface (CLI) agent designed to assist with 
 - 💬 **Interactive & Streaming**: Real-time streaming responses with rich formatting
 - 🎯 **Context Management**: Intelligent context window scaling and management
 - 🔒 **Security-First**: Built-in approval workflows for sensitive operations
+- ⌨️ **Global Hotkeys**: System-wide hotkey support that works during any operation
+- 🎛️ **Advanced Controls**: Real-time toggles for thinking mode, output control, and approvals
 
 ## 🚀 Quick Start
 
@@ -135,6 +137,55 @@ uv run qx "Help me refactor this function"
 uv run qx "What files are in this project?" --exit
 ```
 
+### ⌨️ Global Hotkeys
+
+QX supports global hotkeys that work at any time during operation, including while the AI is processing:
+
+| Hotkey | Action | Description |
+|--------|--------|-------------|
+| **Ctrl+T** | Toggle Thinking | Show/hide AI reasoning process |
+| **Ctrl+A** | Toggle Approve All | Enable/disable automatic approval for tool operations |
+| **Ctrl+S** | Toggle Stdout | Show/hide command output during tool execution |
+| **Ctrl+R** | History Search | Search command history (available during input) |
+| **Ctrl+C** | Cancel Operation | Interrupt current operation |
+| **Ctrl+D** | Exit Application | Gracefully exit QX |
+| **F12** | Emergency Cancel | Alternative cancel option |
+
+**Note**: Global hotkeys are automatically suspended during approval prompts to prevent conflicts with user input.
+
+### 🛡️ Approval System
+
+QX includes a comprehensive approval system for tool operations:
+
+#### Approval Options
+When QX requests permission to perform an operation, you have four choices:
+
+- **Y** (Yes): Approve this single operation
+- **N** (No): Deny this operation
+- **A** (All): **Approve All** - Automatically approve all subsequent tool operations in this session
+- **C** (Cancel): Cancel the operation
+
+#### Approve All Mode
+The "Approve All" feature allows you to:
+- Press **A** during any tool approval to activate automatic approval for the session
+- Use **Ctrl+A** hotkey to toggle Approve All mode on/off at any time
+- See visual confirmation when mode is activated/deactivated
+- Session-based: Mode automatically resets when QX restarts
+
+#### Example Approval Flow
+```
+Write: /home/user/project/script.py
+--- Content Preview ---
+#!/usr/bin/env python3
+print("Hello, World!")
+--- End Preview ---
+
+Allow Qx to write to file: '/home/user/project/script.py'? (Yes, No, All, Cancel) a
+'Approve All' activated for this session.
+```
+
+After pressing **A**, all subsequent tool operations will be auto-approved with no further prompts.
+
 ### Advanced Usage
 
 ```bash
@@ -233,6 +284,47 @@ Configuration in `.Q/mcp_servers.json`:
   }
 }
 ```
+
+## ⌨️ Global Hotkey System
+
+QX includes a sophisticated global hotkey system that provides system-wide key capture capabilities:
+
+### Architecture
+
+- **Global Key Capture**: Uses termios and tty for Unix terminal hotkey detection
+- **Suspend/Resume Pattern**: Automatically suspends global hotkeys during user input to prevent conflicts
+- **Async/Sync Support**: Handles both synchronous and asynchronous callback functions
+- **Terminal Compatibility**: Supports multiple terminal emulators and key sequence patterns
+
+### Key Features
+
+- **Zero Dependencies**: Pure Python implementation using only standard library modules
+- **Conflict Prevention**: Intelligent suspend/resume prevents interference with prompt_toolkit input
+- **Performance Optimized**: Queue-based overflow protection and timeout handling
+- **Comprehensive Key Support**: F-keys, Alt combinations, Ctrl sequences, and navigation keys
+
+### Technical Implementation
+
+The global hotkey system consists of two main components:
+
+1. **GlobalHotkeys Class** (`global_hotkeys.py`):
+   - Low-level terminal input capture using termios
+   - State machine parsing for multi-character escape sequences
+   - Thread-based input listener with async callback support
+
+2. **QXHotkeyManager Class** (`hotkey_manager.py`):
+   - High-level hotkey action registration and management
+   - Integration between global capture and QX functionality
+   - Centralized handler registry for hotkey actions
+
+### Suspend/Resume Pattern
+
+Global hotkeys are automatically suspended during:
+- User input prompts (prompt_toolkit active)
+- Tool approval dialogs
+- Any interactive input operations
+
+This prevents key conflicts and ensures reliable user interaction.
 
 ## 🔧 Development & Plugins
 
