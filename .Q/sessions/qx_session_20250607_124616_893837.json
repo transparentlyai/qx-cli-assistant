@@ -1,0 +1,15 @@
+[
+  {
+    "role": "user",
+    "content": "hello"
+  },
+  {
+    "content": "Hello Mauro, I'm QX. How can I help you today?",
+    "refusal": null,
+    "role": "assistant",
+    "annotations": null,
+    "audio": null,
+    "function_call": null,
+    "tool_calls": null
+  }
+]
