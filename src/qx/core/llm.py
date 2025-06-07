@@ -177,9 +177,13 @@ class QXLLMAgent:
 
     def _configure_litellm(self) -> None:
         """Configure LiteLLM settings."""
-        # Set up debugging if enabled
-        if os.environ.get("QX_LOG_LEVEL", "ERROR").upper() == "DEBUG":
+        # Set up debugging if enabled, but only if not using file logging
+        log_file_path = os.getenv("QX_LOG_FILE")
+        if os.environ.get("QX_LOG_LEVEL", "ERROR").upper() == "DEBUG" and not log_file_path:
             litellm.set_verbose = True
+        elif log_file_path:
+            # When using file logging, disable LiteLLM's verbose mode to prevent console output
+            litellm.set_verbose = False
 
         # Configure timeout settings
         litellm.request_timeout = float(os.environ.get("QX_REQUEST_TIMEOUT", "120"))
