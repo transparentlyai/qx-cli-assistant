@@ -450,8 +450,8 @@ class GlobalHotkeys:
                     tty.setcbreak(self._fd)
                     logger.debug("Terminal set to cbreak mode for global hotkey capture")
                 except (termios.error, OSError) as e:
-                    print(f"Warning: Cannot set terminal to cbreak mode: {e}")
-                    print("Hotkey functionality may not work properly in this environment.")
+                    logger.debug(f"Cannot set terminal to cbreak mode: {e}")
+                    logger.debug("Hotkey functionality may not work properly in this environment")
                     return
             
             while self._running:
@@ -511,8 +511,7 @@ class GlobalHotkeys:
         )
         self._listener_thread.start()
         
-        print("Advanced hotkey listener started.")
-        logger.info("Global hotkey listener started")
+        logger.debug("Global hotkey listener started")
     
     def stop(self):
         """Stop the global hotkey listener."""
@@ -520,8 +519,7 @@ class GlobalHotkeys:
             return
         
         self._running = False
-        print("Stopping hotkey listener...")
-        logger.info("Stopping global hotkey listener...")
+        logger.debug("Stopping global hotkey listener")
         
         # Cancel any pending timeout
         if self._flush_task and not self._flush_task.done():
@@ -545,4 +543,4 @@ class GlobalHotkeys:
         # Final cleanup
         self._flush_task = None
         
-        logger.info("Global hotkey listener stopped")
+        logger.debug("Global hotkey listener stopped")
