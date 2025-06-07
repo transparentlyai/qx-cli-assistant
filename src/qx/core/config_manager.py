@@ -344,7 +344,7 @@ class ConfigManager:
                                 f"- ~/.config/qx/qx.conf (user-level config)\n"
                                 f"- Environment variables\n"
                             )
-                            sys.exit(1)
+                            raise SystemExit(1)
         except Exception as e:
             from qx.cli.theme import themed_console
 
