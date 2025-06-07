@@ -71,40 +71,35 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
             "  /print <text> - Print the specified text to the console", style="primary"
         )
         themed_console.print("  /help       - Show this help message", style="primary")
+
+        themed_console.print("\nKey Bindings:", style="app.header")
+        themed_console.print(
+            "  Ctrl+A      - Toggle 'Approve All' mode", style="primary"
+        )
+        themed_console.print("  Ctrl+C      - Abort current operation", style="primary")
+        themed_console.print("  Ctrl+D      - Exit QX", style="primary")
+        themed_console.print(
+            "  Ctrl+R      - Fuzzy history search (fzf)", style="primary"
+        )
+        themed_console.print(
+            "  Ctrl+T      - Toggle 'Show Thinking' mode", style="primary"
+        )
+        themed_console.print("  Esc+Enter   - Toggle multiline mode", style="primary")
+
         themed_console.print("\nInput Modes:", style="app.header")
         themed_console.print(
             "  • Single-line mode (default): Qx⏵ prompt", style="warning"
         )
         themed_console.print("    - Enter: Submit input", style="info")
-        themed_console.print("    - Alt+Enter: Switch to multiline mode", style="info")
-        themed_console.print("  • Multiline mode: MULTILINE⏵ prompt", style="warning")
+        themed_console.print("    - Esc+Enter: Switch to multiline mode", style="info")
+        themed_console.print("  • Multiline mode: Qm⏵ prompt", style="warning")
         themed_console.print(
             "    - Enter: Add newline (continue editing)", style="info"
         )
         themed_console.print(
             "    - Alt+Enter: Submit input and return to single-line", style="info"
         )
-        themed_console.print("\nFeatures:", style="app.header")
-        themed_console.print("  • Tab completion for commands and paths", style="info")
-        themed_console.print(
-            "  • Fuzzy history search with Ctrl+R (using fzf)", style="info"
-        )
-        themed_console.print("  • Auto-suggestions from history", style="info")
-        themed_console.print("  • Shift+Tab: Toggle 'Approve All' mode", style="info")
-        themed_console.print("\nEmergency Stop:", style="app.header")
-        themed_console.print(
-            "  • Ctrl+C: Emergency stop - interrupts current operation and returns to prompt",
-            style="info",
-        )
-        themed_console.print(
-            "    - Cancels streaming LLM responses immediately", style="text.muted"
-        )
-        themed_console.print(
-            "    - Preserves partial responses when possible", style="text.muted"
-        )
-        themed_console.print("    - Does not exit the application", style="text.muted")
-        themed_console.print("\nExit:", style="app.header")
-        themed_console.print("  • Ctrl+D: Exit QX", style="info")
+
     else:
         themed_console.print(f"Unknown command: {command_name}", style="error")
         themed_console.print(

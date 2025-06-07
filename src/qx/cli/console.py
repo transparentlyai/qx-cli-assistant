@@ -1,9 +1,10 @@
 import os
+
 from qx.cli.theme import themed_console
 
 
 def show_spinner(
-    message: str = "Thinking...",
+    message: str = " ",
     spinner_name: str = "dots",
     speed: float = 1.0,
     style: str = "status.spinner",

@@ -1,8 +1,6 @@
 import asyncio
 import logging
-import os
 import subprocess
-import sys
 from typing import Any, List, Optional
 
 from openai.types.chat import ChatCompletionMessageParam
@@ -12,6 +10,7 @@ from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
 from prompt_toolkit.filters import Condition
 from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.shortcuts.prompt import CompleteStyle
 from prompt_toolkit.styles import Style
 from prompt_toolkit.validation import ValidationError, Validator
 from rich.markdown import Markdown
@@ -44,23 +43,18 @@ def get_bottom_toolbar():
     import qx.core.user_prompts as user_prompts
 
     approve_all_status = (
-        "[lime]ON[/]" if user_prompts._approve_all_active else "[red]OFF[/]"
+        '<style fg="lime">ON</style>'
+        if user_prompts._approve_all_active
+        else '<style fg="red">OFF</style>'
     )
     thinking_status = (
-        "[lime]ON[/]" if user_prompts._show_thinking_active else "[red]OFF[/]"
+        '<style fg="lime">ON</style>'
+        if user_prompts._show_thinking_active
+        else '<style fg="red">OFF</style>'
     )
 
-    toolbar_content = [
-        ("class:bottom-toolbar.key", " Ctrl+R "),
-        ("class:bottom-toolbar.text", "Search"),
-        ("class:bottom-toolbar.key", " Alt+Enter "),
-        ("class:bottom-toolbar.text", "Multiline"),
-        ("class:bottom-toolbar.key", " Shift+Tab "),
-        ("class:bottom-toolbar.text", f"Approve All: {approve_all_status}"),
-        ("class:bottom-toolbar.key", " Ctrl+T "),
-        ("class:bottom-toolbar.text", f"Show Thinking: {thinking_status}"),
-    ]
-    return toolbar_content
+    toolbar_html = f"Thinking: {thinking_status} | Approve All: {approve_all_status}"
+    return HTML(toolbar_html)
 
 
 async def _handle_llm_interaction(
@@ -177,7 +171,7 @@ async def _run_inline_mode(
             pending_text[0] = current_text
             event.app.exit(result="__TOGGLE_MULTILINE__")
 
-    @bindings.add("s-tab")
+    @bindings.add("c-a")
     async def _(event):
         import qx.core.user_prompts as user_prompts
 
@@ -212,7 +206,7 @@ async def _run_inline_mode(
         auto_suggest=AutoSuggestFromHistory(),
         enable_history_search=False,
         completer=qx_completer,
-        complete_style="multi-column",
+        complete_style=CompleteStyle.MULTI_COLUMN,
         key_bindings=bindings,
         mouse_support=False,
         wrap_lines=True,
