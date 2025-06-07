@@ -19,6 +19,7 @@ from qx.cli.commands import _handle_inline_command
 from qx.cli.completer import QXCompleter
 from qx.cli.history import QXHistory
 from qx.cli.theme import themed_console
+from qx.core.config_manager import ConfigManager
 from qx.core.history_utils import parse_history_for_fzf
 from qx.core.llm import QXLLMAgent, query_llm
 from qx.core.paths import QX_HISTORY_FILE
@@ -53,7 +54,9 @@ def get_bottom_toolbar():
         else '<style fg="red">OFF</style>'
     )
 
-    toolbar_html = f"Show Thinking: {thinking_status} | Approve All: {approve_all_status}"
+    toolbar_html = (
+        f"Show Thinking: {thinking_status} | Approve All: {approve_all_status}"
+    )
     return HTML(toolbar_html)
 
 
@@ -106,6 +109,8 @@ async def _run_inline_mode(
 ):
     qx_history = QXHistory(QX_HISTORY_FILE)
     qx_completer = QXCompleter()
+    config_manager = ConfigManager(themed_console, None)
+
     input_style = Style.from_dict(
         {
             "": "fg:#ff005f",
@@ -192,11 +197,18 @@ async def _run_inline_mode(
 
         async with _show_thinking_lock:
             user_prompts._show_thinking_active = not user_prompts._show_thinking_active
-            status = "enabled" if user_prompts._show_thinking_active else "disabled"
-            style = "warning" if user_prompts._show_thinking_active else "warning"
+            new_status_bool = user_prompts._show_thinking_active
+
+            # Persist the change
+            config_manager.set_config_value(
+                "QX_SHOW_THINKING", str(new_status_bool).lower()
+            )
+
+            status_text = "enabled" if new_status_bool else "disabled"
+            style = "warning"
             run_in_terminal(
                 lambda: themed_console.print(
-                    f"✓ [dim green]Show Thinking:[/] {status}.", style=style
+                    f"✓ [dim green]Show Thinking:[/] {status_text}.", style=style
                 )
             )
         event.app.invalidate()

@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional, List
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv, set_key
 import anyio
 
 from qx.core.constants import DEFAULT_TREE_IGNORE_PATTERNS
@@ -38,6 +38,7 @@ QX_MODEL_TEMPERATURE=0.7
 QX_MODEL_MAX_TOKENS=4096
 QX_ENABLE_STREAMING=true
 QX_SHOW_SPINNER=true
+QX_SHOW_THINKING=true
 """
 
 CONFIG_LOCATIONS = """
@@ -68,6 +69,38 @@ class ConfigManager:
         # Explicitly ensure all newly loaded variables are exported to subprocesses
         for var, value in new_env_vars.items():
             os.environ[var] = value
+
+    def get_writable_config_path(self) -> Path:
+        """
+        Determines the appropriate config file path to write to.
+        If inside a project with an existing .Q/qx.conf, uses that.
+        Otherwise, falls back to the user-level config file.
+        """
+        project_root = _find_project_root(str(Path.cwd()))
+        if project_root:
+            project_config_path = project_root / ".Q" / "qx.conf"
+            if project_config_path.is_file():
+                return project_config_path
+
+        # Fallback to user-level config
+        user_config_path = QX_CONFIG_DIR / "qx.conf"
+        return user_config_path
+
+    def set_config_value(self, key: str, value: str):
+        """
+        Sets a key-value pair in the appropriate qx.conf file.
+        Creates the file and directories if they don't exist.
+        """
+        config_path = self.get_writable_config_path()
+
+        # Ensure the directory exists
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # set_key will create the file if it doesn't exist, and update/add the key
+        set_key(dotenv_path=str(config_path), key_to_set=key, value_to_set=value)
+
+        # Also update the current environment so the change is reflected immediately
+        os.environ[key] = value
 
     def _get_rg_ignore_patterns(self, project_root: Path) -> List[str]:
         """
@@ -126,7 +159,7 @@ class ConfigManager:
         # --- Hierarchical qx.conf loading ---
         # Load in order: system -> user -> project
         # Each level can override the previous, but environment variables have final priority
-        
+
         # 1. Server-level configuration (lowest priority)
         self._load_dotenv_if_exists(Path("/etc/qx/qx.conf"), override=False)
 
@@ -138,7 +171,7 @@ class ConfigManager:
         project_root = _find_project_root(str(cwd))
         if project_root:
             self._load_dotenv_if_exists(project_root / ".Q" / "qx.conf", override=True)
-        
+
         # 4. Restore original environment variables (highest priority)
         # This ensures that environment variables set by the user are never overridden
         for key, value in original_env.items():
@@ -151,17 +184,21 @@ class ConfigManager:
         if os.getenv("QX_SHOW_SPINNER") is None:
             os.environ["QX_SHOW_SPINNER"] = "true"
 
+        # Set default for QX_SHOW_THINKING if not set
+        if os.getenv("QX_SHOW_THINKING") is None:
+            os.environ["QX_SHOW_THINKING"] = "true"
+
         # Check for minimal required variables
         model_name = os.getenv("QX_MODEL_NAME")
         api_keys = [
             "OPENROUTER_API_KEY",
-            "OPENAI_API_KEY", 
+            "OPENAI_API_KEY",
             "ANTHROPIC_API_KEY",
             "AZURE_API_KEY",
-            "GOOGLE_API_KEY"
+            "GOOGLE_API_KEY",
         ]
         has_api_key = any(os.getenv(key) for key in api_keys)
-        
+
         if not model_name or not has_api_key:
             from qx.cli.theme import themed_console
 
@@ -171,7 +208,9 @@ class ConfigManager:
             if not model_name:
                 themed_console.print("Missing QX_MODEL_NAME")
             if not has_api_key:
-                themed_console.print(f"Missing API key. Set one of: {', '.join(api_keys)}")
+                themed_console.print(
+                    f"Missing API key. Set one of: {', '.join(api_keys)}"
+                )
             themed_console.print(MINIMAL_CONFIG_EXAMPLE)
             themed_console.print(CONFIG_LOCATIONS)
             sys.exit(1)

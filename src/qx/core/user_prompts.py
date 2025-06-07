@@ -1,19 +1,20 @@
 import asyncio
 import logging
+import os
 from typing import List, Literal, Optional, Tuple, Any
 
-from rich.console import RenderableType  # Corrected import
+from rich.console import RenderableType
 import signal
-from rich.prompt import Prompt  # For Rich-compatible interactive input
+from rich.prompt import Prompt
 
-# Use Any to avoid type checking issues with Console
-RichConsole = Any  # Note: rich.console.Console is the actual type
+RichConsole = Any
 
 logger = logging.getLogger(__name__)
 _approve_all_active: bool = False
 _approve_all_lock = asyncio.Lock()
 
-_show_thinking_active: bool = True
+# Initialize from environment variable, defaulting to True
+_show_thinking_active: bool = os.getenv("QX_SHOW_THINKING", "true").lower() == "true"
 _show_thinking_lock = asyncio.Lock()
 
 CHOICE_YES = ("y", "Yes", "yes")
@@ -42,26 +43,12 @@ async def _execute_prompt_with_live_suspend(
         import sys
 
         if hasattr(sys, "stdin") and sys.stdin.isatty():
-            # This is a simplified version. Rich Prompt.ask is preferred for real use.
-            # print(prompt_text, end="", flush=True)
-            # line = sys.stdin.readline()
-            # return line.strip() if line else ""
-            # For async, Prompt.ask needs to be run in a thread or a different approach
-            # is needed if Textual app is running.
-            # For now, this function is less critical as request_confirmation handles textual/terminal.
-            # The new get_user_choice_from_options_async will use Prompt.ask directly.
-            logger.warning(
-                "_execute_prompt_with_live_suspend fallback used. Consider direct Prompt.ask for new features."
-            )
-            # Fallback to a simple input for non-textual, non-Prompt.ask scenarios
-            # This part might need to be removed or refactored if Textual is always the driver for prompts.
             return await asyncio.to_thread(input, prompt_text)
-
         else:
             logger.warning(
-                "_execute_prompt_with_live_suspend called in non-interactive context or stdin not a TTY. Returning 'c'."
+                "_execute_prompt_with_live_suspend called in non-interactive context. Returning 'c'."
             )
-            return "c"  # Default to cancel in non-interactive
+            return "c"
     except (EOFError, KeyboardInterrupt):
         logger.warning(
             "Input cancelled via EOF/KeyboardInterrupt in _execute_prompt_with_live_suspend."
@@ -77,6 +64,7 @@ async def is_approve_all_active() -> bool:
     async with _approve_all_lock:
         return _approve_all_active
 
+
 async def is_show_thinking_active() -> bool:
     global _show_thinking_active
     async with _show_thinking_lock:
@@ -84,7 +72,7 @@ async def is_show_thinking_active() -> bool:
 
 
 async def _ask_basic_confirmation(
-    console: RichConsole,  # Should be rich.console.Console
+    console: RichConsole,
     choices: List[Tuple[str, str, str]],
     prompt_message_text: str,
     **_kwargs: Any,
@@ -93,37 +81,28 @@ async def _ask_basic_confirmation(
     choices_display_str = "/".join(choices_str_list)
     full_prompt = f"{prompt_message_text} ({choices_display_str}): "
 
-    # This function is called by _request_confirmation_terminal
-    # which already checks for non-interactive. So prompt_toolkit should be safe here.
     while True:
         try:
-            # Use Rich Prompt with disabled Ctrl+C for proper color support
             old_handler = _disable_ctrl_c()
-            
             try:
                 user_input = await asyncio.to_thread(
                     Prompt.ask,
                     full_prompt,
                     choices=choices_str_list,
-                    show_choices=False,  # Choices are already in the prompt text
-                    console=console
+                    show_choices=False,
+                    console=console,
                 )
             finally:
-                # Always restore Ctrl+C handling
                 _restore_ctrl_c(old_handler)
-                
-            # Rich Prompt.ask handles validation and returns valid choice
             if user_input:
                 return user_input.lower()
-
         except Exception as e:
-            # Restore Ctrl+C handling in case of any error
             try:
                 _restore_ctrl_c(old_handler)
-            except:
-                pass  # old_handler might not be defined if error occurred early
+            except Exception:
+                pass
             logger.error(f"Error in confirmation prompt: {e}", exc_info=True)
-            console.print(f"[dim red]Error with prompt, please try again.[/dim red]")
+            console.print("[dim red]Error with prompt, please try again.[/dim red]")
             continue
 
 
@@ -133,7 +112,7 @@ def _is_textual_environment(console: RichConsole) -> bool:
 
 async def _request_confirmation_textual(
     prompt_message: str,
-    console: RichConsole,  # Should be rich.console.Console
+    console: RichConsole,
     content_to_display: Optional[RenderableType] = None,
     current_value_for_modification: Optional[str] = None,
     default_choice_key: str = "n",
@@ -147,35 +126,18 @@ async def _request_confirmation_textual(
         console.print(content_to_display)
         console.print("--- End Preview ---\n")
 
-    app = console._app  # Assuming console is Textual's console wrapper
+    app = console._app
 
-    logger.debug(f"_request_confirmation_textual: app type: {type(app)}")
-    has_req_confirm = hasattr(app, "request_confirmation")
-    # has_prompt_text = hasattr(app, "prompt_for_text_input") # Not used in this path anymore
-    logger.debug(
-        f"_request_confirmation_textual: hasattr(app, 'request_confirmation'): {has_req_confirm}"
-    )
-
-    if not app or not has_req_confirm:
-        logger.error(
-            "Textual app instance or request_confirmation method not found. App: %s, HasReqConfirm: %s",
-            app,
-            has_req_confirm,
-        )
-        console.print(
-            "[warning]⚠️ AUTO-APPROVED (UI limitation - app.request_confirmation missing).[/]"
-        )
+    if not app or not hasattr(app, "request_confirmation"):
+        logger.error("Textual app instance or request_confirmation method not found.")
+        console.print("[warning]AUTO-APPROVED (UI limitation).[/warning]")
         return ("approved", current_value_for_modification)
-
-    textual_choices_param = "ynac"
 
     try:
         user_selected_key = await app.request_confirmation(
-            message=prompt_message,
-            choices=textual_choices_param,
-            default=default_choice_key,
+            message=prompt_message, choices="ynac", default=default_choice_key
         )
-        if user_selected_key is None:  # User cancelled (e.g. Esc in Textual dialog)
+        if user_selected_key is None:
             console.print("[info]Operation cancelled.[/info]")
             return ("cancelled", None)
         if user_selected_key == "y":
@@ -193,10 +155,8 @@ async def _request_confirmation_textual(
             console.print("[info]Operation cancelled by user.[/info]")
             return ("cancelled", None)
         else:
-            logger.warning(
-                f"Unexpected choice '{user_selected_key}' from app.request_confirmation. Denying."
-            )
-            console.print("[info]Operation denied by user (unexpected choice).[/info]")
+            logger.warning(f"Unexpected choice '{user_selected_key}'. Denying.")
+            console.print("[info]Operation denied (unexpected choice).[/info]")
             return ("denied", None)
     except Exception as e:
         logger.error(f"Error in textual confirmation: {e}", exc_info=True)
@@ -206,25 +166,22 @@ async def _request_confirmation_textual(
 
 async def _request_confirmation_terminal(
     prompt_message: str,
-    console: RichConsole,  # Should be rich.console.Console
+    console: RichConsole,
     content_to_display: Optional[RenderableType] = None,
     current_value_for_modification: Optional[str] = None,
-    default_choice_key: str = "n",  # Not directly used by Prompt.ask default, but kept for signature
+    default_choice_key: str = "n",
 ) -> Tuple[ApprovalDecisionStatus, Optional[str]]:
     if await is_approve_all_active():
         console.print("[info]AUTO-APPROVED due to active 'Approve All' session.[/info]")
         return ("session_approved", current_value_for_modification)
 
     import sys
-    import os
 
     if (
         not sys.stdin.isatty()
         or os.environ.get("QX_AUTO_APPROVE", "false").lower() == "true"
     ):
-        console.print(
-            f"[info]AUTO-APPROVED (non-interactive environment):[/info] {prompt_message}"
-        )
+        console.print(f"[info]AUTO-APPROVED (non-interactive):[/info] {prompt_message}")
         return ("approved", current_value_for_modification)
 
     if content_to_display:
@@ -235,11 +192,9 @@ async def _request_confirmation_terminal(
     choices_map = [CHOICE_YES, CHOICE_NO, CHOICE_APPROVE_ALL, CHOICE_CANCEL]
 
     try:
-        # _ask_basic_confirmation now uses Prompt.ask, so it handles interaction
         user_choice_key = await _ask_basic_confirmation(
             console=console, choices=choices_map, prompt_message_text=prompt_message
         )
-
         if user_choice_key == "y":
             return ("approved", current_value_for_modification)
         elif user_choice_key == "n":
@@ -255,11 +210,8 @@ async def _request_confirmation_terminal(
             console.print("[info]Operation cancelled by user.[/info]")
             return ("cancelled", None)
         else:
-            logger.warning(
-                f"Unexpected choice '{user_choice_key}' from _ask_basic_confirmation. Cancelling."
-            )
+            logger.warning(f"Unexpected choice '{user_choice_key}'. Cancelling.")
             return ("cancelled", None)
-
     except Exception as e:
         logger.error(f"Error in request_confirmation_terminal: {e}", exc_info=True)
         console.print(f"[error]Error during confirmation: {e}[/]")
@@ -268,25 +220,18 @@ async def _request_confirmation_terminal(
 
 async def request_confirmation(
     prompt_message: str,
-    console: RichConsole,  # Should be rich.console.Console
+    console: RichConsole,
     content_to_display: Optional[RenderableType] = None,
     current_value_for_modification: Optional[str] = None,
     default_choice_key: str = "n",
 ) -> Tuple[ApprovalDecisionStatus, Optional[str]]:
-    """
-    Requests user confirmation for an action, adapting to Textual or terminal environment.
-
-    This function is the main entry point for simple Yes/No/Approve All/Cancel confirmations.
-    For more dynamic options, plugins should use ApprovalHandler which in turn might call
-    get_user_choice_from_options_async.
-    """
     if _is_textual_environment(console):
         return await _request_confirmation_textual(
             prompt_message,
             console,
             content_to_display,
             current_value_for_modification,
-            default_choice_key=default_choice_key,
+            default_choice_key,
         )
     else:
         return await _request_confirmation_terminal(
@@ -294,71 +239,38 @@ async def request_confirmation(
             console,
             content_to_display,
             current_value_for_modification,
-            default_choice_key=default_choice_key,
+            default_choice_key,
         )
 
 
 async def get_user_choice_from_options_async(
-    console: RichConsole,  # Should be rich.console.Console
-    prompt_text_with_options: str,  # e.g., "Action? ([a])Approve / ([d])Deny / ([c])Cancel: "
-    valid_choices: List[str],  # e.g., ['a', 'd', 'c']
-    default_choice: Optional[str] = None,  # Optional default choice key
-) -> Optional[str]:  # Returns the chosen key (e.g., 'a') or None if cancelled
-    """
-    Interactively prompts the user to make a choice from a list of valid options.
-    This function is intended to be called by ApprovalHandler or other parts of the system
-    that require dynamic, character-based choices in a terminal environment.
-
-    Args:
-        console: The Rich Console instance for output.
-        prompt_text_with_options: The full prompt string, including the options display.
-                                  Example: "Your choice? ([y])Yes / ([n])No / ([c])Cancel: "
-        valid_choices: A list of lowercase strings representing the valid single-character choices.
-                       Example: ['y', 'n', 'c']
-        default_choice: An optional character that is the default choice.
-
-    Returns:
-        The user's chosen character (lowercase) if a valid choice is made,
-        or None if the input is cancelled (e.g., by Ctrl+C, EOFError).
-    """
-    # Ensure console is the correct type for Prompt.ask if not already checked by caller
-    # from rich.console import Console as RichConsoleType
-    # if not isinstance(console, RichConsoleType):
-    #     logger.error(f"get_user_choice_from_options_async expects rich.console.Console, got {type(console)}")
-    #     # Fallback or raise error, for now, we assume it's correct or Prompt.ask handles it.
-
-    # Ensure valid_choices are lowercase for consistent checking
+    console: RichConsole,
+    prompt_text_with_options: str,
+    valid_choices: List[str],
+    default_choice: Optional[str] = None,
+) -> Optional[str]:
     processed_valid_choices = [choice.lower() for choice in valid_choices]
     processed_default_choice = default_choice.lower() if default_choice else None
 
     if not processed_valid_choices:
         logger.error("get_user_choice_from_options_async called with no valid_choices.")
-        return None  # Or raise an error
+        return None
 
-    # If a default choice is provided and is valid, make it the default for Prompt.ask
     if (
         processed_default_choice
         and processed_default_choice not in processed_valid_choices
     ):
         logger.warning(
-            f"Default choice '{processed_default_choice}' not in valid_choices. Ignoring default."
+            f"Default choice '{processed_default_choice}' not in valid_choices. Ignoring."
         )
         processed_default_choice = None
 
-    # Check if running in a non-interactive environment
     import sys
-    import os
 
     if (
         not sys.stdin.isatty()
         or os.environ.get("QX_AUTO_APPROVE", "false").lower() == "true"
     ):
-        # In non-interactive mode, or if QX_AUTO_APPROVE is set:
-        # - If a default is valid, use it.
-        # - Else if 'y' (yes/approve) is an option, use it.
-        # - Else if 'a' (approve all) is an option, use it.
-        # - Else, pick the first valid option.
-        # - If no options, return None (though we check for empty valid_choices earlier).
         auto_choice = None
         if processed_default_choice in processed_valid_choices:
             auto_choice = processed_default_choice
@@ -366,54 +278,44 @@ async def get_user_choice_from_options_async(
             auto_choice = "y"
         elif "a" in processed_valid_choices:
             auto_choice = "a"
-        elif processed_valid_choices:  # Pick the first one
+        elif processed_valid_choices:
             auto_choice = processed_valid_choices[0]
 
         if auto_choice:
             console.print(
-                f"{prompt_text_with_options}[italic dim](Auto-selected: {auto_choice} in non-interactive mode)[/]"
+                f"{prompt_text_with_options}[italic dim](Auto-selected: {auto_choice})[/]"
             )
             return auto_choice
         else:
             console.print(
-                f"{prompt_text_with_options}[italic dim](No suitable auto-selection in non-interactive mode)[/]"
+                f"{prompt_text_with_options}[italic dim](No auto-selection)[/]"
             )
             return None
 
-    # Interactive mode:
     while True:
-        # Use Rich Prompt with disabled Ctrl+C for proper color support
         try:
-            # Temporarily disable Ctrl+C to prevent conflicts
             old_handler = _disable_ctrl_c()
-            
             try:
                 user_input = await asyncio.to_thread(
                     Prompt.ask,
                     prompt_text_with_options,
                     choices=processed_valid_choices,
                     default=processed_default_choice,
-                    show_choices=False,  # Choices are already in the prompt text
-                    console=console
+                    show_choices=False,
+                    console=console,
                 )
             finally:
-                # Always restore Ctrl+C handling
                 _restore_ctrl_c(old_handler)
-            
-            # Rich Prompt.ask handles validation and returns valid choice
             if user_input:
                 return user_input.lower()
             else:
-                # Should not happen with choices validation, but just in case
-                console.print("[dim red]Please select one of the available options.[/dim red]")
+                console.print("[dim red]Please select an option.[/dim red]")
                 continue
-                
         except Exception as e:
-            # Restore Ctrl+C handling in case of any error
             try:
                 _restore_ctrl_c(old_handler)
-            except:
-                pass  # old_handler might not be defined if error occurred early
+            except Exception:
+                pass
             logger.error(f"Error during Rich prompt: {e}", exc_info=True)
-            console.print(f"[dim red]Error with prompt, please try again.[/dim red]")
+            console.print("[dim red]Error with prompt, please try again.[/dim red]")
             continue
