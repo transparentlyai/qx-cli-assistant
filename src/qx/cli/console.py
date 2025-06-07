@@ -5,8 +5,8 @@ from qx.cli.theme import themed_console
 
 def show_spinner(
     message: str = " ",
-    spinner_name: str = "dots",
-    speed: float = 1.0,
+    spinner_name: str = "point",
+    speed: float = 2.0,
     style: str = "status.spinner",
 ):
     """

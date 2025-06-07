@@ -277,12 +277,26 @@ class QXLLMAgent:
         Runs the LLM agent, handling conversation turns and tool calls.
         Returns the final message content or tool output.
         """
+        # Log recursion depth to help with debugging
+        if _recursion_depth > 0:
+            logger.debug(f"LLM run() called with recursion depth: {_recursion_depth}")
+        # Warn when approaching recursion limit
+        if _recursion_depth >= 7:
+            logger.warning(f"High recursion depth detected: {_recursion_depth}/10. Possible infinite tool calling loop.")
         # Prevent infinite recursion in tool calling
         MAX_RECURSION_DEPTH = 10
         if _recursion_depth > MAX_RECURSION_DEPTH:
             error_msg = f"Maximum recursion depth ({MAX_RECURSION_DEPTH}) exceeded in tool calling"
             logger.error(error_msg)
-            return QXRunResult(f"Error: {error_msg}", message_history or [])
+            self.console.print(f"[error]Error:[/] {error_msg}")
+            # Create a response that doesn't continue the tool calling loop
+            final_message = cast(
+                ChatCompletionMessageParam,
+                {"role": "assistant", "content": f"I apologize, but I've reached the maximum recursion depth while processing tool calls. This suggests there may be an issue with the tool calling logic that's causing an infinite loop. Please try rephrasing your request or breaking it into smaller steps."},
+            )
+            messages = list(message_history) if message_history else []
+            messages.append(final_message)
+            return QXRunResult(final_message["content"], messages)
         messages: List[ChatCompletionMessageParam] = []
 
         # Only add system prompt if not already present in message history
@@ -525,7 +539,7 @@ class QXLLMAgent:
 
             console = Console()
 
-            with console.status(" ", spinner="dots") as status:
+            with console.status("", spinner="point",speed=2, refresh_per_second=25) as status:
                 try:
                     stream = await self._make_litellm_call(chat_params)
                 except (asyncio.TimeoutError, httpx.TimeoutException):
@@ -1077,6 +1091,17 @@ class QXLLMAgent:
                 if role == "tool":
                     tool_count += 1
             logger.debug(f"Sending {tool_count} tool responses to LLM")
+            
+            # Check if we're approaching recursion limit before continuing
+            if recursion_depth >= 8:
+                logger.warning(f"Approaching recursion limit (depth {recursion_depth}), forcing final response")
+                # Add a system message to encourage the LLM to provide a final response
+                final_system_msg = cast(
+                    ChatCompletionMessageParam,
+                    {"role": "user", "content": "Please provide a final response based on the tool results above. Do not make any more tool calls."}
+                )
+                messages.append(final_system_msg)
+            
             result = await self.run(
                 "__CONTINUE_AFTER_TOOLS__", messages, recursion_depth + 1
             )
