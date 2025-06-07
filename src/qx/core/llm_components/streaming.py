@@ -82,6 +82,19 @@ class StreamingHandler:
         max_duplicate_chunks = 5
         stream_start_time = time.time()
         max_stream_time = 300  # 5 minutes timeout
+        last_thinking_message = ""  # Track last thinking message for spinner
+
+        # Helper function to update spinner with thinking message
+        def update_spinner_text(thinking_text: str) -> None:
+            nonlocal last_thinking_message
+            if thinking_text and thinking_text.strip():
+                # Get first line of thinking message
+                first_line = thinking_text.strip().split('\n')[0]
+                # Truncate if too long
+                if len(first_line) > 60:
+                    first_line = first_line[:57] + "..."
+                last_thinking_message = first_line
+                status.update(f"[dim]{first_line}[/dim]")
 
         try:
             from rich.console import Console
@@ -142,13 +155,13 @@ class StreamingHandler:
 
                     # Handle reasoning streaming (OpenRouter specific)
                     if hasattr(delta, "reasoning") and delta.reasoning:
-                        # Stop spinner when we start processing reasoning
-                        if not spinner_stopped:
-                            spinner_stopped = True
-                            status.stop()
-
-                        # Display reasoning content in faded color
                         reasoning_text = delta.reasoning
+                        
+                        # Update spinner with current thinking message
+                        if reasoning_text and reasoning_text.strip():
+                            update_spinner_text(reasoning_text)
+                        
+                        # Display reasoning content in faded color
                         if (
                             reasoning_text
                             and reasoning_text.strip()
