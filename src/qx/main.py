@@ -43,7 +43,11 @@ async def _async_main(
     try:
         async with anyio.create_task_group() as tg:
             config_manager = ConfigManager(None, parent_task_group=tg)
-            config_manager.load_configurations()
+            try:
+                config_manager.load_configurations()
+            except SystemExit as e:
+                # Handle clean exit for security errors
+                return e.code
 
             # Initialize the ShowThinkingManager
             await show_thinking_manager.is_active()  # This initializes the singleton
