@@ -53,7 +53,7 @@ def get_bottom_toolbar():
         else '<style fg="red">OFF</style>'
     )
 
-    toolbar_html = f"Thinking: {thinking_status} | Approve All: {approve_all_status}"
+    toolbar_html = f"Show Thinking: {thinking_status} | Approve All: {approve_all_status}"
     return HTML(toolbar_html)
 
 

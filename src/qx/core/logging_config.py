@@ -3,7 +3,7 @@ import os
 import sys
 import traceback
 from pathlib import Path
-from typing import Optional  # Added this import
+from typing import Optional
 
 logger = logging.getLogger("qx")
 
@@ -33,7 +33,7 @@ def configure_logging():
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
 
-    # Add file handler if QX_LOG_FILE is set
+    # Add file handler if QX_LOG_FILE is set, otherwise configure console logging
     log_file_path = os.getenv("QX_LOG_FILE")
     if log_file_path:
         log_file = Path(log_file_path)
@@ -44,20 +44,22 @@ def configure_logging():
             logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         )
         logger.addHandler(file_handler)
+    else:
+        # Add a temporary StreamHandler for INFO and above, to be removed later
+        temp_stream_handler = logging.StreamHandler()
+        temp_stream_handler.setLevel(effective_log_level)
+        temp_stream_handler.setFormatter(
+            logging.Formatter("%(levelname)s: %(message)s")
+        )
+        logger.addHandler(temp_stream_handler)
 
-    # Add a temporary StreamHandler for INFO and above, to be removed later
-    temp_stream_handler = logging.StreamHandler()
-    temp_stream_handler.setLevel(effective_log_level)
-    temp_stream_handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
-    logger.addHandler(temp_stream_handler)
-
-    # Ensure critical errors always go to stderr
-    critical_stream_handler = logging.StreamHandler(sys.stderr)
-    critical_stream_handler.setLevel(logging.CRITICAL)
-    critical_stream_handler.setFormatter(
-        logging.Formatter("%(levelname)s: %(message)s")
-    )
-    logger.addHandler(critical_stream_handler)
+        # Ensure critical errors always go to stderr
+        critical_stream_handler = logging.StreamHandler(sys.stderr)
+        critical_stream_handler.setLevel(logging.CRITICAL)
+        critical_stream_handler.setFormatter(
+            logging.Formatter("%(levelname)s: %(message)s")
+        )
+        logger.addHandler(critical_stream_handler)
 
     logger.setLevel(effective_log_level)
 
@@ -93,7 +95,7 @@ def configure_logging():
         )
         # Also write to file directly in case logger fails (only if QX_LOG_FILE is set)
         if log_file_path:
-            with open(log_file, "a") as f:
+            with open(log_file_path, "a") as f:
                 f.write("\n=== UNCAUGHT EXCEPTION ===\n")
                 traceback.print_exception(exc_type, exc_value, exc_traceback, file=f)
                 f.write("=== END EXCEPTION ===\n\n")
@@ -104,7 +106,7 @@ def configure_logging():
         f"Qx application log level set to: {logging.getLevelName(effective_log_level)} ({effective_log_level})"
     )
     if log_file_path:
-        logger.debug(f"Logging to file: {log_file}")
+        logger.debug(f"Logging to file: {log_file_path}")
     logger.debug("Global exception handler installed")
 
 
