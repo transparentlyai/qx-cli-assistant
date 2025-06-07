@@ -37,6 +37,7 @@ def _suspend_global_hotkeys():
     """Suspend global hotkeys during approval prompts."""
     try:
         from qx.core.hotkey_manager import get_hotkey_manager
+
         manager = get_hotkey_manager()
         if manager and manager.running:
             manager.stop()
@@ -51,6 +52,7 @@ def _resume_global_hotkeys():
     """Resume global hotkeys after approval prompts."""
     try:
         from qx.core.hotkey_manager import get_hotkey_manager
+
         manager = get_hotkey_manager()
         if manager and not manager.running:
             manager.start()
@@ -105,7 +107,7 @@ async def _ask_basic_confirmation(
 
     # Suspend global hotkeys during approval prompt
     hotkeys_suspended = _suspend_global_hotkeys()
-    
+
     try:
         while True:
             try:
@@ -326,7 +328,7 @@ async def get_user_choice_from_options_async(
 
     # Suspend global hotkeys during approval prompt
     hotkeys_suspended = _suspend_global_hotkeys()
-    
+
     try:
         while True:
             try:
