@@ -113,6 +113,26 @@ async def _run_inline_mode(
     qx_completer = QXCompleter()
     config_manager = ConfigManager(themed_console, None)
     _show_thinking_active_for_toolbar[0] = await show_thinking_manager.is_active()
+    
+    # Initialize global hotkey system but don't start it yet
+    # We'll use suspend/resume pattern around prompt_toolkit usage
+    try:
+        from qx.core.hotkey_manager import get_hotkey_manager, register_default_handlers, register_global_hotkey
+        global_hotkey_manager = get_hotkey_manager()
+        # Register handlers but don't start yet - we'll control start/stop around prompts
+        register_default_handlers()
+        # Register global hotkeys for all the same functions as prompt_toolkit
+        register_global_hotkey('ctrl+c', 'cancel')        # Same as prompt_toolkit
+        register_global_hotkey('ctrl+d', 'exit')          # Same as prompt_toolkit  
+        register_global_hotkey('ctrl+r', 'history')       # Same as prompt_toolkit
+        register_global_hotkey('ctrl+a', 'approve_all')   # Same as prompt_toolkit
+        register_global_hotkey('ctrl+t', 'toggle_thinking') # Same as prompt_toolkit
+        register_global_hotkey('ctrl+s', 'toggle_stdout') # Same as prompt_toolkit
+        register_global_hotkey('f12', 'cancel')           # Additional emergency key
+        logger.debug("Global hotkey handlers registered (matching prompt_toolkit)")
+    except Exception as e:
+        logger.debug(f"Exception during global hotkey setup: {e}")
+        global_hotkey_manager = None
 
     input_style = Style.from_dict(
         {
@@ -124,6 +144,7 @@ async def _run_inline_mode(
         }
     )
 
+    # Restore all hotkeys in prompt_toolkit - this works better than global capture during input
     bindings = KeyBindings()
 
     @bindings.add("c-c")
@@ -211,6 +232,24 @@ async def _run_inline_mode(
         )
         event.app.invalidate()
 
+    @bindings.add("c-s")
+    async def _(event):
+        from qx.core.output_control import output_control_manager
+
+        # Get current status and toggle it
+        current_status = await output_control_manager.should_show_stdout()
+        new_status = not current_status
+        await output_control_manager.set_stdout_visibility(new_status)
+
+        status_text = "enabled" if new_status else "disabled"
+        style = "warning"
+        run_in_terminal(
+            lambda: themed_console.print(
+                f"✓ [dim green]Show Stdout:[/] {status_text}.", style=style
+            )
+        )
+        event.app.invalidate()
+
     session: PromptSession[str] = PromptSession(
         history=qx_history,
         auto_suggest=AutoSuggestFromHistory(),
@@ -238,9 +277,20 @@ async def _run_inline_mode(
                 else HTML('<style fg="#ff5f00">Qx⏵</style> ')
             )
 
-            result = await session.prompt_async(
-                current_prompt, wrap_lines=True, default=pending_text[0] or ""
-            )
+            # Stop global hotkeys before prompt_toolkit takes control
+            if global_hotkey_manager and global_hotkey_manager.running:
+                global_hotkey_manager.stop()
+                logger.debug("Stopped global hotkeys for prompt input")
+
+            try:
+                result = await session.prompt_async(
+                    current_prompt, wrap_lines=True, default=pending_text[0] or ""
+                )
+            finally:
+                # Always restart global hotkeys after prompt_toolkit releases control
+                if global_hotkey_manager:
+                    global_hotkey_manager.start()
+                    logger.debug("Restarted global hotkeys after prompt input")
 
             if result != "__TOGGLE_MULTILINE__":
                 pending_text[0] = ""
@@ -301,3 +351,10 @@ async def _run_inline_mode(
         pass
     finally:
         qx_history.flush_history()
+        # Stop global hotkey system
+        try:
+            if global_hotkey_manager and global_hotkey_manager.running:
+                global_hotkey_manager.stop()
+                logger.debug("Global hotkey system stopped")
+        except Exception as e:
+            logger.error(f"Error stopping global hotkey system: {e}")
