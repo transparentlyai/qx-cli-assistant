@@ -32,23 +32,24 @@ def _get_message_role(msg) -> Optional[str]:
         return None
 
 
-def _add_system_message_if_missing(message_history: List[ChatCompletionMessageParam]) -> List[ChatCompletionMessageParam]:
+def _add_system_message_if_missing(
+    message_history: List[ChatCompletionMessageParam],
+) -> List[ChatCompletionMessageParam]:
     """
     Adds the system message as the first message if it's not already present.
     """
     # Check if the first message is already a system message
     if message_history and _get_message_role(message_history[0]) == "system":
         return message_history
-    
+
     # Import here to avoid circular imports
-    from qx.core.llm import load_and_format_system_prompt
-    
+    from qx.core.llm_components.prompts import load_and_format_system_prompt
+
     system_prompt = load_and_format_system_prompt()
     system_message = cast(
-        ChatCompletionMessageParam,
-        {"role": "system", "content": system_prompt}
+        ChatCompletionMessageParam, {"role": "system", "content": system_prompt}
     )
-    
+
     # Prepend the system message
     return [system_message] + message_history
 
@@ -97,7 +98,9 @@ async def save_session_async(message_history: List[ChatCompletionMessageParam]):
         return
 
     # Exclude the system message from the history to be saved
-    history_to_save = [msg for msg in message_history if _get_message_role(msg) != "system"]
+    history_to_save = [
+        msg for msg in message_history if _get_message_role(msg) != "system"
+    ]
 
     # Convert ChatCompletionMessageParam objects to dictionaries for JSON serialization
     serializable_history = []
@@ -441,10 +444,10 @@ def load_session_from_path(
         message_history: List[ChatCompletionMessageParam] = cast(
             List[ChatCompletionMessageParam], raw_messages
         )
-        
+
         # Add system message as first message if not already present
         message_history = _add_system_message_if_missing(message_history)
-        
+
         logger.info(f"Loaded session from {session_path}")
 
         # Set the current session file to the recovered one

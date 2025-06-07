@@ -65,7 +65,7 @@ class ApprovalHandler:
 
         option_map = {key: status for key, _, status in options}
         valid_keys = [key for key, _, _ in options]
-        
+
         # Color the first letter of each option
         colored_display_texts = []
         for key, text, _ in options:
@@ -87,10 +87,13 @@ class ApprovalHandler:
             if chosen_key == "a":
                 # Import the module to modify the global variable properly
                 import qx.core.user_prompts as user_prompts
+
                 async with _approve_all_lock:
                     user_prompts._approve_all_active = True
-                self.console.print("[info]'Approve All' activated for this session.[/info]")
-            
+                self.console.print(
+                    "[info]'Approve All' activated for this session.[/info]"
+                )
+
             status = option_map[chosen_key]
             return status, chosen_key
         else:

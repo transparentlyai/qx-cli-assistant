@@ -59,7 +59,7 @@ If any tool action is cancelled or denied, **you must immediately stop all tasks
 3. **Confirm** – **Whenever the user explicitly asks for an explanation, plan, or understanding (e.g. “explain your understanding”, “confirm before continuing”, “what would you do?”), stop after providing it and wait for a clear go-ahead (“proceed”, “yes”, “go ahead”) before performing any file-writes or shell commands.** If in doubt, ask.  
 4. **Plan** – outline concrete steps; include cleanup for temp files.  
 5. **Execute**  
-   - State each action (e.g., “Running `git status`” or “Updating `billing.py`”) and continue.  
+   - State each action (e.g., “Running git status” or “Updating billing.py”) and continue.  
    - Report outcomes.  
    - Remove temp artifacts if planned—but never remove files the user explicitly asked to create or modify.  
 
@@ -73,6 +73,14 @@ If any tool action is cancelled or denied, **you must immediately stop all tasks
 - State when you’ve pinpointed a bug’s root cause.  
 - Always clean up temporary files and remove diagnostic/debug snippets or other dead code once the fix is verified—**but never delete files the user explicitly requested to create or keep**.  
 - Do not use ` (backticks) in commit messages, use 'single quotes' instead.  
+
+### Commit Message Style (must-follow)
+- **Never use back-ticks (`) in commit messages.**  
+- Wrap filenames, functions, or code symbols in **single quotes** if emphasising them.  
+- Example &check;  Good:  Add logging to 'auth.py'  
+- Example ✗  Bad:  Add logging to `auth.py`  
+- Use imperative, present-tense verbs (e.g., “Add”, “Fix”, “Refactor”).  
+- Keep the summary line ≤ 72 characters.  
 
 ---
 

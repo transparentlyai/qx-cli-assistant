@@ -24,12 +24,14 @@ from qx.core.history_utils import parse_history_for_fzf
 from qx.core.llm import QXLLMAgent, query_llm
 from qx.core.paths import QX_HISTORY_FILE
 from qx.core.session_manager import clean_old_sessions, save_session
-from qx.core.user_prompts import _approve_all_lock, _show_thinking_lock
+from qx.core.user_prompts import _approve_all_lock
+from qx.core.state_manager import show_thinking_manager
 
 logger = logging.getLogger("qx")
 
 is_multiline_mode = [False]
 pending_text = [""]
+_show_thinking_active_for_toolbar = [True]
 
 
 class SingleLineNonEmptyValidator(Validator):
@@ -50,7 +52,7 @@ def get_bottom_toolbar():
     )
     thinking_status = (
         '<style fg="lime">ON</style>'
-        if user_prompts._show_thinking_active
+        if _show_thinking_active_for_toolbar[0]
         else '<style fg="red">OFF</style>'
     )
 
@@ -110,6 +112,7 @@ async def _run_inline_mode(
     qx_history = QXHistory(QX_HISTORY_FILE)
     qx_completer = QXCompleter()
     config_manager = ConfigManager(themed_console, None)
+    _show_thinking_active_for_toolbar[0] = await show_thinking_manager.is_active()
 
     input_style = Style.from_dict(
         {
@@ -193,24 +196,19 @@ async def _run_inline_mode(
 
     @bindings.add("c-t")
     async def _(event):
-        import qx.core.user_prompts as user_prompts
+        new_status = not await show_thinking_manager.is_active()
+        await show_thinking_manager.set_status(new_status)
+        _show_thinking_active_for_toolbar[0] = new_status
 
-        async with _show_thinking_lock:
-            user_prompts._show_thinking_active = not user_prompts._show_thinking_active
-            new_status_bool = user_prompts._show_thinking_active
+        config_manager.set_config_value("QX_SHOW_THINKING", str(new_status).lower())
 
-            # Persist the change
-            config_manager.set_config_value(
-                "QX_SHOW_THINKING", str(new_status_bool).lower()
+        status_text = "enabled" if new_status else "disabled"
+        style = "warning"
+        run_in_terminal(
+            lambda: themed_console.print(
+                f"✓ [dim green]Show Thinking:[/] {status_text}.", style=style
             )
-
-            status_text = "enabled" if new_status_bool else "disabled"
-            style = "warning"
-            run_in_terminal(
-                lambda: themed_console.print(
-                    f"✓ [dim green]Show Thinking:[/] {status_text}.", style=style
-                )
-            )
+        )
         event.app.invalidate()
 
     session: PromptSession[str] = PromptSession(
