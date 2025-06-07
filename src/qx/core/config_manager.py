@@ -170,7 +170,9 @@ class ConfigManager:
         cwd = Path.cwd()
         project_root = _find_project_root(str(cwd))
         if project_root:
-            self._load_dotenv_if_exists(project_root / ".Q" / "qx.conf", override=True)
+            project_config_path = project_root / ".Q" / "qx.conf"
+            self._check_project_config_safety(project_config_path)
+            self._load_dotenv_if_exists(project_config_path, override=True)
 
         # 4. Restore original environment variables (highest priority)
         # This ensures that environment variables set by the user are never overridden
@@ -309,6 +311,46 @@ class ConfigManager:
 
         os.environ["QX_PROJECT_CONTEXT"] = qx_project_context
         os.environ["QX_PROJECT_FILES"] = qx_project_files
+
+    def _check_project_config_safety(self, project_config_path: Path):
+        """
+        Safety check to ensure .Q/qx.conf does not contain any API keys.
+        Exits the application if any variables containing 'KEY' are found.
+        """
+        if not project_config_path.is_file():
+            return
+
+        try:
+            with open(project_config_path, "r", encoding="utf-8") as f:
+                for line_num, line in enumerate(f, 1):
+                    line = line.strip()
+                    # Skip empty lines and comments
+                    if not line or line.startswith("#"):
+                        continue
+
+                    # Check if line contains a variable assignment with 'KEY' in the name
+                    if "=" in line:
+                        var_name = line.split("=")[0].strip()
+                        if "KEY" in var_name.upper():
+                            from qx.cli.theme import themed_console
+
+                            themed_console.print(
+                                f"[error]SECURITY ERROR: API key detected in .Q/qx.conf[/]\n"
+                                f"File: {project_config_path}\n"
+                                f"Line {line_num}: {var_name}\n\n"
+                                f"[error]API keys should NEVER be stored in .Q/qx.conf as this file[/]\n"
+                                f"[error]may be committed to version control.[/]\n\n"
+                                f"Please move API keys to:\n"
+                                f"- ~/.config/qx/qx.conf (user-level config)\n"
+                                f"- Environment variables\n"
+                            )
+                            sys.exit(1)
+        except Exception as e:
+            from qx.cli.theme import themed_console
+
+            themed_console.print(
+                f"[warning]Warning: Could not read project config file {project_config_path}: {e}[/]"
+            )
 
     def _ensure_directories_exist(self):
         """Ensures necessary directories exist."""
