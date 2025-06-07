@@ -33,10 +33,11 @@ RichConsole = ConsoleProtocol  # Type alias for backward compatibility
 
 logger = logging.getLogger(__name__)
 
+
 def load_and_format_system_prompt() -> str:
     """
     Loads the system prompt from the markdown file and formats it with
-    environment variables.
+    environment variables and runtime information.
     """
     try:
         current_dir = Path(__file__).parent
@@ -51,11 +52,28 @@ def load_and_format_system_prompt() -> str:
         project_context = os.environ.get("QX_PROJECT_CONTEXT", "")
         project_files = os.environ.get("QX_PROJECT_FILES", "")
 
+        # Read .gitignore from the runtime CWD
+        try:
+            # Get the current working directory where the qx command is run
+            runtime_cwd = Path(os.getcwd())
+            gitignore_path = runtime_cwd / ".gitignore"
+            if gitignore_path.exists():
+                ignore_paths = gitignore_path.read_text(encoding="utf-8")
+            else:
+                ignore_paths = "# No .gitignore file found in the current directory."
+        except Exception as e:
+            logger.warning(f"Could not read .gitignore file: {e}")
+            ignore_paths = "# Error reading .gitignore file."
+
         formatted_prompt = template.replace("{user_context}", user_context)
         formatted_prompt = formatted_prompt.replace(
             "{project_context}", project_context
         )
         formatted_prompt = formatted_prompt.replace("{project_files}", project_files)
+        formatted_prompt = formatted_prompt.replace("{ignore_paths}", ignore_paths)
+
+        logger.debug(f"Final System Prompt:\n{formatted_prompt}")
+
         return formatted_prompt
     except Exception as e:
         logger.error(f"Failed to load or format system prompt: {e}", exc_info=True)
@@ -89,7 +107,9 @@ class QXLLMAgent:
         self._tool_functions: Dict[str, Callable] = {}
         self._openai_tools_schema: List[ChatCompletionToolParam] = []
         self._tool_input_models: Dict[str, Type[BaseModel]] = {}
-        self._message_cache: Dict[int, Dict[str, Any]] = {}  # Cache for serialized messages
+        self._message_cache: Dict[
+            int, Dict[str, Any]
+        ] = {}  # Cache for serialized messages
 
         for func, schema, input_model_class in tools:
             self._tool_functions[func.__name__] = func
@@ -160,19 +180,19 @@ class QXLLMAgent:
         # Set up debugging if enabled
         if os.environ.get("QX_LOG_LEVEL", "ERROR").upper() == "DEBUG":
             litellm.set_verbose = True
-        
+
         # Configure timeout settings
         litellm.request_timeout = float(os.environ.get("QX_REQUEST_TIMEOUT", "120"))
-        
+
         # Configure retries
         litellm.num_retries = int(os.environ.get("QX_NUM_RETRIES", "3"))
-        
+
         # Configure drop unsupported params behavior
         litellm.drop_params = True
-        
+
         # Set up API key validation
         self._validate_api_keys()
-        
+
         # Parse reliability configuration
         self._setup_reliability_config()
 
@@ -181,40 +201,45 @@ class QXLLMAgent:
         # Check for any provider API key
         api_keys = [
             "OPENROUTER_API_KEY",
-            "OPENAI_API_KEY", 
+            "OPENAI_API_KEY",
             "ANTHROPIC_API_KEY",
             "AZURE_API_KEY",
-            "GOOGLE_API_KEY"
+            "GOOGLE_API_KEY",
         ]
-        
+
         has_valid_key = any(os.environ.get(key) for key in api_keys)
-        
+
         if not has_valid_key:
             from rich.console import Console
+
             Console().print(
-                "[error]Error:[/] No valid API key found. Please set one of: " + 
-                ", ".join(api_keys)
+                "[error]Error:[/] No valid API key found. Please set one of: "
+                + ", ".join(api_keys)
             )
             raise ValueError("No valid API key found.")
 
     def _setup_reliability_config(self) -> None:
         """Parse and setup reliability configuration from environment variables."""
         import json
-        
+
         # Parse fallback models
         fallback_models_str = os.environ.get("QX_FALLBACK_MODELS", "")
         self.fallback_models = []
         if fallback_models_str:
-            self.fallback_models = [model.strip() for model in fallback_models_str.split(",")]
-        
+            self.fallback_models = [
+                model.strip() for model in fallback_models_str.split(",")
+            ]
+
         # Parse context window fallbacks
         context_fallbacks_str = os.environ.get("QX_CONTEXT_WINDOW_FALLBACKS", "{}")
         try:
             self.context_window_fallbacks = json.loads(context_fallbacks_str)
         except json.JSONDecodeError:
-            logger.warning("Invalid JSON for QX_CONTEXT_WINDOW_FALLBACKS, using empty dict")
+            logger.warning(
+                "Invalid JSON for QX_CONTEXT_WINDOW_FALLBACKS, using empty dict"
+            )
             self.context_window_fallbacks = {}
-        
+
         # Parse fallback API keys
         fallback_keys_str = os.environ.get("QX_FALLBACK_API_KEYS", "{}")
         try:
@@ -222,7 +247,7 @@ class QXLLMAgent:
         except json.JSONDecodeError:
             logger.warning("Invalid JSON for QX_FALLBACK_API_KEYS, using empty dict")
             self.fallback_api_keys = {}
-        
+
         # Parse fallback API bases
         fallback_bases_str = os.environ.get("QX_FALLBACK_API_BASES", "{}")
         try:
@@ -230,14 +255,14 @@ class QXLLMAgent:
         except json.JSONDecodeError:
             logger.warning("Invalid JSON for QX_FALLBACK_API_BASES, using empty dict")
             self.fallback_api_bases = {}
-        
+
         # Set up timeout and retry configuration
         self.fallback_timeout = float(os.environ.get("QX_FALLBACK_TIMEOUT", "45"))
         self.fallback_cooldown = float(os.environ.get("QX_FALLBACK_COOLDOWN", "60"))
         self.retry_delay = float(os.environ.get("QX_RETRY_DELAY", "1.0"))
         self.max_retry_delay = float(os.environ.get("QX_MAX_RETRY_DELAY", "60.0"))
         self.backoff_factor = float(os.environ.get("QX_BACKOFF_FACTOR", "2.0"))
-        
+
         logger.debug(f"Reliability config - Fallback models: {self.fallback_models}")
         logger.debug(f"Context window fallbacks: {self.context_window_fallbacks}")
         logger.debug(f"Fallback timeout: {self.fallback_timeout}s")
@@ -325,7 +350,7 @@ class QXLLMAgent:
                 if isinstance(last_message, BaseModel):
                     last_message = last_message.model_dump()
                 logger.info(
-                    f"Sending message to LLM:\\n{json.dumps(last_message, indent=2)}"
+                    f"Sending message to LLM:\n{json.dumps(last_message, indent=2)}"
                 )
 
                 # Also log available tools on first user message
@@ -364,16 +389,16 @@ class QXLLMAgent:
 
         # Add timeout
         chat_params["timeout"] = float(os.environ.get("QX_REQUEST_TIMEOUT", "120"))
-        
+
         # Add retry configuration
         chat_params["num_retries"] = int(os.environ.get("QX_NUM_RETRIES", "3"))
-        
+
         # Add fallback models if configured
-        if hasattr(self, 'fallback_models') and self.fallback_models:
+        if hasattr(self, "fallback_models") and self.fallback_models:
             chat_params["fallbacks"] = self.fallback_models
-        
+
         # Add context window fallback if configured
-        if hasattr(self, 'context_window_fallbacks') and self.context_window_fallbacks:
+        if hasattr(self, "context_window_fallbacks") and self.context_window_fallbacks:
             chat_params["context_window_fallback_dict"] = self.context_window_fallbacks
 
         try:
@@ -419,7 +444,7 @@ class QXLLMAgent:
                             for tc in response_message.tool_calls
                         ]
                     logger.info(
-                        f"Received message from LLM:\\n{json.dumps(response_dict, indent=2)}"
+                        f"Received message from LLM:\n{json.dumps(response_dict, indent=2)}"
                     )
 
                 messages.append(response_message)
@@ -558,7 +583,11 @@ class QXLLMAgent:
 
                         # Display reasoning content in faded color
                         reasoning_text = delta.reasoning
-                        if reasoning_text and reasoning_text.strip() and await is_show_thinking_active():
+                        if (
+                            reasoning_text
+                            and reasoning_text.strip()
+                            and await is_show_thinking_active()
+                        ):
                             from rich.console import Console
 
                             reasoning_console = Console()
@@ -827,7 +856,7 @@ class QXLLMAgent:
         # Log the received message if QX_LOG_RECEIVED is set (for streaming)
         if os.getenv("QX_LOG_RECEIVED"):
             logger.info(
-                f"Received message from LLM (streaming):\\n{json.dumps(response_message_dict, indent=2)}"
+                f"Received message from LLM (streaming):\n{json.dumps(response_message_dict, indent=2)}"
             )
 
         messages.append(cast(ChatCompletionMessageParam, streaming_response_message))
@@ -988,7 +1017,9 @@ class QXLLMAgent:
                         timeout=120.0,  # 2 minute timeout per tool to allow for complex operations
                     )
                 except asyncio.TimeoutError:
-                    error_msg = f"Tool '{task_info['function_name']}' timed out after 2 minutes"
+                    error_msg = (
+                        f"Tool '{task_info['function_name']}' timed out after 2 minutes"
+                    )
                     logger.error(error_msg)
                     return Exception(error_msg)
 
@@ -1023,7 +1054,7 @@ class QXLLMAgent:
                 # Log tool response if QX_LOG_SENT is set (since we're sending it to the model)
                 if os.getenv("QX_LOG_SENT"):
                     logger.info(
-                        f"Sending tool response to LLM:\\n{json.dumps(tool_message, indent=2)}"
+                        f"Sending tool response to LLM:\n{json.dumps(tool_message, indent=2)}"
                     )
 
                 messages.append(
@@ -1102,7 +1133,7 @@ class QXLLMAgent:
             # Use timeout for fallback but allow sufficient time for model response
             response = await asyncio.wait_for(
                 acompletion(**fallback_params),
-                timeout=240.0  # 4 minute timeout for fallback (slightly less than main timeout)
+                timeout=240.0,  # 4 minute timeout for fallback (slightly less than main timeout)
             )
             response_message = response.choices[0].message
             fallback_messages.append(response_message)
@@ -1128,27 +1159,33 @@ class QXLLMAgent:
         try:
             # Remove None values to clean up parameters
             clean_params = {k: v for k, v in chat_params.items() if v is not None}
-            
+
             # Log reliability configuration if debug enabled
             if os.environ.get("QX_LOG_LEVEL", "").upper() == "DEBUG":
-                logger.debug(f"Making LiteLLM call with model: {clean_params.get('model')}")
-                if 'fallbacks' in clean_params:
-                    logger.debug(f"Fallback models configured: {clean_params['fallbacks']}")
-                if 'context_window_fallback_dict' in clean_params:
-                    logger.debug(f"Context window fallbacks: {clean_params['context_window_fallback_dict']}")
+                logger.debug(
+                    f"Making LiteLLM call with model: {clean_params.get('model')}"
+                )
+                if "fallbacks" in clean_params:
+                    logger.debug(
+                        f"Fallback models configured: {clean_params['fallbacks']}"
+                    )
+                if "context_window_fallback_dict" in clean_params:
+                    logger.debug(
+                        f"Context window fallbacks: {clean_params['context_window_fallback_dict']}"
+                    )
                 logger.debug(f"Retries: {clean_params.get('num_retries', 0)}")
                 logger.debug(f"Timeout: {clean_params.get('timeout', 'default')}")
-            
+
             return await acompletion(**clean_params)
-            
+
         except Exception as e:
             error_type = type(e).__name__
             logger.error(f"LiteLLM API call failed ({error_type}): {e}")
-            
+
             # Log which model/fallbacks were attempted if available
-            if hasattr(self, 'fallback_models') and self.fallback_models:
+            if hasattr(self, "fallback_models") and self.fallback_models:
                 logger.debug(f"Fallback models were available: {self.fallback_models}")
-            
+
             raise
 
     async def cleanup(self):
