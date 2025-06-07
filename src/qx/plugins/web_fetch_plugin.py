@@ -10,7 +10,7 @@ from qx.cli.console import themed_console
 
 logger = logging.getLogger(__name__)
 
-MAX_CONTENT_LENGTH = 250000
+MAX_CONTENT_LENGTH = 550000
 REQUEST_TIMEOUT = 10
 
 

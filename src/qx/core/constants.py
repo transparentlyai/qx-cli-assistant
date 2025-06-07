@@ -227,6 +227,7 @@ DEFAULT_APPROVED_COMMANDS = [
     "jobs",  # List active jobs
     "file",  # Error but harmless (no args)
     "file *",  # Determine file type
+    "rg *",
 ]
 
 # Shell command execution timeout in seconds

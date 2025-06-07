@@ -13,13 +13,17 @@ temp_stream_handler: Optional[logging.Handler] = None
 
 def configure_logging():
     """
-    Configures the application's logging based on QX_LOG_LEVEL environment variable.
-    Initially logs to file and console (for INFO and above). Console logging for INFO
-    will be redirected to Textual RichLog once the app starts.
+    Configures the application's logging.
+
+    - If QX_LOG_FILE is set, all logs (from qx and other libraries) are
+      redirected to the specified file, and console output is disabled.
+    - If QX_LOG_FILE is not set, only qx logs are sent to the console.
     """
     global temp_stream_handler
 
-    log_level_name = os.getenv("QX_LOG_LEVEL", "ERROR").upper()  # Default to INFO
+    log_level_name = os.getenv("QX_LOG_LEVEL", "ERROR").upper()
+    os.environ["LITELLM_LOG"] = log_level_name
+
     LOG_LEVELS = {
         "DEBUG": logging.DEBUG,
         "INFO": logging.INFO,
@@ -29,13 +33,21 @@ def configure_logging():
     }
     effective_log_level = LOG_LEVELS.get(log_level_name, logging.ERROR)
 
-    # Clear existing handlers to prevent duplicates on re-configuration
+    # Get the root logger and remove any existing handlers.
+    root_logger = logging.getLogger()
+    root_logger.setLevel(effective_log_level)
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+
+    # Also clear handlers from the qx logger to prevent any conflicts.
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
+    logger.setLevel(effective_log_level)
 
-    # Add file handler if QX_LOG_FILE is set, otherwise configure console logging
     log_file_path = os.getenv("QX_LOG_FILE")
     if log_file_path:
+        # When QX_LOG_FILE is set, configure the root logger to write to a file.
+        # This captures logs from all libraries (like litellm, httpx).
         log_file = Path(log_file_path)
         log_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -43,9 +55,13 @@ def configure_logging():
         file_handler.setFormatter(
             logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         )
-        logger.addHandler(file_handler)
+        root_logger.addHandler(file_handler)
+        logger.propagate = True  # Ensure qx logs go to the root logger's file handler
+
     else:
-        # Add a temporary StreamHandler for INFO and above, to be removed later
+        # When QX_LOG_FILE is not set, configure the 'qx' logger for console output.
+        # Other library logs will go to the root logger, which has no handlers,
+        # effectively silencing them.
         temp_stream_handler = logging.StreamHandler()
         temp_stream_handler.setLevel(effective_log_level)
         temp_stream_handler.setFormatter(
@@ -53,7 +69,6 @@ def configure_logging():
         )
         logger.addHandler(temp_stream_handler)
 
-        # Ensure critical errors always go to stderr
         critical_stream_handler = logging.StreamHandler(sys.stderr)
         critical_stream_handler.setLevel(logging.CRITICAL)
         critical_stream_handler.setFormatter(
@@ -61,27 +76,15 @@ def configure_logging():
         )
         logger.addHandler(critical_stream_handler)
 
-    logger.setLevel(effective_log_level)
+        # Stop qx logs from propagating to the handler-less root logger.
+        logger.propagate = False
 
-    # Enable debug logging for OpenRouter/OpenAI HTTP requests
+    # Enable debug logging for HTTP libraries if requested.
+    # If QX_LOG_FILE is set, their logs will go to the file.
+    # If not, they will be silenced by the handler-less root logger.
     if effective_log_level <= logging.DEBUG:
-        # Enable httpx debug logging at module level
-        httpx_logger = logging.getLogger("httpx")
-        httpx_logger.setLevel(logging.DEBUG)
-        httpx_logger.propagate = True
-
-        # Enable openai debug logging
-        openai_logger = logging.getLogger("openai")
-        openai_logger.setLevel(logging.DEBUG)
-        openai_logger.propagate = True
-
-        # Enable specific httpx sub-loggers that handle HTTP traffic
-        for logger_name in ["httpx._client", "httpx._trace"]:
-            sub_logger = logging.getLogger(logger_name)
-            sub_logger.setLevel(logging.DEBUG)
-            sub_logger.propagate = True
-
-        # Set environment variable to enable httpx debug mode
+        logging.getLogger("httpx").setLevel(logging.DEBUG)
+        logging.getLogger("openai").setLevel(logging.DEBUG)
         os.environ["HTTPX_LOG_LEVEL"] = "debug"
 
     # Set up global exception handler
@@ -93,7 +96,7 @@ def configure_logging():
         logger.critical(
             "Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback)
         )
-        # Also write to file directly in case logger fails (only if QX_LOG_FILE is set)
+        # Also write to file directly in case logger fails
         if log_file_path:
             with open(log_file_path, "a") as f:
                 f.write("\n=== UNCAUGHT EXCEPTION ===\n")
