@@ -155,7 +155,7 @@ async def _async_main(
                 from qx.cli.theme import themed_console
 
                 themed_console.print(
-                    f"\n[dim]Qx Cli Agent ver:[info]{QX_VERSION}[/] | [dim]model:[/][info]{os.path.basename(llm_agent.model_name)}[/] | [dim]cwd:[/][info]{os.getcwd()}[/]"
+                    f"\n[dim]Qx ver:[info]{QX_VERSION}[/] | [dim]model:[/][info]{os.path.basename(llm_agent.model_name)}[/] | [dim]cwd:[/][info]{os.getcwd()}[/]"
                 )
 
                 try:
