@@ -33,6 +33,32 @@ def _restore_ctrl_c(old_handler):
     signal.signal(signal.SIGINT, old_handler)
 
 
+def _suspend_global_hotkeys():
+    """Suspend global hotkeys during approval prompts."""
+    try:
+        from qx.core.hotkey_manager import get_hotkey_manager
+        manager = get_hotkey_manager()
+        if manager and manager.running:
+            manager.stop()
+            logger.debug("Suspended global hotkeys for approval prompt")
+            return True
+    except Exception as e:
+        logger.debug(f"Could not suspend global hotkeys: {e}")
+    return False
+
+
+def _resume_global_hotkeys():
+    """Resume global hotkeys after approval prompts."""
+    try:
+        from qx.core.hotkey_manager import get_hotkey_manager
+        manager = get_hotkey_manager()
+        if manager and not manager.running:
+            manager.start()
+            logger.debug("Resumed global hotkeys after approval prompt")
+    except Exception as e:
+        logger.debug(f"Could not resume global hotkeys: {e}")
+
+
 async def _execute_prompt_with_live_suspend(
     console: RichConsole, *args: Any, **kwargs: Any
 ) -> Any:
@@ -77,29 +103,37 @@ async def _ask_basic_confirmation(
     choices_display_str = "/".join(choices_str_list)
     full_prompt = f"{prompt_message_text} ({choices_display_str}): "
 
-    while True:
-        try:
-            old_handler = _disable_ctrl_c()
+    # Suspend global hotkeys during approval prompt
+    hotkeys_suspended = _suspend_global_hotkeys()
+    
+    try:
+        while True:
             try:
-                user_input = await asyncio.to_thread(
-                    Prompt.ask,
-                    full_prompt,
-                    choices=choices_str_list,
-                    show_choices=False,
-                    console=console,
-                )
-            finally:
-                _restore_ctrl_c(old_handler)
-            if user_input:
-                return user_input.lower()
-        except Exception as e:
-            try:
-                _restore_ctrl_c(old_handler)
-            except Exception:
-                pass
-            logger.error(f"Error in confirmation prompt: {e}", exc_info=True)
-            console.print("[dim red]Error with prompt, please try again.[/dim red]")
-            continue
+                old_handler = _disable_ctrl_c()
+                try:
+                    user_input = await asyncio.to_thread(
+                        Prompt.ask,
+                        full_prompt,
+                        choices=choices_str_list,
+                        show_choices=False,
+                        console=console,
+                    )
+                finally:
+                    _restore_ctrl_c(old_handler)
+                if user_input:
+                    return user_input.lower()
+            except Exception as e:
+                try:
+                    _restore_ctrl_c(old_handler)
+                except Exception:
+                    pass
+                logger.error(f"Error in confirmation prompt: {e}", exc_info=True)
+                console.print("[dim red]Error with prompt, please try again.[/dim red]")
+                continue
+    finally:
+        # Always resume global hotkeys
+        if hotkeys_suspended:
+            _resume_global_hotkeys()
 
 
 def _is_textual_environment(console: RichConsole) -> bool:
@@ -290,30 +324,38 @@ async def get_user_choice_from_options_async(
             )
             return None
 
-    while True:
-        try:
-            old_handler = _disable_ctrl_c()
+    # Suspend global hotkeys during approval prompt
+    hotkeys_suspended = _suspend_global_hotkeys()
+    
+    try:
+        while True:
             try:
-                user_input = await asyncio.to_thread(
-                    Prompt.ask,
-                    prompt_text_with_options,
-                    choices=processed_valid_choices,
-                    default=processed_default_choice,
-                    show_choices=False,
-                    console=console,
-                )
-            finally:
-                _restore_ctrl_c(old_handler)
-            if user_input:
-                return user_input.lower()
-            else:
-                console.print("[dim red]Please select an option.[/dim red]")
+                old_handler = _disable_ctrl_c()
+                try:
+                    user_input = await asyncio.to_thread(
+                        Prompt.ask,
+                        prompt_text_with_options,
+                        choices=processed_valid_choices,
+                        default=processed_default_choice,
+                        show_choices=False,
+                        console=console,
+                    )
+                finally:
+                    _restore_ctrl_c(old_handler)
+                if user_input:
+                    return user_input.lower()
+                else:
+                    console.print("[dim red]Please select an option.[/dim red]")
+                    continue
+            except Exception as e:
+                try:
+                    _restore_ctrl_c(old_handler)
+                except Exception:
+                    pass
+                logger.error(f"Error during Rich prompt: {e}", exc_info=True)
+                console.print("[dim red]Error with prompt, please try again.[/dim red]")
                 continue
-        except Exception as e:
-            try:
-                _restore_ctrl_c(old_handler)
-            except Exception:
-                pass
-            logger.error(f"Error during Rich prompt: {e}", exc_info=True)
-            console.print("[dim red]Error with prompt, please try again.[/dim red]")
-            continue
+    finally:
+        # Always resume global hotkeys
+        if hotkeys_suspended:
+            _resume_global_hotkeys()
