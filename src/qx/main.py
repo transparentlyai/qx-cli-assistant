@@ -8,13 +8,16 @@ from pathlib import Path
 from typing import List, Optional
 
 import anyio
-from openai.types.chat import ChatCompletionMessageParam
+from openai.types.chat import (
+    ChatCompletionMessageParam,
+    ChatCompletionSystemMessageParam,
+)
 
 from qx.cli.inline_mode import _handle_llm_interaction, _run_inline_mode
 from qx.cli.version import QX_VERSION, display_version_info
 from qx.core.config_manager import ConfigManager
 from qx.core.constants import DEFAULT_SYNTAX_HIGHLIGHT_THEME
-from qx.core.llm import QXLLMAgent
+from qx.core.llm import QXLLMAgent, load_and_format_system_prompt
 from qx.core.llm_utils import initialize_agent_with_mcp
 from qx.core.logging_config import configure_logging, remove_temp_stream_handler
 from qx.core.session_manager import (
@@ -102,7 +105,12 @@ async def _async_main(
                     themed_console.print("Attempting to recover latest session...")
                     loaded_history = load_latest_session()
                     if loaded_history:
-                        current_message_history = loaded_history
+                        system_prompt = load_and_format_system_prompt()
+                        current_message_history = [
+                            ChatCompletionSystemMessageParam(
+                                role="system", content=system_prompt
+                            )
+                        ] + loaded_history
                         themed_console.print(
                             "[success]Latest session recovered successfully![/]"
                         )
@@ -116,7 +124,12 @@ async def _async_main(
                     )
                     loaded_history = load_session_from_path(Path(recover_session_path))
                     if loaded_history:
-                        current_message_history = loaded_history
+                        system_prompt = load_and_format_system_prompt()
+                        current_message_history = [
+                            ChatCompletionSystemMessageParam(
+                                role="system", content=system_prompt
+                            )
+                        ] + loaded_history
                         themed_console.print(
                             "[success]Session recovered successfully![/]"
                         )

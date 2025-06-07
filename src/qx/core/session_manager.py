@@ -18,6 +18,41 @@ _session_lock = asyncio.Lock()  # Protect session file access in async context
 _session_lock_sync = threading.Lock()  # Protect session file access in sync context
 
 
+def _get_message_role(msg) -> Optional[str]:
+    """
+    Safely extracts the role from a message, whether it's a dict or Pydantic model.
+    """
+    if hasattr(msg, "get"):
+        # Dict-like object
+        return msg.get("role")
+    elif hasattr(msg, "role"):
+        # Pydantic model or object with role attribute
+        return msg.role
+    else:
+        return None
+
+
+def _add_system_message_if_missing(message_history: List[ChatCompletionMessageParam]) -> List[ChatCompletionMessageParam]:
+    """
+    Adds the system message as the first message if it's not already present.
+    """
+    # Check if the first message is already a system message
+    if message_history and _get_message_role(message_history[0]) == "system":
+        return message_history
+    
+    # Import here to avoid circular imports
+    from qx.core.llm import load_and_format_system_prompt
+    
+    system_prompt = load_and_format_system_prompt()
+    system_message = cast(
+        ChatCompletionMessageParam,
+        {"role": "system", "content": system_prompt}
+    )
+    
+    # Prepend the system message
+    return [system_message] + message_history
+
+
 async def get_or_create_session_filename():
     """
     Returns the current session filename, creating a new one if needed.
@@ -61,9 +96,12 @@ async def save_session_async(message_history: List[ChatCompletionMessageParam]):
     ):  # get_or_create_session_filename returns None if .Q doesn't exist
         return
 
+    # Exclude the system message from the history to be saved
+    history_to_save = [msg for msg in message_history if _get_message_role(msg) != "system"]
+
     # Convert ChatCompletionMessageParam objects to dictionaries for JSON serialization
     serializable_history = []
-    for msg in message_history:
+    for msg in history_to_save:
         if hasattr(msg, "model_dump") and callable(getattr(msg, "model_dump")):
             # Pydantic model with model_dump method
             serializable_history.append(msg.model_dump())  # type: ignore
@@ -133,9 +171,14 @@ def save_session_sync(message_history: List[ChatCompletionMessageParam]):
             ):  # If it couldn't be created due to missing .Q
                 return
 
+            # Exclude the system message from the history to be saved
+            history_to_save = [
+                msg for msg in message_history if _get_message_role(msg) != "system"
+            ]
+
             serializable_history = [
                 msg.model_dump() if hasattr(msg, "model_dump") else msg
-                for msg in message_history
+                for msg in history_to_save
             ]
 
             try:
@@ -398,6 +441,10 @@ def load_session_from_path(
         message_history: List[ChatCompletionMessageParam] = cast(
             List[ChatCompletionMessageParam], raw_messages
         )
+        
+        # Add system message as first message if not already present
+        message_history = _add_system_message_if_missing(message_history)
+        
         logger.info(f"Loaded session from {session_path}")
 
         # Set the current session file to the recovered one
