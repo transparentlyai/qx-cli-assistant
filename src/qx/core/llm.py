@@ -18,8 +18,8 @@ from openai.types.chat import (
 from openai.types.shared_params.function_definition import FunctionDefinition
 from pydantic import BaseModel, ValidationError
 from rich.console import Console as RichConsoleClass
-from qx.cli.theme import themed_console
 
+from qx.cli.theme import themed_console
 from qx.core.mcp_manager import MCPManager
 from qx.core.plugin_manager import PluginManager
 from qx.core.user_prompts import is_show_thinking_active
@@ -498,6 +498,7 @@ class QXLLMAgent:
                 # Output as markdown with Rich markup support
                 from rich.console import Console
                 from rich.markdown import Markdown
+
                 from ..cli.theme import custom_theme
 
                 rich_console = Console(theme=custom_theme)
@@ -524,7 +525,7 @@ class QXLLMAgent:
 
             console = Console()
 
-            with console.status("Thinking...", spinner="dots") as status:
+            with console.status(" ", spinner="dots") as status:
                 try:
                     stream = await self._make_litellm_call(chat_params)
                 except (asyncio.TimeoutError, httpx.TimeoutException):

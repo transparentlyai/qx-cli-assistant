@@ -1,10 +1,10 @@
 import subprocess
 from pathlib import Path
 
-from prompt_toolkit.completion import Completion
+from prompt_toolkit.completion import Completer, Completion
 
 
-class QXCompleter:
+class QXCompleter(Completer):
     """Custom completer that handles both commands and path completion."""
 
     def __init__(self):
