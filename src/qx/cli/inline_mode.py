@@ -193,10 +193,10 @@ async def _run_inline_mode(
         async with _show_thinking_lock:
             user_prompts._show_thinking_active = not user_prompts._show_thinking_active
             status = "enabled" if user_prompts._show_thinking_active else "disabled"
-            style = "success" if user_prompts._show_thinking_active else "warning"
+            style = "warning" if user_prompts._show_thinking_active else "warning"
             run_in_terminal(
                 lambda: themed_console.print(
-                    f"✓ 'Show Thinking' {status}.", style=style
+                    f"✓ [dim green]Show Thinking:[/] {status}.", style=style
                 )
             )
         event.app.invalidate()
