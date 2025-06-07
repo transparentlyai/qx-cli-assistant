@@ -9,6 +9,7 @@ from rich.console import Console as RichConsole
 
 from qx.core.approval_handler import ApprovalHandler
 from qx.cli.console import themed_console
+from qx.core.output_control import should_show_stdout, should_show_stderr
 
 logger = logging.getLogger(__name__)
 
@@ -282,9 +283,11 @@ async def execute_shell_tool(
                 "Command", f"Failed with return code {return_code}.", success=False
             )
 
-        if stdout:
+        # Show stdout only if output control allows it
+        if stdout and await should_show_stdout():
             themed_console.print(stdout, style="dim white")
-        if stderr:
+        # Show stderr only if output control allows it (usually always shown)
+        if stderr and await should_show_stderr():
             themed_console.print(stderr, style="dim red")
 
         return ExecuteShellPluginOutput(
