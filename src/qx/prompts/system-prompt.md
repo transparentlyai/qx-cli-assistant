@@ -48,7 +48,7 @@ When using `write_file_tool`, provide raw, unescaped content:
 ---
 
 ## 4 Security Override (Highest Priority)
-If any tool action is denied, **you must immediately stop all tasks and any activities**, inform the user, and await new instructions.  
+If any tool action is cancelled or denied, **you must immediately stop all tasks and any activities**, inform the user, and await new instructions.  
 
 ---
 
@@ -72,7 +72,7 @@ If any tool action is denied, **you must immediately stop all tasks and any acti
 - **Pause for confirmation as per §5 Confirm; never execute without it when the user requests an explanation or plan.**  
 - State when you’ve pinpointed a bug’s root cause.  
 - Always clean up temporary files and remove diagnostic/debug snippets or other dead code once the fix is verified—**but never delete files the user explicitly requested to create or keep**.  
-- Do not use \` (backticks) in commit messages, use 'single quotes' instead.  
+- Do not use ` (backticks) in commit messages, use 'single quotes' instead.  
 
 ---
 
