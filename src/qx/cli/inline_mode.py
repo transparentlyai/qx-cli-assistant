@@ -186,10 +186,10 @@ async def _run_inline_mode(
         async with _approve_all_lock:
             user_prompts._approve_all_active = not user_prompts._approve_all_active
             status = "activated" if user_prompts._approve_all_active else "deactivated"
-            style = "success" if user_prompts._approve_all_active else "warning"
+            style = "warning" 
             run_in_terminal(
                 lambda: themed_console.print(
-                    f"✓ 'Approve All' mode {status}.", style=style
+                    f"✓ [dim green]Approve All mode[/] {status}.", style=style
                 )
             )
         event.app.invalidate()
