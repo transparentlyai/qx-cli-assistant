@@ -184,10 +184,6 @@ class ConfigManager:
         if os.getenv("QX_SHOW_SPINNER") is None:
             os.environ["QX_SHOW_SPINNER"] = "true"
 
-        # Set default for QX_SHOW_THINKING if not set
-        if os.getenv("QX_SHOW_THINKING") is None:
-            os.environ["QX_SHOW_THINKING"] = "true"
-
         # Check for minimal required variables
         model_name = os.getenv("QX_MODEL_NAME")
         api_keys = [

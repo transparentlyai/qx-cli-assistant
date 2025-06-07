@@ -7,15 +7,13 @@ from rich.console import RenderableType
 import signal
 from rich.prompt import Prompt
 
+from qx.core.state_manager import show_thinking_manager
+
 RichConsole = Any
 
 logger = logging.getLogger(__name__)
 _approve_all_active: bool = False
 _approve_all_lock = asyncio.Lock()
-
-# Initialize from environment variable, defaulting to True
-_show_thinking_active: bool = os.getenv("QX_SHOW_THINKING", "true").lower() == "true"
-_show_thinking_lock = asyncio.Lock()
 
 CHOICE_YES = ("y", "Yes", "yes")
 CHOICE_NO = ("n", "No", "no")
@@ -66,9 +64,7 @@ async def is_approve_all_active() -> bool:
 
 
 async def is_show_thinking_active() -> bool:
-    global _show_thinking_active
-    async with _show_thinking_lock:
-        return _show_thinking_active
+    return await show_thinking_manager.is_active()
 
 
 async def _ask_basic_confirmation(
@@ -193,7 +189,9 @@ async def _request_confirmation_terminal(
 
     try:
         user_choice_key = await _ask_basic_confirmation(
-            console=console, choices=choices_map, prompt_message_text=prompt_message
+            console=console,
+            choices=choices_map,
+            prompt_message_text=prompt_message,
         )
         if user_choice_key == "y":
             return ("approved", current_value_for_modification)

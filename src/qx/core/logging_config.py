@@ -23,12 +23,14 @@ def configure_logging():
 
     log_level_name = os.getenv("QX_LOG_LEVEL", "ERROR").upper()
     log_file_path = os.getenv("QX_LOG_FILE")
-    
+
     # Configure LiteLLM logging based on whether we're using file or console logging
     os.environ["LITELLM_LOG"] = log_level_name
     if log_file_path:
         # Disable LiteLLM's console logging when using file logging
-        os.environ["LITELLM_LOG_LEVEL"] = "CRITICAL"  # Suppress most LiteLLM console output
+        os.environ["LITELLM_LOG_LEVEL"] = (
+            "CRITICAL"  # Suppress most LiteLLM console output
+        )
         # Note: We'll still configure LiteLLM loggers to write to file below
 
     LOG_LEVELS = {
@@ -62,17 +64,17 @@ def configure_logging():
         )
         root_logger.addHandler(file_handler)
         logger.propagate = True  # Ensure qx logs go to the root logger's file handler
-        
+
         # Configure LiteLLM-specific loggers to also redirect to file only
         litellm_loggers = [
             "litellm",
-            "litellm.proxy", 
+            "litellm.proxy",
             "litellm.router",
             "litellm.utils",
             "litellm.llms",
             "LiteLLM",  # Some modules use this capitalization
         ]
-        
+
         for logger_name in litellm_loggers:
             lib_logger = logging.getLogger(logger_name)
             lib_logger.setLevel(effective_log_level)

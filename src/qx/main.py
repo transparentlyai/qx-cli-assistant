@@ -26,6 +26,7 @@ from qx.core.session_manager import (
     load_session_from_path,
     save_session,
 )
+from qx.core.state_manager import show_thinking_manager
 
 # Configure logging for the application
 logger = logging.getLogger("qx")
@@ -43,6 +44,9 @@ async def _async_main(
         async with anyio.create_task_group() as tg:
             config_manager = ConfigManager(None, parent_task_group=tg)
             config_manager.load_configurations()
+
+            # Initialize the ShowThinkingManager
+            await show_thinking_manager.is_active()  # This initializes the singleton
 
             # Configure logging after config is loaded so QX_LOG_LEVEL is available
             configure_logging()
