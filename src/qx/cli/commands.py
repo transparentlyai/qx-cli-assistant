@@ -84,7 +84,7 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
         themed_console.print(
             "  Ctrl+R      - Fuzzy history search (fzf)", style="primary"
         )
-        themed_console.print("  Ctrl+S      - Toggle stdout visibility", style="primary")
+        themed_console.print("  Ctrl+O      - Toggle stdout visibility", style="primary")
         themed_console.print("  Ctrl+T      - Toggle 'Details' mode", style="primary")
         themed_console.print("  Esc+Enter   - Toggle multiline mode", style="primary")
 
