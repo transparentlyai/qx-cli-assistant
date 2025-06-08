@@ -7,7 +7,7 @@ from rich.console import RenderableType
 import signal
 from rich.prompt import Prompt
 
-from qx.core.state_manager import show_thinking_manager
+from qx.core.state_manager import details_manager
 
 RichConsole = Any
 
@@ -91,8 +91,8 @@ async def is_approve_all_active() -> bool:
         return _approve_all_active
 
 
-async def is_show_thinking_active() -> bool:
-    return await show_thinking_manager.is_active()
+async def is_details_active() -> bool:
+    return await details_manager.is_active()
 
 
 async def _ask_basic_confirmation(

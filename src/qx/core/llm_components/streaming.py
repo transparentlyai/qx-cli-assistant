@@ -9,7 +9,7 @@ import httpx
 from openai.types.chat import ChatCompletionMessageParam
 from openai.types.chat.chat_completion_message import ChatCompletionMessage
 
-from qx.core.user_prompts import is_show_thinking_active
+from qx.core.user_prompts import is_details_active
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,7 @@ class StreamingHandler:
             nonlocal last_thinking_message
             if thinking_text and thinking_text.strip():
                 # Get first line of thinking message
-                first_line = thinking_text.strip().split('\n')[0]
+                first_line = thinking_text.strip().split("\n")[0]
                 # Truncate if too long
                 if len(first_line) > 60:
                     first_line = first_line[:57] + "..."
@@ -156,23 +156,24 @@ class StreamingHandler:
                     # Handle reasoning streaming (OpenRouter specific)
                     if hasattr(delta, "reasoning") and delta.reasoning:
                         reasoning_text = delta.reasoning
-                        
+
                         # Check if we should display thinking messages
-                        show_thinking = await is_show_thinking_active()
-                        
+                        show_details = await is_details_active()
+
                         if reasoning_text and reasoning_text.strip():
-                            if show_thinking:
+                            if show_details:
                                 # Temporarily stop spinner to print thinking message cleanly
                                 was_spinning = not spinner_stopped
                                 if was_spinning:
                                     status.stop()
-                                
+
                                 from rich.console import Console
+
                                 reasoning_console = Console()
                                 reasoning_console.print(
                                     f"[dim]{reasoning_text}[/dim]", end=""
                                 )
-                                
+
                                 # Restart spinner if it was running
                                 if was_spinning:
                                     status.start()
