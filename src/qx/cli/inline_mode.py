@@ -23,16 +23,18 @@ from qx.cli.theme import themed_console
 from qx.core.config_manager import ConfigManager
 from qx.core.history_utils import parse_history_for_fzf
 from qx.core.llm import QXLLMAgent, query_llm
+from qx.core.output_control import output_control_manager
 from qx.core.paths import QX_HISTORY_FILE
 from qx.core.session_manager import clean_old_sessions, save_session
-from qx.core.user_prompts import _approve_all_lock
 from qx.core.state_manager import details_manager
+from qx.core.user_prompts import _approve_all_lock
 
 logger = logging.getLogger("qx")
 
 is_multiline_mode = [False]
 pending_text = [""]
 _details_active_for_toolbar = [True]
+_stdout_active_for_toolbar = [True]
 
 
 class SingleLineNonEmptyValidator(Validator):
@@ -51,13 +53,20 @@ def get_bottom_toolbar():
         if user_prompts._approve_all_active
         else '<style fg="red">OFF</style>'
     )
-    thinking_status = (
+    details_status = (
         '<style fg="lime">ON</style>'
         if _details_active_for_toolbar[0]
         else '<style fg="red">OFF</style>'
     )
+    stdout_status = (
+        '<style fg="lime">ON</style>'
+        if _stdout_active_for_toolbar[0]
+        else '<style fg="red">OFF</style>'
+    )
 
-    toolbar_html = f"Details: {thinking_status} | Approve All: {approve_all_status}"
+    toolbar_html = (
+        f"Details: {details_status} | Stdout: {stdout_status} | Approve All: {approve_all_status}"
+    )
     return HTML(toolbar_html)
 
 
@@ -114,6 +123,7 @@ async def _run_inline_mode(
     qx_history = QXHistory(QX_HISTORY_FILE)
     qx_completer = QXCompleter()
     _details_active_for_toolbar[0] = await details_manager.is_active()
+    _stdout_active_for_toolbar[0] = await output_control_manager.should_show_stdout()
 
     # Initialize global hotkey system but don't start it yet
     # We'll use suspend/resume pattern around prompt_toolkit usage
@@ -240,12 +250,11 @@ async def _run_inline_mode(
 
     @bindings.add("c-o")
     async def _(event):
-        from qx.core.output_control import output_control_manager
-
         # Get current status and toggle it
         current_status = await output_control_manager.should_show_stdout()
         new_status = not current_status
         await output_control_manager.set_stdout_visibility(new_status)
+        _stdout_active_for_toolbar[0] = new_status
 
         status_text = "enabled" if new_status else "disabled"
         style = "warning"

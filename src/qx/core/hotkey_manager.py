@@ -265,33 +265,33 @@ def _default_approve_all_handler():
 def _default_toggle_details_handler():
     """Default handler for Ctrl+T - toggle details mode."""
     try:
-        import os
+        from qx.core.state_manager import details_manager
+        import asyncio
 
-        # Simple environment variable toggle without any external dependencies
-        current_status = os.getenv("QX_SHOW_DETAILS", "true").lower() == "true"
-        new_status = not current_status
-        os.environ["QX_SHOW_DETAILS"] = str(new_status).lower()
+        async def toggle_details():
+            new_status = not await details_manager.is_active()
+            await details_manager.set_status(new_status)
 
-        # Update toolbar state if available (without importing complex modules)
-        try:
-            from qx.cli.inline_mode import _details_active_for_toolbar
-            _details_active_for_toolbar[0] = new_status
-        except ImportError:
-            pass  # Module not imported yet
+            # Update toolbar state if available
+            try:
+                from qx.cli.inline_mode import _details_active_for_toolbar
+                _details_active_for_toolbar[0] = new_status
+            except ImportError:
+                pass  # Module not imported yet
 
-        # Use managed stream print with newline to avoid spinner overlap
-        status_text = "enabled" if new_status else "disabled"
-        try:
-            from qx.core.llm_components.streaming import _managed_stream_print
-            _managed_stream_print(
-                f"\n✓ [dim green]Details:[/] {status_text}.", 
-                use_manager=True, 
-                style="warning"
-            )
-        except Exception:
-            # Fallback to plain print if managed print not available
-            print(f"\n✓ Details: {status_text}")
-        logger.info(f"Details {status_text} via global hotkey")
+            status_text = "enabled" if new_status else "disabled"
+            try:
+                from qx.core.llm_components.streaming import _managed_stream_print
+                _managed_stream_print(
+                    f"\n✓ [dim green]Details:[/] {status_text}.", 
+                    use_manager=True, 
+                    style="warning"
+                )
+            except Exception:
+                print(f"\n✓ Details: {status_text}")
+            logger.info(f"Details {status_text} via global hotkey")
+
+        asyncio.run(toggle_details())
 
     except Exception as e:
         logger.error(f"Error in toggle details handler: {e}")
@@ -300,26 +300,34 @@ def _default_toggle_details_handler():
 def _default_toggle_stdout_handler():
     """Default handler for Ctrl+O - toggle stdout visibility."""
     try:
-        import os
-        
-        # Simple environment variable toggle without any external dependencies
-        current_status = os.getenv("QX_SHOW_STDOUT", "true").lower() == "true"
-        new_status = not current_status
-        os.environ["QX_SHOW_STDOUT"] = str(new_status).lower()
+        from qx.core.output_control import output_control_manager
+        import asyncio
 
-        # Use managed stream print with newline to avoid spinner overlap
-        status_text = "enabled" if new_status else "disabled"
-        try:
-            from qx.core.llm_components.streaming import _managed_stream_print
-            _managed_stream_print(
-                f"\n✓ [dim green]Show Stdout:[/] {status_text}.", 
-                use_manager=True, 
-                style="warning"
-            )
-        except Exception:
-            # Fallback to plain print if managed print not available
-            print(f"\n✓ Show Stdout: {status_text}")
-        logger.info(f"Show Stdout {status_text} via Ctrl+O")
+        async def toggle_stdout():
+            current_status = await output_control_manager.should_show_stdout()
+            new_status = not current_status
+            await output_control_manager.set_stdout_visibility(new_status)
+
+            # Update toolbar state if available
+            try:
+                from qx.cli.inline_mode import _stdout_active_for_toolbar
+                _stdout_active_for_toolbar[0] = new_status
+            except ImportError:
+                pass  # Module not imported yet
+
+            status_text = "enabled" if new_status else "disabled"
+            try:
+                from qx.core.llm_components.streaming import _managed_stream_print
+                _managed_stream_print(
+                    f"\n✓ [dim green]Show Stdout:[/] {status_text}.", 
+                    use_manager=True, 
+                    style="warning"
+                )
+            except Exception:
+                print(f"\n✓ Show Stdout: {status_text}")
+            logger.info(f"Show Stdout {status_text} via Ctrl+O")
+
+        asyncio.run(toggle_stdout())
 
     except Exception as e:
         logger.error(f"Error in toggle stdout handler: {e}")
