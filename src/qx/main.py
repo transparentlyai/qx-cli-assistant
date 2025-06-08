@@ -72,19 +72,19 @@ async def _async_main(
                 config_manager.mcp_manager
             )
 
-            # Get QX_KEEP_SESSIONS from environment, default to 5 if not set or invalid
+            # Get QX_KEEP_SESSIONS from environment, default to 20 if not set or invalid
             try:
-                keep_sessions = int(os.getenv("QX_KEEP_SESSIONS", "5"))
+                keep_sessions = int(os.getenv("QX_KEEP_SESSIONS", "20"))
                 if keep_sessions < 0:
                     logger.warning(
-                        f"QX_KEEP_SESSIONS must be non-negative. Using default of 5 instead of {keep_sessions}."
+                        f"QX_KEEP_SESSIONS must be non-negative. Using default of 20 instead of {keep_sessions}."
                     )
-                    keep_sessions = 5
+                    keep_sessions = 20
             except ValueError:
                 logger.warning(
-                    "Invalid value for QX_KEEP_SESSIONS. Using default of 5."
+                    "Invalid value for QX_KEEP_SESSIONS. Using default of 20."
                 )
-                keep_sessions = 5
+                keep_sessions = 20
 
             # Handle exit after response mode (non-interactive)
             if exit_after_response and initial_prompt:
