@@ -133,7 +133,7 @@ async def _run_inline_mode(
         register_global_hotkey("ctrl+r", "history")  # Same as prompt_toolkit
         register_global_hotkey("ctrl+a", "approve_all")  # Same as prompt_toolkit
         register_global_hotkey("ctrl+t", "toggle_details")  # Same as prompt_toolkit
-        register_global_hotkey("ctrl+s", "toggle_stdout")  # Re-enabled with fix
+        register_global_hotkey("ctrl+o", "toggle_stdout")  # Re-enabled with fix
         register_global_hotkey("f12", "cancel")  # Additional emergency key
         logger.debug("Global hotkey handlers registered (matching prompt_toolkit)")
     except Exception as e:
@@ -238,7 +238,7 @@ async def _run_inline_mode(
         )
         event.app.invalidate()
 
-    @bindings.add("c-s")
+    @bindings.add("c-o")
     async def _(event):
         from qx.core.output_control import output_control_manager
 

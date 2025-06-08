@@ -245,8 +245,17 @@ def _default_approve_all_handler():
         user_prompts._approve_all_active = not user_prompts._approve_all_active
         status = "activated" if user_prompts._approve_all_active else "deactivated"
         
-        # Simple print without Rich formatting to avoid threading issues
-        print(f"✓ Approve All mode {status}")
+        # Use managed stream print with newline to avoid spinner overlap
+        try:
+            from qx.core.llm_components.streaming import _managed_stream_print
+            _managed_stream_print(
+                f"\n✓ [dim green]Approve All mode[/] {status}.", 
+                use_manager=True, 
+                style="warning"
+            )
+        except Exception:
+            # Fallback to plain print if managed print not available
+            print(f"\n✓ Approve All mode {status}")
         logger.info(f"Approve All mode {status} via global hotkey")
 
     except Exception as e:
@@ -270,9 +279,18 @@ def _default_toggle_details_handler():
         except ImportError:
             pass  # Module not imported yet
 
-        # Simple print without Rich formatting to avoid threading issues
+        # Use managed stream print with newline to avoid spinner overlap
         status_text = "enabled" if new_status else "disabled"
-        print(f"✓ Details: {status_text}")
+        try:
+            from qx.core.llm_components.streaming import _managed_stream_print
+            _managed_stream_print(
+                f"\n✓ [dim green]Details:[/] {status_text}.", 
+                use_manager=True, 
+                style="warning"
+            )
+        except Exception:
+            # Fallback to plain print if managed print not available
+            print(f"\n✓ Details: {status_text}")
         logger.info(f"Details {status_text} via global hotkey")
 
     except Exception as e:
@@ -280,7 +298,7 @@ def _default_toggle_details_handler():
 
 
 def _default_toggle_stdout_handler():
-    """Default handler for Ctrl+S - toggle stdout visibility."""
+    """Default handler for Ctrl+O - toggle stdout visibility."""
     try:
         import os
         
@@ -289,10 +307,19 @@ def _default_toggle_stdout_handler():
         new_status = not current_status
         os.environ["QX_SHOW_STDOUT"] = str(new_status).lower()
 
-        # Simple print without Rich formatting to avoid threading issues
+        # Use managed stream print with newline to avoid spinner overlap
         status_text = "enabled" if new_status else "disabled"
-        print(f"✓ Show Stdout: {status_text}")
-        logger.info(f"Show Stdout {status_text} via Ctrl+S")
+        try:
+            from qx.core.llm_components.streaming import _managed_stream_print
+            _managed_stream_print(
+                f"\n✓ [dim green]Show Stdout:[/] {status_text}.", 
+                use_manager=True, 
+                style="warning"
+            )
+        except Exception:
+            # Fallback to plain print if managed print not available
+            print(f"\n✓ Show Stdout: {status_text}")
+        logger.info(f"Show Stdout {status_text} via Ctrl+O")
 
     except Exception as e:
         logger.error(f"Error in toggle stdout handler: {e}")

@@ -14,7 +14,7 @@ QX implements a sophisticated global hotkey system that allows users to trigger 
 |--------|--------|-------------|
 | **Ctrl+T** | Toggle Details | Show/hide AI reasoning process during responses |
 | **Ctrl+A** | Toggle Approve All | Enable/disable automatic approval for tool operations |
-| **Ctrl+S** | Toggle Stdout | Show/hide command output during tool execution |
+| **Ctrl+O** | Toggle Stdout | Show/hide command output during tool execution |
 | **Ctrl+R** | History Search | Search command history (available during input only) |
 | **Ctrl+E** | Edit in External Editor | Open current input in text editor (vi by default, configurable via QX_DEFAULT_EDITOR). Supports: vi, vim, nvim, nano, code/vscode |
 | **Ctrl+C** | Cancel Operation | Interrupt current operation |
