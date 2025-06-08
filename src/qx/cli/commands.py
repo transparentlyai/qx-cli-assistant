@@ -93,7 +93,10 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
         themed_console.print(
             "  /model      - Show current LLM model configuration", style="primary"
         )
-        themed_console.print("  /tools      - List active tools", style="primary")
+        themed_console.print(
+            "  /tools      - List active tools with simple descriptions",
+            style="primary",
+        )
         themed_console.print(
             "  /reset      - Reset session and clear message history", style="primary"
         )

@@ -1,3 +1,4 @@
+
 import argparse
 import asyncio
 import logging
@@ -27,6 +28,7 @@ from qx.core.session_manager import (
     save_session,
 )
 from qx.core.state_manager import details_manager
+from qx.core.database import init_db
 
 # Configure logging for the application
 logger = logging.getLogger("qx")
@@ -40,6 +42,7 @@ async def _async_main(
     """
     Asynchronous main function to handle the Qx agent logic.
     """
+    init_db()
     try:
         async with anyio.create_task_group() as tg:
             config_manager = ConfigManager(None, parent_task_group=tg)
@@ -208,7 +211,6 @@ async def _async_main(
         logger.critical(f"Critical error in _async_main: {e}", exc_info=True)
         print(f"Critical error: {e}")
         traceback.print_exc()
-
 
 def main():
     configure_logging()
