@@ -184,7 +184,7 @@ async def _async_main(
                 try:
                     # Run inline interactive loop
                     await _run_inline_mode(
-                        llm_agent, current_message_history, keep_sessions
+                        llm_agent, current_message_history, keep_sessions, config_manager
                     )
                 except KeyboardInterrupt:
                     logger.debug("Qx terminated by user (Ctrl+C)")
