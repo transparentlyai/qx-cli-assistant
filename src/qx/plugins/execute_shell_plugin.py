@@ -2,7 +2,7 @@ import asyncio
 import fnmatch
 import logging
 import subprocess
-from typing import List, Optional
+from typing import Optional
 
 from pydantic import BaseModel, Field
 from rich.console import Console as RichConsole
@@ -10,6 +10,11 @@ from rich.console import Console as RichConsole
 from qx.cli.console import themed_console
 from qx.core.approval_handler import ApprovalHandler
 from qx.core.output_control import should_show_stderr, should_show_stdout
+from qx.core.constants import (
+    DEFAULT_PROHIBITED_COMMANDS,
+    DEFAULT_APPROVED_COMMANDS,
+    APPROVAL_STATUSES_OK,
+)
 
 
 def _managed_plugin_print(content: str, **kwargs) -> None:
@@ -38,195 +43,6 @@ def _managed_plugin_print(content: str, **kwargs) -> None:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_PROHIBITED_SHELL_PATTERNS: List[str] = [
-    "sudo *",
-    "su *",
-    "chmod 777 *",
-    "chmod -R 777 *",
-    "rm -rf /*",
-    "dd if=/dev/zero of=/dev/*",
-    "> /dev/sda",
-    "mkfs.*",
-    ":(){:|:&};:",
-    "mv /* /dev/null",
-    "wget * | bash",
-    "curl * | bash",
-    "wget * | sh",
-    "curl * | sh",
-    "*(){ :;};*",
-    "echo * > /etc/passwd",
-    "echo * > /etc/shadow",
-    "rm -rf ~",
-    "rm -rf .",
-    "find / -delete",
-    "find . -delete",
-    "shred * /dev/*",
-    "wipe /dev/*",
-    "fdisk /dev/*",
-    "parted /dev/*",
-    "gparted /dev/*",
-    "userdel root",
-    "groupdel root",
-    "passwd -d root",
-    "passwd -l root",
-    "chown root* /*",
-    "chown -R * /*",
-    "chattr -i *",
-    "chattr +i /*",
-    "reboot",
-    "shutdown *",
-    "halt",
-    "poweroff",
-    "init 0",
-    "init 6",
-    "iptables -F",
-    "iptables -X",
-    "iptables -P INPUT DROP",
-    "iptables -P FORWARD DROP",
-    "iptables -P OUTPUT DROP",
-    "ufw disable",
-    "systemctl stop firewalld",
-    "systemctl disable firewalld",
-    "insmod *",
-    "rmmod *",
-    "modprobe *",
-    "sysctl *",
-    "echo * > /proc/sys/*",
-    "* | base64 -d | bash",
-    "* | base64 -d | sh",
-    "history -c",
-    "echo > ~/.bash_history",
-    "kill -9 1",
-    "pkill init",
-    "mount -o remount,ro /",
-    "mount /dev/sd* /mnt; rm -rf /mnt/*",
-]
-DEFAULT_AUTO_APPROVED_SHELL_PATTERNS: List[str] = [
-    "ls",
-    "ls *",
-    "cd",
-    "cd *",
-    "pwd",
-    "echo",
-    "echo *",
-    "cat",
-    "cat *",
-    "head",
-    "head *",
-    "tail",
-    "tail *",
-    "grep",
-    "grep *",
-    "find",
-    "find *",
-    "mkdir",
-    "mkdir *",
-    "touch",
-    "touch *",
-    "cp",
-    "cp *",
-    "mv",
-    "mv *",
-    "python --version",
-    "python -m *",
-    "python3 --version",
-    "python3 -m *",
-    "pip list",
-    "pip show *",
-    "pip freeze",
-    "uv list",
-    "uv pip list",
-    "uv pip show *",
-    "uv pip freeze",
-    "cloc",
-    "cloc *",
-    "git",
-    "git *",
-    "date",
-    "cal",
-    "uptime",
-    "whoami",
-    "id",
-    "uname",
-    "uname *",
-    "df",
-    "df *",
-    "du",
-    "du *",
-    "wc",
-    "wc *",
-    "less",
-    "less *",
-    "more",
-    "more *",
-    "diff",
-    "diff *",
-    "comm",
-    "comm *",
-    "sort",
-    "sort *",
-    "uniq",
-    "uniq *",
-    "ps",
-    "ps *",
-    "top",
-    "env",
-    "printenv",
-    "printenv *",
-    "export -p",
-    "man",
-    "man *",
-    "info",
-    "info *",
-    "tldr",
-    "tldr *",
-    "* --help",
-    "stat",
-    "stat *",
-    "which",
-    "which *",
-    "whereis",
-    "whereis *",
-    "type",
-    "type *",
-    "history",
-    "clear",
-    "ping",
-    "ping *",
-    "ip",
-    "ip *",
-    "ifconfig",
-    "ifconfig *",
-    "netstat",
-    "netstat *",
-    "ss",
-    "ss *",
-    "host",
-    "host *",
-    "dig",
-    "dig *",
-    "nslookup",
-    "nslookup *",
-    "tar -tvf *",
-    "zipinfo *",
-    "unzip -l *",
-    "gzip -l *",
-    "gunzip -l *",
-    "zcat *",
-    "bzcat *",
-    "xzcat *",
-    "basename *",
-    "dirname *",
-    "readlink *",
-    "test *",
-    "[ * ]",
-    "alias",
-    "jobs",
-    "file",
-    "file *",
-    "rg *",
-]
-
 
 class ExecuteShellPluginInput(BaseModel):
     command: str = Field(..., description="The shell command to execute.")
@@ -242,15 +58,13 @@ class ExecuteShellPluginOutput(BaseModel):
 
 def _is_command_prohibited(command: str) -> bool:
     return any(
-        fnmatch.fnmatch(command, pattern)
-        for pattern in DEFAULT_PROHIBITED_SHELL_PATTERNS
+        fnmatch.fnmatch(command, pattern) for pattern in DEFAULT_PROHIBITED_COMMANDS
     )
 
 
 def _is_command_auto_approved(command: str) -> bool:
     return any(
-        fnmatch.fnmatch(command, pattern)
-        for pattern in DEFAULT_AUTO_APPROVED_SHELL_PATTERNS
+        fnmatch.fnmatch(command, pattern) for pattern in DEFAULT_APPROVED_COMMANDS
     )
 
 
@@ -284,7 +98,7 @@ async def execute_shell_tool(
             prompt_message=f"Allow [primary]Qx[/] to execute command: [highlight]'{command}'[/]?",
         )
 
-    if status not in ["approved", "session_approved"]:
+    if status not in APPROVAL_STATUSES_OK:
         err_msg = "Operation denied by user."
         approval_handler.print_outcome("Execution", "Denied by user.", success=False)
         return ExecuteShellPluginOutput(command=command, error=err_msg)
