@@ -58,12 +58,21 @@ ApprovalDecisionStatus = Literal["approved", "denied", "cancelled", "session_app
 
 def _disable_ctrl_c():
     """Temporarily disable Ctrl+C signal handling"""
-    return signal.signal(signal.SIGINT, signal.SIG_IGN)
+    try:
+        return signal.signal(signal.SIGINT, signal.SIG_IGN)
+    except ValueError:
+        # Signal handling only works in main thread
+        return None
 
 
 def _restore_ctrl_c(old_handler):
     """Restore previous Ctrl+C signal handling"""
-    signal.signal(signal.SIGINT, old_handler)
+    if old_handler is not None:
+        try:
+            signal.signal(signal.SIGINT, old_handler)
+        except ValueError:
+            # Signal handling only works in main thread
+            pass
 
 
 def _suspend_global_hotkeys():

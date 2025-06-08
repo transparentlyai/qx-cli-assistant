@@ -32,6 +32,33 @@ def _handle_model_command(agent: QXLLMAgent):
     themed_console.print(model_info_content, style="app.header")
 
 
+SIMPLE_TOOL_DESCRIPTIONS = {
+    "get_current_time_tool": "Provides the current date and time.",
+    "execute_shell_tool": "Runs a specified command in the shell.",
+    "read_file_tool": "Reads the contents of a file at a given path.",
+    "todo_manager_tool": "Helps manage tasks and to-do lists.",
+    "web_fetch_tool": "Retrieves content from a URL.",
+    "write_file_tool": "Creates or updates a file with the provided content.",
+}
+
+
+def _handle_tools_command(agent: QXLLMAgent):
+    """
+    Displays the list of active tools.
+    """
+    themed_console.print("Active Tools:", style="app.header")
+    if not agent._openai_tools_schema:
+        themed_console.print("  No tools available.", style="warning")
+        return
+
+    for tool in agent._openai_tools_schema:
+        tool_name = tool.get("function", {}).get("name", "N/A")
+        description = SIMPLE_TOOL_DESCRIPTIONS.get(
+            tool_name, "No description available."
+        )
+        themed_console.print(f"  - {tool_name}: {description}", style="primary")
+
+
 async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
     """Handle slash commands in inline mode."""
     parts = command_input.strip().split(maxsplit=1)
@@ -40,6 +67,8 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
 
     if command_name == "/model":
         _handle_model_command(llm_agent)
+    elif command_name == "/tools":
+        _handle_tools_command(llm_agent)
     elif command_name == "/reset":
         # Just reset message history in inline mode
         reset_session()
@@ -60,6 +89,7 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
         themed_console.print(
             "  /model      - Show current LLM model configuration", style="primary"
         )
+        themed_console.print("  /tools      - List active tools", style="primary")
         themed_console.print(
             "  /reset      - Reset session and clear message history", style="primary"
         )
@@ -79,12 +109,15 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
         themed_console.print("  Ctrl+C      - Abort current operation", style="primary")
         themed_console.print("  Ctrl+D      - Exit QX", style="primary")
         themed_console.print(
-            "  Ctrl+E      - Edit input in external editor (vi/vim/nvim/nano/code)", style="primary"
+            "  Ctrl+E      - Edit input in external editor (vi/vim/nvim/nano/code)",
+            style="primary",
         )
         themed_console.print(
             "  Ctrl+R      - Fuzzy history search (fzf)", style="primary"
         )
-        themed_console.print("  Ctrl+O      - Toggle stdout visibility", style="primary")
+        themed_console.print(
+            "  Ctrl+O      - Toggle stdout visibility", style="primary"
+        )
         themed_console.print("  Ctrl+T      - Toggle 'Details' mode", style="primary")
         themed_console.print("  Esc+Enter   - Toggle multiline mode", style="primary")
 
@@ -104,16 +137,21 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
 
         themed_console.print("\nEditor Configuration:", style="app.header")
         themed_console.print(
-            "  • Set QX_DEFAULT_EDITOR environment variable to choose editor", style="warning"
+            "  • Set QX_DEFAULT_EDITOR environment variable to choose editor",
+            style="warning",
         )
         themed_console.print("    - Default: vi", style="info")
-        themed_console.print("    - Supported: vi, vim, nvim, nano, code/vscode", style="info")
-        themed_console.print("    - Example: export QX_DEFAULT_EDITOR=code", style="info")
+        themed_console.print(
+            "    - Supported: vi, vim, nvim, nano, code/vscode", style="info"
+        )
+        themed_console.print(
+            "    - Example: export QX_DEFAULT_EDITOR=code", style="info"
+        )
 
     else:
         themed_console.print(f"Unknown command: {command_name}", style="error")
         themed_console.print(
-            "Available commands: /model, /reset, /approve-all, /print, /help",
+            "Available commands: /model, /tools, /reset, /approve-all, /print, /help",
             style="text.muted",
         )
 
@@ -131,6 +169,8 @@ async def handle_command(
 
     if command_name == "/model":
         _handle_model_command(llm_agent)
+    elif command_name == "/tools":
+        _handle_tools_command(llm_agent)
     elif command_name == "/reset":
         # No console to clear in inline mode
         reset_session()
@@ -161,6 +201,6 @@ async def handle_command(
     else:
         themed_console.print(f"Unknown command: {command_name}", style="error")
         themed_console.print(
-            "Available commands: /model, /reset, /print", style="text.muted"
+            "Available commands: /model, /tools, /reset, /print", style="text.muted"
         )
     return current_message_history
