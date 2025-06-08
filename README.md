@@ -232,7 +232,7 @@ See [`RELIABILITY.md`](RELIABILITY.md) for complete reliability configuration gu
 
 ## 🌐 Supported Providers
 
-QX supports all LiteLLM providers including:
+QX supports 100+ LLM providers through [LiteLLM](https://docs.litellm.ai/), including:
 
 - **OpenRouter** (recommended): Access to multiple providers through one API
 - **OpenAI**: GPT-4, GPT-3.5, and other OpenAI models
@@ -259,6 +259,8 @@ ANTHROPIC_API_KEY=sk-ant-...
 # Local Model
 QX_MODEL_NAME=ollama/llama3.2
 ```
+
+For detailed setup instructions, API key acquisition, and model selection guidance, see the **[Model Providers Guide](docs/MODEL_PROVIDERS.md)**.
 
 ## 🛠️ Available Tools
 
@@ -353,6 +355,8 @@ async def my_tool(console: Console, args: MyToolInput) -> MyToolOutput:
     return MyToolOutput(result=f"Completed: {args.task}")
 ```
 
+For comprehensive tool development guidance, see the **[Tool Development Guide](docs/TOOL_DEVELOPMENT.md)**.
+
 ## 🧪 Testing & Validation
 
 ### Test Reliability Configuration
@@ -373,10 +377,19 @@ uv run qx --version
 
 ## 📚 Documentation
 
+### Configuration & Setup
 - **[`qx.conf.example`](qx.conf.example)**: Complete configuration reference
-- **[`RELIABILITY.md`](RELIABILITY.md)**: Reliability and resilience guide  
+- **[Model Providers Guide](docs/MODEL_PROVIDERS.md)**: Comprehensive guide to using different AI models and providers
+- **[`RELIABILITY.md`](docs/RELIABILITY.md)**: Reliability and resilience guide
+- **[`HOTKEYS.md`](docs/HOTKEYS.md)**: Global hotkey system documentation
+
+### Development & Architecture  
+- **[Tool Development Guide](docs/TOOL_DEVELOPMENT.md)**: Complete guide for creating custom tools and plugins
+- **[Console Manager Architecture](docs/CONSOLE_MANAGER.md)**: Producer-consumer pattern for concurrent console access
+
+### External References
 - **[LiteLLM Docs](https://docs.litellm.ai/)**: Upstream LiteLLM documentation
-- **[Plugin Development](#development--plugins)**: How to create custom tools
+- **[Model Context Protocol](https://modelcontextprotocol.io/)**: MCP specification and tools
 
 ## 🚀 Production Deployment
 
