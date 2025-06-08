@@ -1,5 +1,12 @@
 # QX - AI-Powered Coding CLI Agent
 
+[![Python](https://img.shields.io/badge/Python-3.13+-blue.svg)](https://python.org)
+[![LiteLLM](https://img.shields.io/badge/Powered%20by-LiteLLM-purple.svg)](https://docs.litellm.ai/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Models](https://img.shields.io/badge/Models-100+-orange.svg)](docs/MODEL_PROVIDERS.md)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)]()
+[![CLI](https://img.shields.io/badge/Interface-CLI-blue.svg)]()
+
 QX is an intelligent command-line interface (CLI) agent designed to assist with software development, DevOps tasks, and code interaction within your project workspace. Built with Python and powered by LiteLLM, QX provides access to 100+ LLM providers with enterprise-grade reliability features.
 
 ## ✨ Features
@@ -34,6 +41,8 @@ uv run qx
 ### Configuration
 
 QX uses a **hierarchical configuration system** that loads settings from multiple sources in order of priority. Later sources override earlier ones, allowing for flexible system-wide, user-specific, and project-specific configurations.
+
+> **📖 For detailed model setup instructions and API key acquisition, see the [Model Providers Guide](docs/MODEL_PROVIDERS.md)**
 
 #### Configuration Hierarchy (Lowest to Highest Priority)
 
