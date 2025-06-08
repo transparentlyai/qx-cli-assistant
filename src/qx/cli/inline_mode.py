@@ -49,24 +49,22 @@ def get_bottom_toolbar():
     import qx.core.user_prompts as user_prompts
 
     approve_all_status = (
-        '<style fg="lime">ON</style>'
+        '<style bg="#22c55e" fg="black">ON</style>'
         if user_prompts._approve_all_active
-        else '<style fg="red">OFF</style>'
+        else '<style bg="#ef4444" fg="black">OFF</style>'
     )
     details_status = (
-        '<style fg="lime">ON</style>'
+        '<style bg="#22c55e" fg="black">ON</style>'
         if _details_active_for_toolbar[0]
-        else '<style fg="red">OFF</style>'
+        else '<style bg="#ef4444" fg="black">OFF</style>'
     )
     stdout_status = (
-        '<style fg="lime">ON</style>'
+        '<style bg="#22c55e" fg="black">ON</style>'
         if _stdout_active_for_toolbar[0]
-        else '<style fg="red">OFF</style>'
+        else '<style bg="#ef4444" fg="black">OFF</style>'
     )
 
-    toolbar_html = (
-        f"Details: {details_status} | Stdout: {stdout_status} | Approve All: {approve_all_status}"
-    )
+    toolbar_html = f'<style fg="black" bg="white">Details: {details_status} | Stdout: {stdout_status} | Approve All: {approve_all_status}</style>'
     return HTML(toolbar_html)
 
 
@@ -154,9 +152,11 @@ async def _run_inline_mode(
         {
             "": "fg:#ff005f",
             "selected": "fg:#ff005f bg:#050505 reverse",
-            "bottom-toolbar": "bg:#222222 fg:#888888",
-            "bottom-toolbar.text": "bg:#222222 fg:#cccccc",
-            "bottom-toolbar.key": "bg:#222222 fg:#ff5f00 bold",
+            "bottom-toolbar": "fg:black bg:black",
+            "bottom-toolbar.text": "fg:black bg:black",
+            "bottom-toolbar.key": "fg:black bg:black",
+            "toolbar": "fg:black bg:black",
+            "status": "fg:black bg:black",
         }
     )
 
