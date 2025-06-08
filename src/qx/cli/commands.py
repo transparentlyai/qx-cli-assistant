@@ -79,8 +79,12 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
         themed_console.print("  Ctrl+C      - Abort current operation", style="primary")
         themed_console.print("  Ctrl+D      - Exit QX", style="primary")
         themed_console.print(
+            "  Ctrl+E      - Edit input in external editor (vi/vim/nvim/nano/code)", style="primary"
+        )
+        themed_console.print(
             "  Ctrl+R      - Fuzzy history search (fzf)", style="primary"
         )
+        themed_console.print("  Ctrl+S      - Toggle stdout visibility", style="primary")
         themed_console.print("  Ctrl+T      - Toggle 'Details' mode", style="primary")
         themed_console.print("  Esc+Enter   - Toggle multiline mode", style="primary")
 
@@ -97,6 +101,14 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
         themed_console.print(
             "    - Alt+Enter: Submit input and return to single-line", style="info"
         )
+
+        themed_console.print("\nEditor Configuration:", style="app.header")
+        themed_console.print(
+            "  • Set QX_DEFAULT_EDITOR environment variable to choose editor", style="warning"
+        )
+        themed_console.print("    - Default: vi", style="info")
+        themed_console.print("    - Supported: vi, vim, nvim, nano, code/vscode", style="info")
+        themed_console.print("    - Example: export QX_DEFAULT_EDITOR=code", style="info")
 
     else:
         themed_console.print(f"Unknown command: {command_name}", style="error")

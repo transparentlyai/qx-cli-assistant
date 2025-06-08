@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import subprocess
 from typing import Any, List, Optional
 
@@ -132,7 +133,7 @@ async def _run_inline_mode(
         register_global_hotkey("ctrl+r", "history")  # Same as prompt_toolkit
         register_global_hotkey("ctrl+a", "approve_all")  # Same as prompt_toolkit
         register_global_hotkey("ctrl+t", "toggle_details")  # Same as prompt_toolkit
-        register_global_hotkey("ctrl+s", "toggle_stdout")  # Same as prompt_toolkit
+        register_global_hotkey("ctrl+s", "toggle_stdout")  # Re-enabled with fix
         register_global_hotkey("f12", "cancel")  # Additional emergency key
         logger.debug("Global hotkey handlers registered (matching prompt_toolkit)")
     except Exception as e:
@@ -254,6 +255,81 @@ async def _run_inline_mode(
             )
         )
         event.app.invalidate()
+
+    @bindings.add("c-e")
+    def _(event):
+        import tempfile
+        
+        # Get current input buffer content
+        current_text = event.current_buffer.text
+        
+        # Get editor from environment variable, default to vi
+        editor = os.getenv("QX_DEFAULT_EDITOR", "vi")
+        
+        try:
+            # Create temporary file with current content
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as temp_file:
+                temp_file.write(current_text)
+                temp_file_path = temp_file.name
+            
+            # Clear the current prompt line before launching editor
+            print("\r\033[K", end="", flush=True)  # Move to start of line and clear it
+            
+            # Handle different editors with specific arguments
+            editor_cmd = []
+            if editor in ["code", "vscode"]:
+                # VSCode needs --wait flag to block until file is closed
+                editor_cmd = [editor, "--wait", temp_file_path]
+            elif editor in ["nano", "vi", "vim", "nvim"]:
+                # Terminal editors work directly
+                editor_cmd = [editor, temp_file_path]
+            else:
+                # Generic fallback - try the editor as-is
+                editor_cmd = [editor, temp_file_path]
+            
+            # Run editor
+            editor_process = subprocess.run(editor_cmd, check=False)
+            
+            # Invalidate and reset the app display (exactly like Ctrl+R does)
+            event.app.invalidate()
+            event.app.renderer.reset()
+            
+            # Read back the edited content
+            try:
+                with open(temp_file_path, 'r') as f:
+                    edited_content = f.read()
+                
+                # Update buffer with edited content
+                event.current_buffer.text = edited_content
+                event.current_buffer.cursor_position = len(edited_content)
+                
+            except Exception as e:
+                # On read error, keep original text
+                run_in_terminal(
+                    lambda: themed_console.print(
+                        f"✗ [red]Error reading edited file:[/] {e}", style="error"
+                    )
+                )
+            finally:
+                # Clean up temp file
+                try:
+                    os.unlink(temp_file_path)
+                except Exception:
+                    pass
+            
+        except Exception as e:
+            # Clean up temp file on outer error
+            try:
+                if 'temp_file_path' in locals():
+                    os.unlink(temp_file_path)
+            except Exception:
+                pass
+            
+            run_in_terminal(
+                lambda: themed_console.print(
+                    f"✗ [red]Failed to open editor:[/] {e}", style="error"
+                )
+            )
 
     session: PromptSession[str] = PromptSession(
         history=qx_history,

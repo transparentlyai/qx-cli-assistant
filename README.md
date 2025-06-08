@@ -156,11 +156,43 @@ QX supports global hotkeys that work at any time during operation, including whi
 | **Ctrl+A** | Toggle Approve All | Enable/disable automatic approval for tool operations |
 | **Ctrl+S** | Toggle Stdout | Show/hide command output during tool execution |
 | **Ctrl+R** | History Search | Search command history (available during input) |
+| **Ctrl+E** | External Editor | Edit current input in external text editor |
 | **Ctrl+C** | Cancel Operation | Interrupt current operation |
 | **Ctrl+D** | Exit Application | Gracefully exit QX |
 | **F12** | Emergency Cancel | Alternative cancel option |
 
 **Note**: Global hotkeys are automatically suspended during approval prompts to prevent conflicts with user input.
+
+### 📝 External Editor Integration
+
+QX supports editing input in your preferred external text editor using **Ctrl+E**:
+
+#### Supported Editors
+- **vi/vim/nvim** - Terminal-based editors
+- **nano** - Simple terminal editor
+- **code/vscode** - Visual Studio Code (with `--wait` flag)
+- **Custom editors** - Any editor can be configured
+
+#### Configuration
+Set the `QX_DEFAULT_EDITOR` environment variable to choose your preferred editor:
+
+```bash
+# Use Visual Studio Code
+export QX_DEFAULT_EDITOR=code
+
+# Use nano for simple editing
+export QX_DEFAULT_EDITOR=nano
+
+# Use neovim
+export QX_DEFAULT_EDITOR=nvim
+```
+
+#### Usage
+1. Type some text in the QX prompt
+2. Press **Ctrl+E** to open the text in your editor
+3. Edit the content and save/exit the editor
+4. The updated text appears in the QX input buffer
+5. Press Enter to submit or continue editing
 
 ### 🛡️ Approval System
 
