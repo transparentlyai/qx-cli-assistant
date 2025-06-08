@@ -131,7 +131,7 @@ async def _async_main(
                         if llm_agent:
                             current_message_history = await _handle_llm_interaction(
                                 llm_agent,
-                                "what we have discussed so far?",
+                                "list a summary of each iteraction we had so far - just the list, with a title 'So far in this session' and a separator at the end of the list - **ONLY the list,title and separator, no other text**",
                                 current_message_history,
                                 code_theme_to_use,
                             )
