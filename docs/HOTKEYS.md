@@ -12,7 +12,7 @@ QX implements a sophisticated global hotkey system that allows users to trigger 
 
 | Hotkey | Action | Description |
 |--------|--------|-------------|
-| **Ctrl+T** | Toggle Thinking | Show/hide AI reasoning process during responses |
+| **Ctrl+T** | Toggle Details | Show/hide AI reasoning process during responses |
 | **Ctrl+A** | Toggle Approve All | Enable/disable automatic approval for tool operations |
 | **Ctrl+S** | Toggle Stdout | Show/hide command output during tool execution |
 | **Ctrl+R** | History Search | Search command history (available during input only) |
@@ -131,30 +131,30 @@ The parser handles multiple terminal emulator patterns:
 
 ## Default Action Handlers
 
-### Toggle Thinking Handler
+### Toggle Details Handler
 
 ```python
-async def _default_toggle_thinking_handler():
-    \"\"\"Default handler for Ctrl+T - toggle show thinking mode.\"\"\"
-    from qx.core.state_manager import show_thinking_manager
+async def _default_toggle_details_handler():
+    """Default handler for Ctrl+T - toggle details mode."""
+    from qx.core.state_manager import show_details_manager
     from qx.core.config_manager import ConfigManager
     
-    new_status = not await show_thinking_manager.is_active()
-    await show_thinking_manager.set_status(new_status)
+    new_status = not await show_details_manager.is_active()
+    await show_details_manager.set_status(new_status)
     
     # Update config and provide feedback
     config_manager = ConfigManager(themed_console, None)
-    config_manager.set_config_value("QX_SHOW_THINKING", str(new_status).lower())
+    config_manager.set_config_value("QX_SHOW_DETAILS", str(new_status).lower())
     
     status_text = "enabled" if new_status else "disabled"
-    themed_console.print(f"✓ [dim green]Show Thinking:[/] {status_text}.", style="warning")
+    themed_console.print(f"✓ [dim green]Details:[/] {status_text}.", style="warning")
 ```
 
 ### Approve All Handler
 
 ```python
 async def _default_approve_all_handler():
-    \"\"\"Default handler for Ctrl+A - toggle approve all mode.\"\"\"
+    """Default handler for Ctrl+A - toggle approve all mode."""
     import qx.core.user_prompts as user_prompts
     
     async with user_prompts._approve_all_lock:
@@ -270,7 +270,7 @@ QX_LOG_LEVEL=DEBUG uv run qx
 python -c "import sys; print('TTY:', sys.stdin.isatty())"
 
 # Test basic hotkey functionality
-# (Start QX and try Ctrl+T to toggle thinking mode)
+# (Start QX and try Ctrl+T to toggle details mode)
 ```
 
 ## Future Enhancements

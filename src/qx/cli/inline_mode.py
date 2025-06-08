@@ -25,13 +25,13 @@ from qx.core.llm import QXLLMAgent, query_llm
 from qx.core.paths import QX_HISTORY_FILE
 from qx.core.session_manager import clean_old_sessions, save_session
 from qx.core.user_prompts import _approve_all_lock
-from qx.core.state_manager import show_thinking_manager
+from qx.core.state_manager import details_manager
 
 logger = logging.getLogger("qx")
 
 is_multiline_mode = [False]
 pending_text = [""]
-_show_thinking_active_for_toolbar = [True]
+_details_active_for_toolbar = [True]
 
 
 class SingleLineNonEmptyValidator(Validator):
@@ -52,13 +52,11 @@ def get_bottom_toolbar():
     )
     thinking_status = (
         '<style fg="lime">ON</style>'
-        if _show_thinking_active_for_toolbar[0]
+        if _details_active_for_toolbar[0]
         else '<style fg="red">OFF</style>'
     )
 
-    toolbar_html = (
-        f"Show Thinking: {thinking_status} | Approve All: {approve_all_status}"
-    )
+    toolbar_html = f"Details: {thinking_status} | Approve All: {approve_all_status}"
     return HTML(toolbar_html)
 
 
@@ -114,23 +112,28 @@ async def _run_inline_mode(
     qx_history = QXHistory(QX_HISTORY_FILE)
     qx_completer = QXCompleter()
     config_manager = ConfigManager(themed_console, None)
-    _show_thinking_active_for_toolbar[0] = await show_thinking_manager.is_active()
+    _details_active_for_toolbar[0] = await details_manager.is_active()
 
     # Initialize global hotkey system but don't start it yet
     # We'll use suspend/resume pattern around prompt_toolkit usage
     try:
-        from qx.core.hotkey_manager import get_hotkey_manager, register_default_handlers, register_global_hotkey
+        from qx.core.hotkey_manager import (
+            get_hotkey_manager,
+            register_default_handlers,
+            register_global_hotkey,
+        )
+
         global_hotkey_manager = get_hotkey_manager()
         # Register handlers but don't start yet - we'll control start/stop around prompts
         register_default_handlers()
         # Register global hotkeys for all the same functions as prompt_toolkit
-        register_global_hotkey('ctrl+c', 'cancel')        # Same as prompt_toolkit
-        register_global_hotkey('ctrl+d', 'exit')          # Same as prompt_toolkit
-        register_global_hotkey('ctrl+r', 'history')       # Same as prompt_toolkit
-        register_global_hotkey('ctrl+a', 'approve_all')   # Same as prompt_toolkit
-        register_global_hotkey('ctrl+t', 'toggle_thinking') # Same as prompt_toolkit
-        register_global_hotkey('ctrl+s', 'toggle_stdout') # Same as prompt_toolkit
-        register_global_hotkey('f12', 'cancel')           # Additional emergency key
+        register_global_hotkey("ctrl+c", "cancel")  # Same as prompt_toolkit
+        register_global_hotkey("ctrl+d", "exit")  # Same as prompt_toolkit
+        register_global_hotkey("ctrl+r", "history")  # Same as prompt_toolkit
+        register_global_hotkey("ctrl+a", "approve_all")  # Same as prompt_toolkit
+        register_global_hotkey("ctrl+t", "toggle_details")  # Same as prompt_toolkit
+        register_global_hotkey("ctrl+s", "toggle_stdout")  # Same as prompt_toolkit
+        register_global_hotkey("f12", "cancel")  # Additional emergency key
         logger.debug("Global hotkey handlers registered (matching prompt_toolkit)")
     except Exception as e:
         logger.debug(f"Exception during global hotkey setup: {e}")
@@ -219,17 +222,17 @@ async def _run_inline_mode(
 
     @bindings.add("c-t")
     async def _(event):
-        new_status = not await show_thinking_manager.is_active()
-        await show_thinking_manager.set_status(new_status)
-        _show_thinking_active_for_toolbar[0] = new_status
+        new_status = not await details_manager.is_active()
+        await details_manager.set_status(new_status)
+        _details_active_for_toolbar[0] = new_status
 
-        config_manager.set_config_value("QX_SHOW_THINKING", str(new_status).lower())
+        config_manager.set_config_value("QX_SHOW_DETAILS", str(new_status).lower())
 
         status_text = "enabled" if new_status else "disabled"
         style = "warning"
         run_in_terminal(
             lambda: themed_console.print(
-                f"✓ [dim green]Show Thinking:[/] {status_text}.", style=style
+                f"✓ [dim green]Details:[/] {status_text}.", style=style
             )
         )
         event.app.invalidate()

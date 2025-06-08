@@ -9,6 +9,7 @@ with ongoing operations.
 import asyncio
 import logging
 import os
+import signal
 from typing import Callable, Dict, Optional
 
 from .global_hotkeys import GlobalHotkeys
@@ -19,11 +20,11 @@ logger = logging.getLogger(__name__)
 class QXHotkeyManager:
     """
     Manages hotkey action handlers for QX.
-    
+
     This service provides centralized hotkey action handling with global
     hotkey capture that works at any time, not just during prompt input.
     """
-    
+
     def __init__(self):
         self._action_handlers: Dict[str, Callable] = {}
         self._global_hotkeys = GlobalHotkeys()
@@ -34,22 +35,28 @@ class QXHotkeyManager:
         """Register a handler function for a specific action."""
         self._action_handlers[action] = handler
         logger.debug(f"Registered handler for action: {action}")
-        
+
     def register_global_hotkey(self, key_combination: str, action: str):
         """Register a global hotkey that maps to an action."""
         if action not in self._action_handlers:
-            logger.warning(f"No handler registered for action '{action}' when mapping hotkey '{key_combination}'")
+            logger.warning(
+                f"No handler registered for action '{action}' when mapping hotkey '{key_combination}'"
+            )
             return
-            
+
         # Create a callback that executes the action
         def hotkey_callback():
-            logger.info(f"Global hotkey '{key_combination}' pressed, executing action '{action}'")
+            logger.info(
+                f"Global hotkey '{key_combination}' pressed, executing action '{action}'"
+            )
             self.execute_action_sync(action)
-            
+
         self._global_hotkeys.register_hotkey(key_combination, hotkey_callback)
         self._hotkey_mappings[key_combination] = action
-        logger.debug(f"Registered global hotkey '{key_combination}' -> action '{action}'")
-        
+        logger.debug(
+            f"Registered global hotkey '{key_combination}' -> action '{action}'"
+        )
+
     def unregister_global_hotkey(self, key_combination: str):
         """Unregister a global hotkey."""
         self._global_hotkeys.unregister_hotkey(key_combination)
@@ -62,7 +69,7 @@ class QXHotkeyManager:
         if self.running:
             logger.debug("Hotkey manager already running")
             return True
-            
+
         try:
             # Start global hotkey capture
             self._global_hotkeys.start()
@@ -71,7 +78,9 @@ class QXHotkeyManager:
             return True
         except Exception as e:
             logger.warning(f"Failed to start global hotkey capture: {e}")
-            logger.info("QX will continue without global hotkeys (prompt_toolkit hotkeys will still work)")
+            logger.info(
+                "QX will continue without global hotkeys (prompt_toolkit hotkeys will still work)"
+            )
             self.running = True
             return True
 
@@ -79,7 +88,7 @@ class QXHotkeyManager:
         """Stop the hotkey manager."""
         if not self.running:
             return
-            
+
         # Stop global hotkey capture
         self._global_hotkeys.stop()
         self.running = False
@@ -90,20 +99,22 @@ class QXHotkeyManager:
         if not self.running:
             logger.warning(f"Hotkey manager not running, ignoring action: {action}")
             return
-            
+
         if action in self._action_handlers:
             try:
                 handler = self._action_handlers[action]
                 logger.debug(f"Executing action: {action}")
-                
+
                 # Handle both sync and async handlers
                 if asyncio.iscoroutinefunction(handler):
                     await handler()
                 else:
                     handler()
-                    
+
             except Exception as e:
-                logger.error(f"Error executing handler for action '{action}': {e}", exc_info=True)
+                logger.error(
+                    f"Error executing handler for action '{action}': {e}", exc_info=True
+                )
         else:
             logger.warning(f"No handler registered for action: {action}")
 
@@ -112,12 +123,12 @@ class QXHotkeyManager:
         if not self.running:
             logger.warning(f"Hotkey manager not running, ignoring action: {action}")
             return
-            
+
         if action in self._action_handlers:
             try:
                 handler = self._action_handlers[action]
                 logger.debug(f"Executing action (sync): {action}")
-                
+
                 # Handle both sync and async handlers - for async, create a task
                 if asyncio.iscoroutinefunction(handler):
                     try:
@@ -125,19 +136,27 @@ class QXHotkeyManager:
                         loop = asyncio.get_event_loop()
                         if loop.is_running():
                             asyncio.create_task(handler())
-                            logger.debug(f"Scheduled async handler for action: {action}")
+                            logger.debug(
+                                f"Scheduled async handler for action: {action}"
+                            )
                         else:
-                            logger.warning(f"Event loop not running for async action: {action}")
+                            logger.warning(
+                                f"Event loop not running for async action: {action}"
+                            )
                     except RuntimeError:
                         # No event loop, try to run directly
-                        logger.warning(f"No event loop available for async action: {action}")
+                        logger.warning(
+                            f"No event loop available for async action: {action}"
+                        )
                         asyncio.run(handler())
                 else:
                     handler()
                     logger.debug(f"Executed sync handler for action: {action}")
-                    
+
             except Exception as e:
-                logger.error(f"Error executing handler for action '{action}': {e}", exc_info=True)
+                logger.error(
+                    f"Error executing handler for action '{action}': {e}", exc_info=True
+                )
         else:
             logger.warning(f"No handler registered for action: {action}")
 
@@ -171,7 +190,8 @@ def register_hotkey_handler(action: str, handler: Callable):
     """Register a handler for a specific hotkey action."""
     manager = get_hotkey_manager()
     manager.register_action_handler(action, handler)
-    
+
+
 def register_global_hotkey(key_combination: str, action: str):
     """Register a global hotkey that maps to an action."""
     manager = get_hotkey_manager()
@@ -183,8 +203,6 @@ def _default_cancel_handler():
     """Default handler for Ctrl+C - cancel current operation."""
     try:
         # This will be caught by the main application loop
-        import signal
-        import os
         os.kill(os.getpid(), signal.SIGINT)
         logger.info("Sent SIGINT for Ctrl+C")
     except Exception as e:
@@ -205,12 +223,15 @@ def _default_history_handler():
     """Default handler for Ctrl+R - history search."""
     try:
         from qx.cli.console import themed_console
-        
+
         logger.info("History search requested via global hotkey")
-        
+
         # During LLM operations, just show a message that history search is available during input
-        themed_console.print("✓ [dim green]History Search:[/] Available during prompt input (Ctrl+R).", style="warning")
-        
+        themed_console.print(
+            "✓ [dim green]History Search:[/] Available during prompt input (Ctrl+R).",
+            style="warning",
+        )
+
     except Exception as e:
         logger.error(f"Error in history handler: {e}")
 
@@ -220,47 +241,50 @@ async def _default_approve_all_handler():
     try:
         import qx.core.user_prompts as user_prompts
         from qx.cli.console import themed_console
-        
+
         async with user_prompts._approve_all_lock:
             user_prompts._approve_all_active = not user_prompts._approve_all_active
             status = "activated" if user_prompts._approve_all_active else "deactivated"
             style = "warning"  # Match prompt_toolkit version
-            
-            themed_console.print(f"✓ [dim green]Approve All mode[/] {status}.", style=style)
+
+            themed_console.print(
+                f"✓ [dim green]Approve All mode[/] {status}.", style=style
+            )
             logger.info(f"Approve All mode {status} via global hotkey")
-            
+
     except Exception as e:
         logger.error(f"Error in approve all handler: {e}")
 
 
-async def _default_toggle_thinking_handler():
-    """Default handler for Ctrl+T - toggle show thinking mode."""
+async def _default_toggle_details_handler():
+    """Default handler for Ctrl+T - toggle details mode."""
     try:
-        from qx.core.state_manager import show_thinking_manager
+        from qx.core.state_manager import details_manager
         from qx.core.config_manager import ConfigManager
         from qx.cli.console import themed_console
-        
-        new_status = not await show_thinking_manager.is_active()
-        await show_thinking_manager.set_status(new_status)
-        
+
+        new_status = not await details_manager.is_active()
+        await details_manager.set_status(new_status)
+
         # Update toolbar state to match prompt_toolkit version
         try:
-            from qx.cli.inline_mode import _show_thinking_active_for_toolbar
-            _show_thinking_active_for_toolbar[0] = new_status
+            from qx.cli.inline_mode import _details_active_for_toolbar
+
+            _details_active_for_toolbar[0] = new_status
         except ImportError:
             pass  # Module not imported yet
-        
+
         # Update config - match prompt_toolkit version exactly
         config_manager = ConfigManager(themed_console, None)
-        config_manager.set_config_value("QX_SHOW_THINKING", str(new_status).lower())
-        
+        config_manager.set_config_value("QX_SHOW_DETAILS", str(new_status).lower())
+
         status_text = "enabled" if new_status else "disabled"
         style = "warning"  # Match prompt_toolkit version
-        themed_console.print(f"✓ [dim green]Show Thinking:[/] {status_text}.", style=style)
-        logger.info(f"Show Thinking {status_text} via global hotkey")
-        
+        themed_console.print(f"✓ [dim green]Details:[/] {status_text}.", style=style)
+        logger.info(f"Details {status_text} via global hotkey")
+
     except Exception as e:
-        logger.error(f"Error in toggle thinking handler: {e}")
+        logger.error(f"Error in toggle details handler: {e}")
 
 
 async def _default_toggle_stdout_handler():
@@ -268,28 +292,30 @@ async def _default_toggle_stdout_handler():
     try:
         from qx.core.output_control import output_control_manager
         from qx.cli.console import themed_console
-        
+
         # Get current status and toggle it
         current_status = await output_control_manager.should_show_stdout()
         new_status = not current_status
         await output_control_manager.set_stdout_visibility(new_status)
-        
+
         status_text = "enabled" if new_status else "disabled"
-        themed_console.print(f"✓ [dim green]Show Stdout:[/] {status_text}.", style="warning")
+        themed_console.print(
+            f"✓ [dim green]Show Stdout:[/] {status_text}.", style="warning"
+        )
         logger.info(f"Show Stdout {status_text} via Ctrl+S")
-        
+
     except Exception as e:
         logger.error(f"Error in toggle stdout handler: {e}")
 
 
 def register_default_handlers():
     """Register all default hotkey handlers."""
-    register_hotkey_handler('cancel', _default_cancel_handler)
-    register_hotkey_handler('exit', _default_exit_handler)
-    register_hotkey_handler('history', _default_history_handler)
-    register_hotkey_handler('approve_all', _default_approve_all_handler)
-    register_hotkey_handler('toggle_thinking', _default_toggle_thinking_handler)
-    register_hotkey_handler('toggle_stdout', _default_toggle_stdout_handler)
+    register_hotkey_handler("cancel", _default_cancel_handler)
+    register_hotkey_handler("exit", _default_exit_handler)
+    register_hotkey_handler("history", _default_history_handler)
+    register_hotkey_handler("approve_all", _default_approve_all_handler)
+    register_hotkey_handler("toggle_details", _default_toggle_details_handler)
+    register_hotkey_handler("toggle_stdout", _default_toggle_stdout_handler)
     logger.debug("Default hotkey handlers registered")
 
 
@@ -299,9 +325,10 @@ def initialize_hotkey_system():
     # Don't auto-start - let the application control when to start/stop
     logger.debug("Hotkey system initialized (handlers registered)")
 
+
 def register_default_global_hotkeys():
     """Register default global hotkey mappings."""
     # Only register function keys as global hotkeys to avoid conflicts with prompt_toolkit
     # Function keys are less likely to interfere with text input
-    register_global_hotkey('f12', 'cancel')  # F12 as emergency interrupt
+    register_global_hotkey("f12", "cancel")  # F12 as emergency interrupt
     logger.debug("Default global hotkeys registered (F12 for emergency cancel)")
