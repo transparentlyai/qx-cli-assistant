@@ -14,23 +14,28 @@ import qx.core.user_prompts
 logger = logging.getLogger("qx")
 
 
-def _handle_model_command(agent: QXLLMAgent):
+def _handle_model_command(agent: QXLLMAgent, config_manager: ConfigManager, new_model: Optional[str] = None):
     """
-    Displays information about the current LLM model configuration.
+    Displays or updates the current LLM model configuration.
     """
-    model_info_content = "Current LLM Model Configuration:\n"
-    model_info_content += f"  Model Name: {agent.model_name}\n"
-    model_info_content += "  Provider: OpenRouter (https://openrouter.ai/api/v1)\n"
+    if new_model:
+        config_manager.set_config_value("QX_MODEL_NAME", new_model)
+        themed_console.print(f"Model updated to: {new_model}", style="info")
+        themed_console.print("Please restart QX for the change to take full effect.", style="warning")
+    else:
+        model_info_content = "Current LLM Model Configuration:\n"
+        model_info_content += f"  Model Name: {agent.model_name}\n"
+        model_info_content += "  Provider: OpenRouter (https://openrouter.ai/api/v1)\n"
 
-    temperature_val = agent.temperature
-    max_tokens_val = agent.max_output_tokens
-    reasoning_effort_val = agent.reasoning_effort
+        temperature_val = agent.temperature
+        max_tokens_val = agent.max_output_tokens
+        reasoning_effort_val = agent.reasoning_effort
 
-    model_info_content += f"  Temperature: {temperature_val}\n"
-    model_info_content += f"  Max Output Tokens: {max_tokens_val}\n"
-    model_info_content += f"  Reasoning Effort: {reasoning_effort_val if reasoning_effort_val else 'None'}\n"
+        model_info_content += f"  Temperature: {temperature_val}\n"
+        model_info_content += f"  Max Output Tokens: {max_tokens_val}\n"
+        model_info_content += f"  Reasoning Effort: {reasoning_effort_val if reasoning_effort_val else 'None'}\n"
 
-    themed_console.print(model_info_content, style="app.header")
+        themed_console.print(model_info_content, style="app.header")
 
 
 SIMPLE_TOOL_DESCRIPTIONS = {
@@ -63,14 +68,14 @@ def _handle_tools_command(agent: QXLLMAgent):
         themed_console.print(text)
 
 
-async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
+async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent, config_manager: ConfigManager):
     """Handle slash commands in inline mode."""
     parts = command_input.strip().split(maxsplit=1)
     command_name = parts[0].lower()
     command_args = parts[1] if len(parts) > 1 else ""
 
     if command_name == "/model":
-        _handle_model_command(llm_agent)
+        _handle_model_command(llm_agent, config_manager, command_args)
     elif command_name == "/tools":
         _handle_tools_command(llm_agent)
     elif command_name == "/reset":
@@ -91,7 +96,7 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):
     elif command_name == "/help":
         themed_console.print("Available Commands:", style="app.header")
         themed_console.print(
-            "  /model      - Show current LLM model configuration", style="primary"
+            "  /model [<model-name>] - Show or update LLM model configuration", style="primary"
         )
         themed_console.print(
             "  /tools      - List active tools with simple descriptions",
@@ -175,7 +180,7 @@ async def handle_command(
     command_args = parts[1] if len(parts) > 1 else ""
 
     if command_name == "/model":
-        _handle_model_command(llm_agent)
+        _handle_model_command(llm_agent, config_manager, command_args)
     elif command_name == "/tools":
         _handle_tools_command(llm_agent)
     elif command_name == "/reset":

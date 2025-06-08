@@ -109,10 +109,10 @@ async def _run_inline_mode(
     llm_agent: QXLLMAgent,
     current_message_history: Optional[List[ChatCompletionMessageParam]],
     keep_sessions: int,
+    config_manager: ConfigManager,
 ):
     qx_history = QXHistory(QX_HISTORY_FILE)
     qx_completer = QXCompleter()
-    config_manager = ConfigManager(themed_console, None)
     _details_active_for_toolbar[0] = await details_manager.is_active()
 
     # Initialize global hotkey system but don't start it yet
@@ -259,77 +259,57 @@ async def _run_inline_mode(
     @bindings.add("c-e")
     def _(event):
         import tempfile
-        
-        # Get current input buffer content
+
         current_text = event.current_buffer.text
-        
-        # Get editor from environment variable, default to vi
         editor = os.getenv("QX_DEFAULT_EDITOR", "vi")
-        
+        temp_file_path = None
+
         try:
-            # Create temporary file with current content
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as temp_file:
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".txt", delete=False
+            ) as temp_file:
                 temp_file.write(current_text)
                 temp_file_path = temp_file.name
-            
-            # Clear the current prompt line before launching editor
-            print("\r\033[K", end="", flush=True)  # Move to start of line and clear it
-            
-            # Handle different editors with specific arguments
+
+            print("\r\033[K", end="", flush=True)
+
             editor_cmd = []
             if editor in ["code", "vscode"]:
-                # VSCode needs --wait flag to block until file is closed
                 editor_cmd = [editor, "--wait", temp_file_path]
             elif editor in ["nano", "vi", "vim", "nvim"]:
-                # Terminal editors work directly
                 editor_cmd = [editor, temp_file_path]
             else:
-                # Generic fallback - try the editor as-is
                 editor_cmd = [editor, temp_file_path]
-            
-            # Run editor
-            editor_process = subprocess.run(editor_cmd, check=False)
-            
-            # Invalidate and reset the app display (exactly like Ctrl+R does)
+
+            subprocess.run(editor_cmd, check=False)
+
             event.app.invalidate()
             event.app.renderer.reset()
-            
-            # Read back the edited content
+
             try:
-                with open(temp_file_path, 'r') as f:
+                with open(temp_file_path, "r") as f:
                     edited_content = f.read()
-                
-                # Update buffer with edited content
                 event.current_buffer.text = edited_content
                 event.current_buffer.cursor_position = len(edited_content)
-                
-            except Exception as e:
-                # On read error, keep original text
+            except Exception as read_error:
                 run_in_terminal(
-                    lambda: themed_console.print(
-                        f"✗ [red]Error reading edited file:[/] {e}", style="error"
+                    lambda err=read_error: themed_console.print(
+                        f"✗ [red]Error reading edited file:[/] {err}", style="error"
                     )
                 )
-            finally:
-                # Clean up temp file
+
+        except Exception as edit_error:
+            run_in_terminal(
+                lambda err=edit_error: themed_console.print(
+                    f"✗ [red]Failed to open editor:[/] {err}", style="error"
+                )
+            )
+        finally:
+            if temp_file_path and os.path.exists(temp_file_path):
                 try:
                     os.unlink(temp_file_path)
                 except Exception:
                     pass
-            
-        except Exception as e:
-            # Clean up temp file on outer error
-            try:
-                if 'temp_file_path' in locals():
-                    os.unlink(temp_file_path)
-            except Exception:
-                pass
-            
-            run_in_terminal(
-                lambda: themed_console.print(
-                    f"✗ [red]Failed to open editor:[/] {e}", style="error"
-                )
-            )
 
     session: PromptSession[str] = PromptSession(
         history=qx_history,
@@ -404,7 +384,7 @@ async def _run_inline_mode(
                 is_multiline_mode[0] = False
 
             if user_input.startswith("/"):
-                await _handle_inline_command(user_input, llm_agent)
+                await _handle_inline_command(user_input, llm_agent, config_manager)
                 continue
 
             # Save user message immediately
