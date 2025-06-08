@@ -14,6 +14,7 @@ from openai.types.chat import (
 )
 
 from qx.cli.inline_mode import _handle_llm_interaction, _run_inline_mode
+from qx.cli.session_selector import select_session
 from qx.cli.version import QX_VERSION, display_version_info
 from qx.core.config_manager import ConfigManager
 from qx.core.constants import DEFAULT_SYNTAX_HIGHLIGHT_THEME
@@ -22,7 +23,6 @@ from qx.core.llm_utils import initialize_agent_with_mcp
 from qx.core.logging_config import configure_logging, remove_temp_stream_handler
 from qx.core.session_manager import (
     clean_old_sessions,
-    load_latest_session,
     load_session_from_path,
     save_session,
 )
@@ -35,7 +35,7 @@ logger = logging.getLogger("qx")
 async def _async_main(
     initial_prompt: Optional[str] = None,
     exit_after_response: bool = False,
-    recover_session_path: Optional[Path] = None,
+    recover_session: bool = False,
 ):
     """
     Asynchronous main function to handle the Qx agent logic.
@@ -106,27 +106,12 @@ async def _async_main(
             current_message_history: Optional[List[ChatCompletionMessageParam]] = None
 
             # Handle session recovery
-            if recover_session_path:
+            if recover_session:
                 from qx.cli.theme import themed_console
 
-                if recover_session_path == "LATEST":
-                    themed_console.print("Attempting to recover latest session...")
-                    loaded_history = load_latest_session()
-                    if loaded_history:
-                        system_prompt = load_and_format_system_prompt()
-                        current_message_history = [
-                            ChatCompletionSystemMessageParam(
-                                role="system", content=system_prompt
-                            )
-                        ] + loaded_history
-                        themed_console.print(
-                            "[success]Latest session recovered successfully![/]"
-                        )
-                    else:
-                        themed_console.print(
-                            "[error]No previous sessions found. Starting new session.[/]"
-                        )
-                else:
+                recover_session_path = select_session()
+
+                if recover_session_path:
                     themed_console.print(
                         f"[info]Attempting to recover session from: {recover_session_path}[/]"
                     )
@@ -145,6 +130,10 @@ async def _async_main(
                         themed_console.print(
                             "[error]Failed to recover session. Starting new session.[/]"
                         )
+                else:
+                    themed_console.print(
+                        "[error]No session selected. Starting new session.[/]"
+                    )
 
             # Handle initial prompt
             if initial_prompt and not exit_after_response:
@@ -232,10 +221,8 @@ def main():
     parser.add_argument(
         "-r",
         "--recover-session",
-        type=str,
-        nargs="?",
-        const="LATEST",
-        help="Path to a JSON session file to recover and continue the conversation. If no path is provided, recovers the latest session.",
+        action="store_true",
+        help="Shows a list of previous sessions to recover and continue the conversation.",
     )
     parser.add_argument(
         "initial_prompt",
@@ -266,18 +253,12 @@ def main():
         )
         sys.exit(1)
 
-    recover_path = (
-        args.recover_session
-        if args.recover_session == "LATEST"
-        else (Path(args.recover_session) if args.recover_session else None)
-    )
-
     try:
         asyncio.run(
             _async_main(
                 initial_prompt=initial_prompt_str if initial_prompt_str else None,
                 exit_after_response=args.exit_after_response,
-                recover_session_path=recover_path,
+                recover_session=args.recover_session,
             )
         )
 
