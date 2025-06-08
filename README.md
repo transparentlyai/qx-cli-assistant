@@ -13,7 +13,7 @@ QX is an intelligent command-line interface (CLI) agent designed to assist with 
 - 🎯 **Context Management**: Intelligent context window scaling and management
 - 🔒 **Security-First**: Built-in approval workflows for sensitive operations
 - ⌨️ **Global Hotkeys**: System-wide hotkey support that works during any operation
-- 🎛️ **Advanced Controls**: Real-time toggles for thinking mode, output control, and approvals
+- 🎛️ **Advanced Controls**: Real-time toggles for details mode, output control, and approvals
 
 ## 🚀 Quick Start
 
@@ -143,7 +143,7 @@ QX supports global hotkeys that work at any time during operation, including whi
 
 | Hotkey | Action | Description |
 |--------|--------|-------------|
-| **Ctrl+T** | Toggle Thinking | Show/hide AI reasoning process |
+| **Ctrl+T** | Toggle Details | Show/hide AI reasoning process |
 | **Ctrl+A** | Toggle Approve All | Enable/disable automatic approval for tool operations |
 | **Ctrl+S** | Toggle Stdout | Show/hide command output during tool execution |
 | **Ctrl+R** | History Search | Search command history (available during input) |

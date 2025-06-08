@@ -26,7 +26,7 @@ from qx.core.session_manager import (
     load_session_from_path,
     save_session,
 )
-from qx.core.state_manager import show_thinking_manager
+from qx.core.state_manager import details_manager
 
 # Configure logging for the application
 logger = logging.getLogger("qx")
@@ -49,8 +49,8 @@ async def _async_main(
                 # Handle clean exit for security errors
                 return e.code
 
-            # Initialize the ShowThinkingManager
-            await show_thinking_manager.is_active()  # This initializes the singleton
+            # Initialize the DetailsManager
+            await details_manager.is_active()  # This initializes the singleton
 
             # Configure logging after config is loaded so QX_LOG_LEVEL is available
             configure_logging()
