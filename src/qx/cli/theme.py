@@ -10,16 +10,16 @@ from rich.theme import Theme
 
 custom_theme = Theme(
     {
-        "primary": "bold blue",
+        "primary": "blue",
         "secondary": "dim green",
-        "highlight": "bold yellow on black",
+        "highlight": "yellow on black",
         "info": "cyan",
         "warning": "yellow",
         "error": "red",
         "debug": "dim white",
         "success": "green",
-        "attention": "bold yellow",
-        "critical": "bold bright_red",
+        "attention": "yellow",
+        "critical": "bright_red",
         # UI elements
         "app.title": "bold white on blue",
         "app.header": "bold yellow",

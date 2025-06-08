@@ -7,9 +7,9 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from rich.console import Console as RichConsole
 
-from qx.core.approval_handler import ApprovalHandler
 from qx.cli.console import themed_console
-from qx.core.output_control import should_show_stdout, should_show_stderr
+from qx.core.approval_handler import ApprovalHandler
+from qx.core.output_control import should_show_stderr, should_show_stdout
 
 
 def _managed_plugin_print(content: str, **kwargs) -> None:
@@ -19,18 +19,22 @@ def _managed_plugin_print(content: str, **kwargs) -> None:
     """
     try:
         from qx.core.console_manager import get_console_manager
+
         manager = get_console_manager()
         if manager and manager._running:
-            style = kwargs.get('style')
-            markup = kwargs.get('markup', True)
-            end = kwargs.get('end', '\n')
-            manager.print(content, style=style, markup=markup, end=end, console=themed_console)
+            style = kwargs.get("style")
+            markup = kwargs.get("markup", True)
+            end = kwargs.get("end", "\n")
+            manager.print(
+                content, style=style, markup=markup, end=end, console=themed_console
+            )
             return
     except Exception:
         pass
-    
+
     # Fallback to direct themed_console usage
     themed_console.print(content, **kwargs)
+
 
 logger = logging.getLogger(__name__)
 
@@ -220,6 +224,7 @@ DEFAULT_AUTO_APPROVED_SHELL_PATTERNS: List[str] = [
     "jobs",
     "file",
     "file *",
+    "rg *",
 ]
 
 
