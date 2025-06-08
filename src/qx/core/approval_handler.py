@@ -12,15 +12,33 @@ from qx.core.user_prompts import (
 class ApprovalHandler:
     """
     Handles requests for user approval with a standardized messaging format.
+    
+    Supports both direct console usage and the new console manager
+    for thread-safe concurrent access.
     """
 
-    def __init__(self, console: Console):
+    def __init__(self, console: Console, use_console_manager: bool = True):
         self.console = console
+        self.use_console_manager = use_console_manager
+        self._console_manager = None
+        
+        if self.use_console_manager:
+            try:
+                from qx.core.console_manager import get_console_manager
+                self._console_manager = get_console_manager()
+            except Exception:
+                # Fallback to direct console usage if manager unavailable
+                self.use_console_manager = False
 
     def print_outcome(self, action: str, outcome: str, success: bool = True):
         """Prints the final outcome of an operation."""
         style = "success" if success else "error"
-        self.console.print(f"  └─ {action} {outcome}", style=style)
+        message = f"  └─ {action} {outcome}"
+        
+        if self.use_console_manager and self._console_manager:
+            self._console_manager.print(message, style=style, console=self.console)
+        else:
+            self.console.print(message, style=style)
 
     async def request_approval(
         self,
@@ -45,14 +63,23 @@ class ApprovalHandler:
         """
         if await is_approve_all_active():
             header = f"{operation} (Auto-approved) {parameter_name}: [primary]'{parameter_value}'[/]"
-            self.console.print(header)
+            if self.use_console_manager and self._console_manager:
+                self._console_manager.print(header, console=self.console)
+            else:
+                self.console.print(header)
             return "session_approved", "a"
 
         header = f"{operation}: {parameter_value}"
-        self.console.print(header)
+        if self.use_console_manager and self._console_manager:
+            self._console_manager.print(header, console=self.console)
+        else:
+            self.console.print(header)
 
         if content_to_display:
-            self.console.print(content_to_display)
+            if self.use_console_manager and self._console_manager:
+                self._console_manager.print(content_to_display, console=self.console)
+            else:
+                self.console.print(content_to_display)
 
         options = [
             ("y", "Yes", "approved"),
@@ -73,12 +100,20 @@ class ApprovalHandler:
         prompt_choices = ", ".join(colored_display_texts)
         full_prompt_text = f"{prompt_message} ({prompt_choices}) "
 
-        chosen_key = await get_user_choice_from_options_async(
-            self.console,
-            full_prompt_text,
-            valid_keys,
-            default_choice=None,
-        )
+        if self.use_console_manager and self._console_manager:
+            chosen_key = self._console_manager.request_choice_blocking(
+                prompt_text_with_options=full_prompt_text,
+                valid_choices=valid_keys,
+                console=self.console,
+                default_choice=None
+            )
+        else:
+            chosen_key = await get_user_choice_from_options_async(
+                self.console,
+                full_prompt_text,
+                valid_keys,
+                default_choice=None,
+            )
 
         if chosen_key and chosen_key in option_map:
             # Handle "All" option to activate session auto-approve
@@ -87,9 +122,15 @@ class ApprovalHandler:
                 import qx.core.user_prompts as user_prompts
                 async with _approve_all_lock:
                     user_prompts._approve_all_active = True
-                self.console.print(
-                    "[info]'Approve All' activated for this session.[/info]"
-                )
+                if self.use_console_manager and self._console_manager:
+                    self._console_manager.print(
+                        "[info]'Approve All' activated for this session.[/info]",
+                        console=self.console
+                    )
+                else:
+                    self.console.print(
+                        "[info]'Approve All' activated for this session.[/info]"
+                    )
 
             status = option_map[chosen_key]
             return status, chosen_key

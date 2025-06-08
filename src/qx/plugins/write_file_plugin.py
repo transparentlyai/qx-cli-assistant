@@ -14,6 +14,27 @@ from qx.core.approval_handler import ApprovalHandler
 from qx.core.paths import USER_HOME_DIR, _find_project_root
 from qx.cli.console import themed_console
 
+
+def _managed_plugin_print(content: str, **kwargs) -> None:
+    """
+    Print helper for plugins that uses console manager when available.
+    Falls back to themed_console if manager is unavailable.
+    """
+    try:
+        from qx.core.console_manager import get_console_manager
+        manager = get_console_manager()
+        if manager and manager._running:
+            style = kwargs.get('style')
+            markup = kwargs.get('markup', True)
+            end = kwargs.get('end', '\n')
+            manager.print(content, style=style, markup=markup, end=end, console=themed_console)
+            return
+    except Exception:
+        pass
+    
+    # Fallback to direct themed_console usage
+    themed_console.print(content, **kwargs)
+
 logger = logging.getLogger(__name__)
 
 MAX_PREVIEW_LINES = 50
@@ -155,7 +176,7 @@ async def write_file_tool(
 
     if not is_path_allowed(absolute_path, project_root, USER_HOME_DIR):
         err_msg = f"Access denied by policy for path: {absolute_path}"
-        themed_console.print(f"Write (Denied by Policy) path: {absolute_path}")
+        _managed_plugin_print(f"Write (Denied by Policy) path: {absolute_path}")
         approval_handler.print_outcome(
             "Write", "Failed. Policy violation.", success=False
         )
