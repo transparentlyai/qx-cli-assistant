@@ -20,7 +20,10 @@ def get_session_preview(session_file: Path) -> str:
             if session_data:
                 last_message = session_data[-1]
                 if "content" in last_message and last_message["content"]:
-                    return last_message["content"].split("\n")[0]
+                    first_line = last_message["content"].split("\n")[0]
+                    if len(first_line) > 80:
+                        return first_line[:77] + "..."
+                    return first_line
     except (json.JSONDecodeError, IndexError, KeyError):
         return "(empty session)"
     return "(no message preview)"
