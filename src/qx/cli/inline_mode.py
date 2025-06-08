@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import signal
 import subprocess
 from typing import Any, List, Optional
 
@@ -35,6 +36,7 @@ is_multiline_mode = [False]
 pending_text = [""]
 _details_active_for_toolbar = [True]
 _stdout_active_for_toolbar = [True]
+_planning_mode_active = [False]
 
 
 class SingleLineNonEmptyValidator(Validator):
@@ -64,7 +66,14 @@ def get_bottom_toolbar():
         else '<style bg="#ef4444" fg="black">OFF</style>'
     )
 
-    toolbar_html = f'<style fg="black" bg="white">Details: {details_status} | Stdout: {stdout_status} | Approve All: {approve_all_status}</style>'
+    mode_text = "Planning" if _planning_mode_active[0] else "Implementing"
+    mode_status = (
+        '<style bg="#0097ff" fg="black">PLANNING</style>'
+        if _planning_mode_active[0]
+        else '<style bg="#22c55e" fg="black">IMPLEMENTING</style>'
+    )
+
+    toolbar_html = f'<style fg="black" bg="white">Mode: {mode_status} | Details: {details_status} | Stdout: {stdout_status} | Approve All: {approve_all_status}</style>'
     return HTML(toolbar_html)
 
 
@@ -265,6 +274,18 @@ async def _run_inline_mode(
         )
         event.app.invalidate()
 
+    @bindings.add("c-p")
+    def _(event):
+        _planning_mode_active[0] = not _planning_mode_active[0]
+        mode_text = "Planning" if _planning_mode_active[0] else "Implementing"
+        style = "warning"
+        run_in_terminal(
+            lambda: themed_console.print(
+                f"✓ [dim green]Mode:[/] {mode_text}.", style=style
+            )
+        )
+        event.app.invalidate()
+
     @bindings.add("c-e")
     def _(event):
         import tempfile
@@ -336,6 +357,15 @@ async def _run_inline_mode(
         bottom_toolbar=get_bottom_toolbar,
     )
 
+    # Handle terminal resize for proper redrawing
+    def handle_resize(signum, frame):
+        if hasattr(session, 'app') and session.app:
+            session.app.invalidate()
+            session.app.renderer.reset()
+
+    # Register signal handler for terminal resize
+    signal.signal(signal.SIGWINCH, handle_resize)
+
     try:
         while True:
             if not is_multiline_mode[0]:
@@ -399,15 +429,25 @@ async def _run_inline_mode(
             # Save user message immediately
             if current_message_history is None:
                 current_message_history = []
+
+            # Inject mode indicator if active
+            final_user_input = user_input
+            if _planning_mode_active[0]:
+                final_user_input = user_input + "\n\n---\nThe current mode is PLANNING"
+            else:
+                final_user_input = (
+                    user_input + "\n\n---\nThe current mode is IMPLEMENTING"
+                )
+
             current_message_history.append(
-                ChatCompletionUserMessageParam(role="user", content=user_input)
+                ChatCompletionUserMessageParam(role="user", content=final_user_input)
             )
             save_session(current_message_history)
 
             llm_task = asyncio.create_task(
                 _handle_llm_interaction(
                     llm_agent,
-                    user_input,
+                    final_user_input,
                     current_message_history,
                     "rrt",
                     add_user_message_to_history=False,
