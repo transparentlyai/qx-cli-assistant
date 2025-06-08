@@ -151,6 +151,7 @@ class QXLLMAgent:
         self,
         user_input: str,
         message_history: Optional[List[ChatCompletionMessageParam]] = None,
+        add_user_message_to_history: bool = True,
         _recursion_depth: int = 0,
     ) -> Any:
         """
@@ -210,7 +211,7 @@ class QXLLMAgent:
         else:
             # Only add user message if not already in the last position of message history and not empty
             should_add_user_message = (
-                user_input.strip() != ""
+                user_input.strip() != "" and add_user_message_to_history
             )  # Don't add empty messages
             if should_add_user_message and message_history:
                 # Check if the last message is already this user input
@@ -469,6 +470,7 @@ async def query_llm(
     user_input: str,
     console: RichConsole,
     message_history: Optional[List[ChatCompletionMessageParam]] = None,
+    add_user_message_to_history: bool = True,
 ) -> Optional[Any]:
     """
     Queries the LLM agent.
@@ -477,6 +479,7 @@ async def query_llm(
         result = await agent.run(
             user_input,
             message_history=message_history,
+            add_user_message_to_history=add_user_message_to_history,
         )
         return result
     except Exception as e:

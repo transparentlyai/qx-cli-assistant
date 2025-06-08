@@ -3,7 +3,7 @@ import logging
 import subprocess
 from typing import Any, List, Optional
 
-from openai.types.chat import ChatCompletionMessageParam
+from openai.types.chat import ChatCompletionMessageParam, ChatCompletionUserMessageParam
 from prompt_toolkit import PromptSession
 from prompt_toolkit.application import run_in_terminal
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
@@ -68,6 +68,7 @@ async def _handle_llm_interaction(
     current_message_history: Optional[List[ChatCompletionMessageParam]],
     code_theme_to_use: str,
     plain_text_output: bool = False,
+    add_user_message_to_history: bool = True,
 ) -> Optional[List[ChatCompletionMessageParam]]:
     run_result: Optional[Any] = None
     try:
@@ -76,6 +77,7 @@ async def _handle_llm_interaction(
             user_input,
             message_history=current_message_history,
             console=themed_console,
+            add_user_message_to_history=add_user_message_to_history,
         )
     except asyncio.CancelledError:
         logger.info("LLM interaction cancelled by user")
@@ -113,7 +115,7 @@ async def _run_inline_mode(
     qx_completer = QXCompleter()
     config_manager = ConfigManager(themed_console, None)
     _show_thinking_active_for_toolbar[0] = await show_thinking_manager.is_active()
-    
+
     # Initialize global hotkey system but don't start it yet
     # We'll use suspend/resume pattern around prompt_toolkit usage
     try:
@@ -123,7 +125,7 @@ async def _run_inline_mode(
         register_default_handlers()
         # Register global hotkeys for all the same functions as prompt_toolkit
         register_global_hotkey('ctrl+c', 'cancel')        # Same as prompt_toolkit
-        register_global_hotkey('ctrl+d', 'exit')          # Same as prompt_toolkit  
+        register_global_hotkey('ctrl+d', 'exit')          # Same as prompt_toolkit
         register_global_hotkey('ctrl+r', 'history')       # Same as prompt_toolkit
         register_global_hotkey('ctrl+a', 'approve_all')   # Same as prompt_toolkit
         register_global_hotkey('ctrl+t', 'toggle_thinking') # Same as prompt_toolkit
@@ -207,7 +209,7 @@ async def _run_inline_mode(
         async with _approve_all_lock:
             user_prompts._approve_all_active = not user_prompts._approve_all_active
             status = "activated" if user_prompts._approve_all_active else "deactivated"
-            style = "warning" 
+            style = "warning"
             run_in_terminal(
                 lambda: themed_console.print(
                     f"✓ [dim green]Approve All mode[/] {status}.", style=style
@@ -326,9 +328,21 @@ async def _run_inline_mode(
                 await _handle_inline_command(user_input, llm_agent)
                 continue
 
+            # Save user message immediately
+            if current_message_history is None:
+                current_message_history = []
+            current_message_history.append(
+                ChatCompletionUserMessageParam(role="user", content=user_input)
+            )
+            save_session(current_message_history)
+
             llm_task = asyncio.create_task(
                 _handle_llm_interaction(
-                    llm_agent, user_input, current_message_history, "rrt"
+                    llm_agent,
+                    user_input,
+                    current_message_history,
+                    "rrt",
+                    add_user_message_to_history=False,
                 )
             )
 
