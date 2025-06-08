@@ -18,6 +18,25 @@ _session_lock = asyncio.Lock()  # Protect session file access in async context
 _session_lock_sync = threading.Lock()  # Protect session file access in sync context
 
 
+def get_session_files() -> List[Path]:
+    """
+    Returns a list of all session files, sorted by modification time (newest first).
+    """
+    if not QX_SESSIONS_DIR.is_dir():
+        return []
+
+    session_files = [
+        f
+        for f in QX_SESSIONS_DIR.iterdir()
+        if f.is_file() and f.name.startswith("qx_session_") and f.suffix == ".json"
+    ]
+
+    # Sort by modification time, newest first
+    session_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+
+    return session_files
+
+
 def _get_message_role(msg) -> Optional[str]:
     """
     Safely extracts the role from a message, whether it's a dict or Pydantic model.
@@ -245,26 +264,13 @@ async def clean_old_sessions_async(keep_sessions: int):
 
     try:
         # Run file operations in thread pool
-        def _get_session_files():
-            if (
-                not QX_SESSIONS_DIR.is_dir()
-            ):  # Check if sessions directory exists within .Q
-                return []
-            return sorted(
-                [
-                    f
-                    for f in QX_SESSIONS_DIR.iterdir()
-                    if f.is_file()
-                    and f.name.startswith("qx_session_")
-                    and f.suffix == ".json"
-                ],
-                key=lambda f: f.name,
-            )
+        def _get_files():
+            return get_session_files()
 
-        session_files = await asyncio.to_thread(_get_session_files)
+        session_files = await asyncio.to_thread(_get_files)
 
         if len(session_files) > keep_sessions:
-            files_to_delete = session_files[:-(keep_sessions)]
+            files_to_delete = session_files[keep_sessions:]
             for file_path in files_to_delete:
                 try:
                     await asyncio.to_thread(file_path.unlink)
@@ -283,148 +289,36 @@ def clean_old_sessions(keep_sessions: int):
     """
     Sync wrapper for clean_old_sessions.
     """
+    clean_old_sessions_async_ = clean_old_sessions_async(keep_sessions)
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
-            # We're in an async context, create a task
-            asyncio.create_task(clean_old_sessions_async(keep_sessions))
+            asyncio.create_task(clean_old_sessions_async_)
         else:
-            # Sync context - do it synchronously
-            if keep_sessions < 0:
-                logger.warning(
-                    f"Invalid QX_KEEP_SESSIONS value: {keep_sessions}. Must be non-negative. Skipping session cleanup."
-                )
-                return
-
-            # Only attempt cleanup if .Q directory exists
-            if not QX_SESSIONS_DIR.parent.is_dir():
-                logger.info("'.Q' directory not found. Skipping session cleanup.")
-                return
-
-            try:
-                if (
-                    not QX_SESSIONS_DIR.is_dir()
-                ):  # Check if sessions directory exists within .Q
-                    session_files = []
-                else:
-                    session_files = sorted(
-                        [
-                            f
-                            for f in QX_SESSIONS_DIR.iterdir()
-                            if f.is_file()
-                            and f.name.startswith("qx_session_")
-                            and f.suffix == ".json"
-                        ],
-                        key=lambda f: f.name,
-                    )
-
-                if len(session_files) > keep_sessions:
-                    files_to_delete = session_files[:-(keep_sessions)]
-                    for file_path in files_to_delete:
-                        try:
-                            file_path.unlink()
-                            logger.info(f"Deleted old session file: {file_path}")
-                        except Exception as e:
-                            logger.error(
-                                f"Failed to delete old session file {file_path}: {e}"
-                            )
-                else:
-                    logger.info(
-                        f"Number of sessions ({len(session_files)}) is within the limit ({keep_sessions}). No old sessions to delete."
-                    )
-            except Exception as e:
-                logger.error(f"Error during session cleanup: {e}", exc_info=True)
+            loop.run_until_complete(clean_old_sessions_async_)
     except RuntimeError:
-        # No event loop - do it synchronously
-        if keep_sessions < 0:
-            logger.warning(
-                f"Invalid QX_KEEP_SESSIONS value: {keep_sessions}. Must be non-negative. Skipping session cleanup."
-            )
-            return
-
-        # Only attempt cleanup if .Q directory exists
-        if not QX_SESSIONS_DIR.parent.is_dir():
-            logger.info("'.Q' directory not found. Skipping session cleanup.")
-            return
-
-        try:
-            if (
-                not QX_SESSIONS_DIR.is_dir()
-            ):  # Check if sessions directory exists within .Q
-                session_files = []
-            else:
-                session_files = sorted(
-                    [
-                        f
-                        for f in QX_SESSIONS_DIR.iterdir()
-                        if f.is_file()
-                        and f.name.startswith("qx_session_")
-                        and f.suffix == ".json"
-                    ],
-                    key=lambda f: f.name,
-                )
-
-            if len(session_files) > keep_sessions:
-                files_to_delete = session_files[:-(keep_sessions)]
-                for file_path in files_to_delete:
-                    try:
-                        file_path.unlink()
-                        logger.info(f"Deleted old session file: {file_path}")
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to delete old session file {file_path}: {e}"
-                        )
-            else:
-                logger.info(
-                    f"Number of sessions ({len(session_files)}) is within the limit ({keep_sessions}). No old sessions to delete."
-                )
-        except Exception as e:
-            logger.error(f"Error during session cleanup: {e}", exc_info=True)
+        asyncio.run(clean_old_sessions_async_)
 
 
 def load_latest_session() -> Optional[List[ChatCompletionMessageParam]]:
     """
     Loads the most recent session from the sessions directory.
     """
-    # Only attempt to load if .Q directory exists
     if not QX_SESSIONS_DIR.parent.is_dir():
         logger.info("'.Q' directory not found. Skipping session load.")
         return None
 
-    try:
-        if not QX_SESSIONS_DIR.is_dir():  # Check if sessions directory exists within .Q
-            logger.info("Session directory not found. No previous sessions to load.")
-            return None
+    session_files = get_session_files()
 
-        session_files = sorted(
-            [
-                f
-                for f in QX_SESSIONS_DIR.iterdir()
-                if f.is_file()
-                and f.name.startswith("qx_session_")
-                and f.suffix == ".json"
-            ],
-            key=lambda f: f.name,
-            reverse=True,  # Get the most recent first
-        )
-
-        if not session_files:
-            logger.info("No previous sessions found.")
-            return None
-
-        latest_session_file = session_files[0]
-        loaded_history = load_session_from_path(latest_session_file)
-        if loaded_history:
-            # Set the current session file to the recovered one
-            set_current_session_file(latest_session_file)
-        return loaded_history
-
-    except FileNotFoundError:
-        logger.info("Session directory or file not found during load.")
+    if not session_files:
+        logger.info("No previous sessions found.")
         return None
-    except Exception as e:
-        logger.error(f"Error loading latest session: {e}", exc_info=True)
-        return None
+
+    latest_session_file = session_files[0]
+    loaded_history = load_session_from_path(latest_session_file)
+    if loaded_history:
+        set_current_session_file(latest_session_file)
+    return loaded_history
 
 
 def load_session_from_path(
