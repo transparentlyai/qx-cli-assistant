@@ -233,6 +233,9 @@ DEFAULT_APPROVED_COMMANDS = [
 # Shell command execution timeout in seconds
 SHELL_COMMAND_TIMEOUT = 60
 
+# Approval statuses that indicate the operation should proceed
+APPROVAL_STATUSES_OK = ["approved", "session_approved"]
+
 
 # --- Rich CLI Theme Configuration ---
 DEFAULT_SYNTAX_HIGHLIGHT_THEME = (
