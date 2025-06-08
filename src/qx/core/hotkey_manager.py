@@ -236,72 +236,62 @@ def _default_history_handler():
         logger.error(f"Error in history handler: {e}")
 
 
-async def _default_approve_all_handler():
+def _default_approve_all_handler():
     """Default handler for Ctrl+A - toggle approve all mode."""
     try:
         import qx.core.user_prompts as user_prompts
-        from qx.cli.console import themed_console
 
-        async with user_prompts._approve_all_lock:
-            user_prompts._approve_all_active = not user_prompts._approve_all_active
-            status = "activated" if user_prompts._approve_all_active else "deactivated"
-            style = "warning"  # Match prompt_toolkit version
-
-            themed_console.print(
-                f"✓ [dim green]Approve All mode[/] {status}.", style=style
-            )
-            logger.info(f"Approve All mode {status} via global hotkey")
+        # Simple toggle without any external dependencies or Rich formatting
+        user_prompts._approve_all_active = not user_prompts._approve_all_active
+        status = "activated" if user_prompts._approve_all_active else "deactivated"
+        
+        # Simple print without Rich formatting to avoid threading issues
+        print(f"✓ Approve All mode {status}")
+        logger.info(f"Approve All mode {status} via global hotkey")
 
     except Exception as e:
         logger.error(f"Error in approve all handler: {e}")
 
 
-async def _default_toggle_details_handler():
+def _default_toggle_details_handler():
     """Default handler for Ctrl+T - toggle details mode."""
     try:
-        from qx.core.state_manager import details_manager
-        from qx.core.config_manager import ConfigManager
-        from qx.cli.console import themed_console
+        import os
 
-        new_status = not await details_manager.is_active()
-        await details_manager.set_status(new_status)
+        # Simple environment variable toggle without any external dependencies
+        current_status = os.getenv("QX_SHOW_DETAILS", "true").lower() == "true"
+        new_status = not current_status
+        os.environ["QX_SHOW_DETAILS"] = str(new_status).lower()
 
-        # Update toolbar state to match prompt_toolkit version
+        # Update toolbar state if available (without importing complex modules)
         try:
             from qx.cli.inline_mode import _details_active_for_toolbar
-
             _details_active_for_toolbar[0] = new_status
         except ImportError:
             pass  # Module not imported yet
 
-        # Update config - match prompt_toolkit version exactly
-        config_manager = ConfigManager(themed_console, None)
-        config_manager.set_config_value("QX_SHOW_DETAILS", str(new_status).lower())
-
+        # Simple print without Rich formatting to avoid threading issues
         status_text = "enabled" if new_status else "disabled"
-        style = "warning"  # Match prompt_toolkit version
-        themed_console.print(f"✓ [dim green]Details:[/] {status_text}.", style=style)
+        print(f"✓ Details: {status_text}")
         logger.info(f"Details {status_text} via global hotkey")
 
     except Exception as e:
         logger.error(f"Error in toggle details handler: {e}")
 
 
-async def _default_toggle_stdout_handler():
+def _default_toggle_stdout_handler():
     """Default handler for Ctrl+S - toggle stdout visibility."""
     try:
-        from qx.core.output_control import output_control_manager
-        from qx.cli.console import themed_console
-
-        # Get current status and toggle it
-        current_status = await output_control_manager.should_show_stdout()
+        import os
+        
+        # Simple environment variable toggle without any external dependencies
+        current_status = os.getenv("QX_SHOW_STDOUT", "true").lower() == "true"
         new_status = not current_status
-        await output_control_manager.set_stdout_visibility(new_status)
+        os.environ["QX_SHOW_STDOUT"] = str(new_status).lower()
 
+        # Simple print without Rich formatting to avoid threading issues
         status_text = "enabled" if new_status else "disabled"
-        themed_console.print(
-            f"✓ [dim green]Show Stdout:[/] {status_text}.", style="warning"
-        )
+        print(f"✓ Show Stdout: {status_text}")
         logger.info(f"Show Stdout {status_text} via Ctrl+S")
 
     except Exception as e:

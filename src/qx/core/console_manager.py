@@ -44,6 +44,7 @@ class ConsoleCommand(ABC):
     command_id: str
     command_type: CommandType
     created_at: float
+    source_identifier: Optional[str] = None
     
     def __post_init__(self):
         if not self.command_id:
@@ -55,7 +56,7 @@ class ConsoleCommand(ABC):
 @dataclass
 class PrintCommand(ConsoleCommand):
     """Command to print content to console."""
-    content: Union[str, RenderableType]
+    content: Union[str, RenderableType] = ""
     style: Optional[str] = None
     markup: bool = True
     end: str = "\n"
@@ -69,7 +70,7 @@ class PrintCommand(ConsoleCommand):
 @dataclass
 class InputCommand(ConsoleCommand):
     """Base class for input commands."""
-    input_type: InputType
+    input_type: InputType = InputType.SIMPLE_PROMPT
     blocking: bool = True
     timeout: Optional[float] = None
     callback: Optional[Callable[[Any], None]] = None
@@ -88,7 +89,8 @@ def create_simple_prompt_command(
     console: Optional[Console] = None,
     blocking: bool = True,
     timeout: Optional[float] = None,
-    callback: Optional[Callable[[Any], None]] = None
+    callback: Optional[Callable[[Any], None]] = None,
+    source_identifier: Optional[str] = None
 ) -> InputCommand:
     """Factory function to create SimplePromptCommand."""
     cmd = InputCommand(
@@ -98,7 +100,8 @@ def create_simple_prompt_command(
         input_type=InputType.SIMPLE_PROMPT,
         blocking=blocking,
         timeout=timeout,
-        callback=callback
+        callback=callback,
+        source_identifier=source_identifier
     )
     cmd.prompt_text = prompt_text
     cmd.default = default
@@ -114,7 +117,8 @@ def create_approval_request_command(
     default_choice_key: str = "n",
     blocking: bool = True,
     timeout: Optional[float] = None,
-    callback: Optional[Callable[[tuple], None]] = None
+    callback: Optional[Callable[[tuple], None]] = None,
+    source_identifier: Optional[str] = None
 ) -> InputCommand:
     """Factory function to create ApprovalRequestCommand."""
     cmd = InputCommand(
@@ -124,7 +128,8 @@ def create_approval_request_command(
         input_type=InputType.APPROVAL_REQUEST,
         blocking=blocking,
         timeout=timeout,
-        callback=callback
+        callback=callback,
+        source_identifier=source_identifier
     )
     cmd.prompt_message = prompt_message
     cmd.console = console
@@ -141,7 +146,8 @@ def create_choice_selection_command(
     default_choice: Optional[str] = None,
     blocking: bool = True,
     timeout: Optional[float] = None,
-    callback: Optional[Callable[[Optional[str]], None]] = None
+    callback: Optional[Callable[[Optional[str]], None]] = None,
+    source_identifier: Optional[str] = None
 ) -> InputCommand:
     """Factory function to create ChoiceSelectionCommand."""
     cmd = InputCommand(
@@ -151,7 +157,8 @@ def create_choice_selection_command(
         input_type=InputType.CHOICE_SELECTION,
         blocking=blocking,
         timeout=timeout,
-        callback=callback
+        callback=callback,
+        source_identifier=source_identifier
     )
     cmd.prompt_text_with_options = prompt_text_with_options
     cmd.valid_choices = valid_choices
@@ -177,6 +184,30 @@ class ConsoleManager:
     output and input functionality. It maintains a single consumer thread that
     processes all console interactions sequentially while supporting both
     blocking and non-blocking input patterns.
+    
+    Features:
+    - Thread-safe print operations with Rich styling support
+    - Simple input requests with optional defaults
+    - Approval requests (y/n/a/c pattern) 
+    - Multiple choice selections
+    - Source identifier support for component attribution
+    - Both blocking and async (callback-based) interaction patterns
+    - Automatic fallback to direct console usage when manager not running
+    
+    Usage:
+        manager = get_console_manager()
+        
+        # Print with source identification
+        manager.print("Task completed", source_identifier="TaskRunner")
+        
+        # Input requests
+        name = manager.request_input_blocking("Enter name:", source_identifier="Setup")
+        
+        # Approval requests  
+        result = manager.request_approval_blocking("Continue?", console, source_identifier="Tool")
+        
+        # Choice selection
+        choice = manager.request_choice_blocking("Select:", options, console, source_identifier="Config")
     """
     
     def __init__(self, default_console: Optional[Console] = None):
@@ -263,16 +294,33 @@ class ConsoleManager:
         try:
             console = command.console or self._default_console
             
+            # Prepare content with source identifier if provided
+            content = command.content
+            if command.source_identifier:
+                # Prepend the source identifier with styling
+                if isinstance(content, str):
+                    content = f"[dim]\\[{command.source_identifier}][/dim] {content}"
+                else:
+                    # For rich renderables, we'll prefix with the identifier
+                    from rich.text import Text
+                    identifier_text = Text(f"[{command.source_identifier}] ", style="dim")
+                    if hasattr(content, '__rich__'):
+                        # Create a group to combine identifier and content
+                        from rich.console import Group
+                        content = Group(identifier_text, content)
+                    else:
+                        content = f"[dim]\\[{command.source_identifier}][/dim] {content}"
+            
             if command.style:
                 console.print(
-                    command.content,
+                    content,
                     style=command.style,
                     markup=command.markup,
                     end=command.end
                 )
             else:
                 console.print(
-                    command.content,
+                    content,
                     markup=command.markup,
                     end=command.end
                 )
@@ -320,14 +368,17 @@ class ConsoleManager:
     
     async def _handle_simple_prompt(self, command: InputCommand) -> Optional[str]:
         """Handle simple prompt input."""
-        # For simple prompts, we'd typically use Rich's Prompt
-        # This is a placeholder - actual implementation would depend on requirements
         from rich.prompt import Prompt
         
         try:
             console = getattr(command, 'console', None) or self._default_console
             prompt_text = getattr(command, 'prompt_text', 'Enter input: ')
             default = getattr(command, 'default', None)
+            
+            # Prepare prompt text with source identifier if provided
+            if command.source_identifier:
+                prompt_text = f"[dim]\\[{command.source_identifier}][/dim] {prompt_text}"
+            
             return await asyncio.to_thread(
                 Prompt.ask,
                 prompt_text,
@@ -350,8 +401,13 @@ class ConsoleManager:
             user_prompts._disable_console_manager = True
             
             try:
+                # Prepare prompt message with source identifier if provided
+                prompt_message = getattr(command, 'prompt_message', 'Approve?')
+                if command.source_identifier:
+                    prompt_message = f"[dim]\\[{command.source_identifier}][/dim] {prompt_message}"
+                
                 return await request_confirmation(
-                    prompt_message=getattr(command, 'prompt_message', 'Approve?'),
+                    prompt_message=prompt_message,
                     console=getattr(command, 'console', self._default_console),
                     content_to_display=getattr(command, 'content_to_display', None),
                     current_value_for_modification=getattr(command, 'current_value_for_modification', None),
@@ -377,9 +433,14 @@ class ConsoleManager:
             user_prompts._disable_console_manager = True
             
             try:
+                # Prepare prompt message with source identifier if provided
+                prompt_text = getattr(command, 'prompt_text_with_options', 'Choose: ')
+                if command.source_identifier:
+                    prompt_text = f"[dim]\\[{command.source_identifier}][/dim] {prompt_text}"
+                
                 return await get_user_choice_from_options_async(
                     console=getattr(command, 'console', self._default_console),
-                    prompt_text_with_options=getattr(command, 'prompt_text_with_options', 'Choose: '),
+                    prompt_text_with_options=prompt_text,
                     valid_choices=getattr(command, 'valid_choices', ['y', 'n']),
                     default_choice=getattr(command, 'default_choice', None)
                 )
@@ -399,7 +460,8 @@ class ConsoleManager:
         style: Optional[str] = None,
         markup: bool = True,
         end: str = "\n",
-        console: Optional[Console] = None
+        console: Optional[Console] = None,
+        source_identifier: Optional[str] = None
     ) -> None:
         """Queue a print command."""
         if not self._running:
@@ -416,7 +478,8 @@ class ConsoleManager:
             style=style,
             markup=markup,
             end=end,
-            console=console
+            console=console,
+            source_identifier=source_identifier
         )
         self._command_queue.put(command)
     
@@ -427,7 +490,8 @@ class ConsoleManager:
         content_to_display: Optional[RenderableType] = None,
         current_value_for_modification: Optional[str] = None,
         default_choice_key: str = "n",
-        timeout: Optional[float] = None
+        timeout: Optional[float] = None,
+        source_identifier: Optional[str] = None
     ) -> tuple:
         """Request approval with blocking wait for response."""
         if not self._running:
@@ -446,7 +510,8 @@ class ConsoleManager:
             current_value_for_modification=current_value_for_modification,
             default_choice_key=default_choice_key,
             blocking=True,
-            timeout=timeout
+            timeout=timeout,
+            source_identifier=source_identifier
         )
         
         self._command_queue.put(command)
@@ -465,7 +530,8 @@ class ConsoleManager:
         callback: Callable[[tuple], None],
         content_to_display: Optional[RenderableType] = None,
         current_value_for_modification: Optional[str] = None,
-        default_choice_key: str = "n"
+        default_choice_key: str = "n",
+        source_identifier: Optional[str] = None
     ) -> str:
         """Request approval with async callback for response."""
         command = create_approval_request_command(
@@ -475,7 +541,8 @@ class ConsoleManager:
             current_value_for_modification=current_value_for_modification,
             default_choice_key=default_choice_key,
             blocking=False,
-            callback=callback
+            callback=callback,
+            source_identifier=source_identifier
         )
         
         self._command_queue.put(command)
@@ -487,7 +554,8 @@ class ConsoleManager:
         valid_choices: List[str],
         console: Console,
         default_choice: Optional[str] = None,
-        timeout: Optional[float] = None
+        timeout: Optional[float] = None,
+        source_identifier: Optional[str] = None
     ) -> Optional[str]:
         """Request choice selection with blocking wait for response."""
         if not self._running:
@@ -504,7 +572,8 @@ class ConsoleManager:
             console=console,
             default_choice=default_choice,
             blocking=True,
-            timeout=timeout
+            timeout=timeout,
+            source_identifier=source_identifier
         )
         
         self._command_queue.put(command)
@@ -522,7 +591,8 @@ class ConsoleManager:
         valid_choices: List[str],
         console: Console,
         callback: Callable[[Optional[str]], None],
-        default_choice: Optional[str] = None
+        default_choice: Optional[str] = None,
+        source_identifier: Optional[str] = None
     ) -> str:
         """Request choice selection with async callback for response."""
         command = create_choice_selection_command(
@@ -531,7 +601,62 @@ class ConsoleManager:
             console=console,
             default_choice=default_choice,
             blocking=False,
-            callback=callback
+            callback=callback,
+            source_identifier=source_identifier
+        )
+        
+        self._command_queue.put(command)
+        return command.command_id
+    
+    def request_input_blocking(
+        self,
+        prompt_text: str,
+        default: Optional[str] = None,
+        console: Optional[Console] = None,
+        timeout: Optional[float] = None,
+        source_identifier: Optional[str] = None
+    ) -> Optional[str]:
+        """Request simple input with blocking wait for response."""
+        if not self._running:
+            # Fallback to direct call if manager not running
+            from rich.prompt import Prompt
+            target_console = console or self._default_console
+            return Prompt.ask(prompt_text, default=default, console=target_console)
+        
+        command = create_simple_prompt_command(
+            prompt_text=prompt_text,
+            default=default,
+            console=console,
+            blocking=True,
+            timeout=timeout,
+            source_identifier=source_identifier
+        )
+        
+        self._command_queue.put(command)
+        
+        try:
+            response = command.response_queue.get(timeout=timeout)
+            return response
+        except queue.Empty:
+            logger.warning("Input request timed out")
+            return None
+    
+    def request_input_async(
+        self,
+        prompt_text: str,
+        callback: Callable[[Optional[str]], None],
+        default: Optional[str] = None,
+        console: Optional[Console] = None,
+        source_identifier: Optional[str] = None
+    ) -> str:
+        """Request simple input with async callback for response."""
+        command = create_simple_prompt_command(
+            prompt_text=prompt_text,
+            default=default,
+            console=console,
+            blocking=False,
+            callback=callback,
+            source_identifier=source_identifier
         )
         
         self._command_queue.put(command)
