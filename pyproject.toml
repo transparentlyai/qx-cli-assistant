@@ -22,12 +22,16 @@ dependencies = [
     "arrow>=1.3.0",
     "sqlalchemy>=2.0.41",
     "bcrypt>=4.3.0",
+    "python-jose>=3.5.0",
+    "fastapi>=0.115.12",
+    "uvicorn>=0.34.3",
 ]
 readme = "README.md"
 requires-python = ">= 3.13"
 
 [project.scripts]
 qx = "qx.main:main"
+qx-api = "uvicorn qx.api:app --reload"
 
 [build-system]
 requires = ["hatchling"]
