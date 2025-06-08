@@ -8,7 +8,14 @@ class QXCompleter(Completer):
     """Custom completer that handles both commands and path completion."""
 
     def __init__(self):
-        self.commands = ["/model", "/reset", "/approve-all", "/help", "/print"]
+        self.commands = [
+            "/model",
+            "/reset",
+            "/approve-all",
+            "/help",
+            "/print",
+            "/tools",
+        ]
 
     def get_completions(self, document, complete_event):
         # Get the current text and cursor position
