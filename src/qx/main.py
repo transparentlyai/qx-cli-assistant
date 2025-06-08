@@ -126,6 +126,16 @@ async def _async_main(
                         themed_console.print(
                             "[success]Session recovered successfully![/]"
                         )
+
+                        # Automatically ask for a summary
+                        if llm_agent:
+                            current_message_history = await _handle_llm_interaction(
+                                llm_agent,
+                                "what we have discussed so far?",
+                                current_message_history,
+                                code_theme_to_use,
+                            )
+
                     else:
                         themed_console.print(
                             "[error]Failed to recover session. Starting new session.[/]"
