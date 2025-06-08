@@ -3,6 +3,7 @@ import logging
 from typing import List, Optional
 
 from openai.types.chat import ChatCompletionMessageParam
+from rich.text import Text
 
 from qx.cli.theme import themed_console
 from qx.core.llm import QXLLMAgent, initialize_llm_agent
@@ -56,7 +57,10 @@ def _handle_tools_command(agent: QXLLMAgent):
         description = SIMPLE_TOOL_DESCRIPTIONS.get(
             tool_name, "No description available."
         )
-        themed_console.print(f"  - {tool_name}: {description}", style="primary")
+        text = Text()
+        text.append(f"  - {tool_name}: ", style="primary")
+        text.append(description, style="dim white")
+        themed_console.print(text)
 
 
 async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent):

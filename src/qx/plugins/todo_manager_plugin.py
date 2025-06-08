@@ -263,7 +263,7 @@ def _display_todo_with_tasks(console: RichConsole, todo: Dict[str, Any]) -> None
     priority_color = priority_colors.get(todo['priority'], 'white')
     
     header = Text()
-    header.append(f"📋 {todo['title']}", style="bold")
+    header.append(f"• {todo['title']}", style="bold")
     header.append(f" [{todo['status'].upper()}]", style=f"bold {status_color}")
     header.append(f" (Priority: {todo['priority']})", style=priority_color)
     
@@ -274,7 +274,7 @@ def _display_todo_with_tasks(console: RichConsole, todo: Dict[str, Any]) -> None
         table.add_column("Task")
         
         for i, task in enumerate(tasks, 1):
-            status_icon = "✅" if task['status'] == 'completed' else "🔄" if task['status'] == 'in_progress' else "⏳"
+            status_icon = "✓" if task['status'] == 'completed' else "~" if task['status'] == 'in_progress' else "·"
             task_style = "dim" if task['status'] == 'completed' else "white"
             table.add_row(status_icon, f"{i}. {task['content']}", style=task_style)
     else:
@@ -406,9 +406,9 @@ async def todo_manager_tool(
                     task_id = _create_task(todo_id, task_content)
                     task_ids.append(task_id)
             
-            _managed_plugin_print(f"[green]✨ Created todo '{args.title}' with ID: {todo_id}[/green]")
+            _managed_plugin_print(f"[green]+ Created todo '{args.title}' with ID: {todo_id}[/green]")
             if task_ids:
-                _managed_plugin_print(f"[blue]📝 Added {len(task_ids)} initial tasks[/blue]")
+                _managed_plugin_print(f"[blue]+ Added {len(task_ids)} initial tasks[/blue]")
             
             # Display the formatted todo
             todo['tasks'] = _get_tasks_for_todo(todo_id)
@@ -578,7 +578,7 @@ async def todo_manager_tool(
                 task_id = _create_task(args.todo_id, task_content)
                 task_ids.append(task_id)
             
-            _managed_plugin_print(f"[blue]📝 Added {len(task_ids)} tasks to todo '{todo['title']}'[/blue]")
+            _managed_plugin_print(f"[blue]+ Added {len(task_ids)} tasks to todo '{todo['title']}'[/blue]")
             
             # Display the updated todo
             todo['tasks'] = _get_tasks_for_todo(args.todo_id)
@@ -695,7 +695,7 @@ async def todo_manager_tool(
                     error="Task update failed"
                 )
             
-            _managed_plugin_print(f"[green]✅ Completed task '{task['content']}' in '{todo['title']}'[/green]")
+            _managed_plugin_print(f"[green]✓ Completed task '{task['content']}' in '{todo['title']}'[/green]")
             
             # Display the updated todo
             todo['tasks'] = _get_tasks_for_todo(args.todo_id)
