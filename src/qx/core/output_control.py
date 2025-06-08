@@ -50,13 +50,13 @@ class OutputControlManager:
             if stdout_setting is not None:
                 return stdout_setting.lower() == "true"
             
-            # Fall back to thinking mechanism
+            # Fall back to details mechanism
             try:
-                from qx.core.user_prompts import is_show_thinking_active
-                return await is_show_thinking_active()
+                from qx.core.user_prompts import is_details_active
+                return await is_details_active()
             except ImportError:
-                # If thinking module isn't available, default to showing stdout
-                logger.warning("Thinking module not available, defaulting to show stdout")
+                # If details module isn't available, default to showing stdout
+                logger.warning("Details module not available, defaulting to show stdout")
                 return True
 
     async def should_show_stderr(self) -> bool:
@@ -159,9 +159,9 @@ def should_show_stdout_sync() -> bool:
     if stdout_setting is not None:
         return stdout_setting.lower() == "true"
     
-    # Fall back to thinking setting
-    thinking_setting = os.getenv("QX_SHOW_THINKING", "true")
-    return thinking_setting.lower() == "true"
+    # Fall back to details setting
+    details_setting = os.getenv("QX_SHOW_DETAILS", "true")
+    return details_setting.lower() == "true"
 
 
 def should_show_stderr_sync() -> bool:
