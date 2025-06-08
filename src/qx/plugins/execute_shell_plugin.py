@@ -11,6 +11,27 @@ from qx.core.approval_handler import ApprovalHandler
 from qx.cli.console import themed_console
 from qx.core.output_control import should_show_stdout, should_show_stderr
 
+
+def _managed_plugin_print(content: str, **kwargs) -> None:
+    """
+    Print helper for plugins that uses console manager when available.
+    Falls back to themed_console if manager is unavailable.
+    """
+    try:
+        from qx.core.console_manager import get_console_manager
+        manager = get_console_manager()
+        if manager and manager._running:
+            style = kwargs.get('style')
+            markup = kwargs.get('markup', True)
+            end = kwargs.get('end', '\n')
+            manager.print(content, style=style, markup=markup, end=end, console=themed_console)
+            return
+    except Exception:
+        pass
+    
+    # Fallback to direct themed_console usage
+    themed_console.print(content, **kwargs)
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_PROHIBITED_SHELL_PATTERNS: List[str] = [
@@ -236,12 +257,12 @@ async def execute_shell_tool(
 
     if not command:
         err_msg = "Empty command provided."
-        themed_console.print(f"Execute Shell Command (Error): {err_msg}")
+        _managed_plugin_print(f"Execute Shell Command (Error): {err_msg}")
         return ExecuteShellPluginOutput(command="", error=err_msg)
 
     if _is_command_prohibited(command):
         err_msg = f"Command '{command}' is prohibited by policy."
-        themed_console.print(f"Execute Shell Command (Denied by Policy): {command}")
+        _managed_plugin_print(f"Execute Shell Command (Denied by Policy): {command}")
         approval_handler.print_outcome(
             "Execution", "Failed. Command is prohibited.", success=False
         )
@@ -249,7 +270,7 @@ async def execute_shell_tool(
 
     status = "approved"
     if _is_command_auto_approved(command):
-        themed_console.print(f"Execute Shell Command (Auto-approved): {command}")
+        _managed_plugin_print(f"Execute Shell Command (Auto-approved): {command}")
     else:
         status, _ = await approval_handler.request_approval(
             operation="Execute Shell Command",
@@ -285,10 +306,10 @@ async def execute_shell_tool(
 
         # Show stdout only if output control allows it
         if stdout and await should_show_stdout():
-            themed_console.print(stdout, style="dim white")
+            _managed_plugin_print(stdout, style="dim white")
         # Show stderr only if output control allows it (usually always shown)
         if stderr and await should_show_stderr():
-            themed_console.print(stderr, style="dim red")
+            _managed_plugin_print(stderr, style="dim red")
 
         return ExecuteShellPluginOutput(
             command=command,

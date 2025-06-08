@@ -14,6 +14,42 @@ from qx.core.user_prompts import is_details_active
 logger = logging.getLogger(__name__)
 
 
+def _managed_stream_print(content: Any, use_manager: bool = False, **kwargs) -> None:
+    """
+    Print helper for streaming that optionally uses console manager.
+    
+    For performance-critical streaming content, use_manager should be False.
+    For status messages and error reporting, use_manager can be True.
+    """
+    from rich.console import Console
+    
+    if use_manager:
+        try:
+            from qx.core.console_manager import get_console_manager
+            manager = get_console_manager()
+            if manager and manager._running:
+                style = kwargs.get('style')
+                markup = kwargs.get('markup', True)
+                end = kwargs.get('end', '\n')
+                console = kwargs.get('console')
+                if not console:
+                    from qx.cli.theme import custom_theme
+                    console = Console(theme=custom_theme)
+                manager.print(content, style=style, markup=markup, end=end, console=console)
+                return
+        except Exception:
+            pass
+    
+    # Fallback to direct console creation and printing
+    console = kwargs.get('console')
+    if not console:
+        from qx.cli.theme import custom_theme
+        console = Console(theme=custom_theme)
+    
+    print_kwargs = {k: v for k, v in kwargs.items() if k != 'console'}
+    console.print(content, **print_kwargs)
+
+
 class StreamingHandler:
     """Handles streaming responses from LLM APIs."""
 
@@ -283,8 +319,7 @@ class StreamingHandler:
             if accumulated_content:
                 from rich.console import Console
 
-                console = Console()
-                console.print("\n[warning]⚠ Response interrupted[/]")
+                _managed_stream_print("\n[warning]⚠ Response interrupted[/]", use_manager=True)
 
                 response_message = cast(
                     ChatCompletionMessageParam,
@@ -300,8 +335,7 @@ class StreamingHandler:
                 return QXRunResult(accumulated_content, messages)
             else:
                 # No content was generated before cancellation
-                console = Console()
-                console.print("\n[warning]Operation cancelled[/]")
+                _managed_stream_print("\n[warning]Operation cancelled[/]", use_manager=True)
                 return QXRunResult("Operation cancelled", messages)
         except Exception as e:
             logger.error(f"Error during streaming: {e}", exc_info=True)
@@ -397,9 +431,7 @@ class StreamingHandler:
 
         # Add final newline if we rendered any content
         if accumulated_content.strip() and (has_rendered_content or remaining_content):
-            from rich.console import Console
-
-            Console().print()
+            _managed_stream_print("", use_manager=True)
 
         # Create response message from accumulated data
         response_message_dict: Dict[str, Any] = {

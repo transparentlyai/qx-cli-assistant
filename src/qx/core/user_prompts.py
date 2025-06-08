@@ -15,6 +15,39 @@ logger = logging.getLogger(__name__)
 _approve_all_active: bool = False
 _approve_all_lock = asyncio.Lock()
 
+# Flag to control console manager usage (disabled when called from ConsoleManager)
+_disable_console_manager = False
+
+
+def _managed_print(console: RichConsole, content: Any, **kwargs) -> None:
+    """
+    Print helper that optionally uses console manager for thread-safe output.
+    
+    This is disabled when called from within the ConsoleManager to prevent
+    circular dependencies.
+    """
+    global _disable_console_manager
+    
+    if _disable_console_manager:
+        # Direct print when called from ConsoleManager
+        console.print(content, **kwargs)
+        return
+    
+    try:
+        # Try to use console manager for thread-safe printing
+        from qx.core.console_manager import get_console_manager
+        manager = get_console_manager()
+        if manager and manager._running:
+            style = kwargs.get('style')
+            markup = kwargs.get('markup', True)
+            end = kwargs.get('end', '\n')
+            manager.print(content, style=style, markup=markup, end=end, console=console)
+        else:
+            console.print(content, **kwargs)
+    except Exception:
+        # Fallback to direct print if manager unavailable
+        console.print(content, **kwargs)
+
 CHOICE_YES = ("y", "Yes", "yes")
 CHOICE_NO = ("n", "No", "no")
 CHOICE_APPROVE_ALL = ("a", "Approve All", "all")
@@ -150,7 +183,7 @@ async def _request_confirmation_textual(
     default_choice_key: str = "n",
 ) -> Tuple[ApprovalDecisionStatus, Optional[str]]:
     if await is_approve_all_active():
-        console.print("[info]AUTO-APPROVED due to active 'Approve All' session.[/info]")
+        _managed_print(console, "[info]AUTO-APPROVED due to active 'Approve All' session.[/info]")
         return ("session_approved", current_value_for_modification)
 
     if content_to_display:
@@ -181,7 +214,7 @@ async def _request_confirmation_textual(
             global _approve_all_active
             async with _approve_all_lock:
                 _approve_all_active = True
-            console.print("[info]'Approve All' activated for this session.[/info]")
+            _managed_print(console, "[info]'Approve All' activated for this session.[/info]")
             return ("session_approved", current_value_for_modification)
         elif user_selected_key == "c":
             console.print("[info]Operation cancelled by user.[/info]")
@@ -204,7 +237,7 @@ async def _request_confirmation_terminal(
     default_choice_key: str = "n",
 ) -> Tuple[ApprovalDecisionStatus, Optional[str]]:
     if await is_approve_all_active():
-        console.print("[info]AUTO-APPROVED due to active 'Approve All' session.[/info]")
+        _managed_print(console, "[info]AUTO-APPROVED due to active 'Approve All' session.[/info]")
         return ("session_approved", current_value_for_modification)
 
     import sys
@@ -238,7 +271,7 @@ async def _request_confirmation_terminal(
             global _approve_all_active
             async with _approve_all_lock:
                 _approve_all_active = True
-            console.print("[info]'Approve All' activated for this session.[/info]")
+            _managed_print(console, "[info]'Approve All' activated for this session.[/info]")
             return ("session_approved", current_value_for_modification)
         elif user_choice_key == "c":
             console.print("[info]Operation cancelled by user.[/info]")
