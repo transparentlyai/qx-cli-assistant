@@ -66,7 +66,6 @@ def get_bottom_toolbar():
         else '<style bg="#ef4444" fg="black">OFF</style>'
     )
 
-    mode_text = "Planning" if _planning_mode_active[0] else "Implementing"
     mode_status = (
         '<style bg="#0097ff" fg="black">PLANNING</style>'
         if _planning_mode_active[0]
@@ -359,7 +358,7 @@ async def _run_inline_mode(
 
     # Handle terminal resize for proper redrawing
     def handle_resize(signum, frame):
-        if hasattr(session, 'app') and session.app:
+        if hasattr(session, "app") and session.app:
             session.app.invalidate()
             session.app.renderer.reset()
 
