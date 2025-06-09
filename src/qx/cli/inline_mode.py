@@ -291,7 +291,7 @@ async def _run_inline_mode(
         import tempfile
 
         current_text = event.current_buffer.text
-        editor = os.getenv("QX_DEFAULT_EDITOR", "vi")
+        editor = os.getenv("QX_DEFAULT_EDITOR", "nano")
         temp_file_path = None
 
         try:
