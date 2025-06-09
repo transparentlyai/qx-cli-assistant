@@ -15,7 +15,11 @@ from qx.core.constants import MODELS
 logger = logging.getLogger("qx")
 
 
-def _handle_model_command(agent: QXLLMAgent, config_manager: ConfigManager, new_model_name: Optional[str] = None):
+def _handle_model_command(
+    agent: QXLLMAgent,
+    config_manager: ConfigManager,
+    new_model_name: Optional[str] = None,
+):
     """
     Displays or updates the current LLM model configuration.
     """
@@ -25,11 +29,13 @@ def _handle_model_command(agent: QXLLMAgent, config_manager: ConfigManager, new_
             if model["name"] == new_model_name:
                 model_to_save = model["model"]
                 break
-        
+
         if model_to_save:
             config_manager.set_config_value("QX_MODEL_NAME", model_to_save)
             themed_console.print(f"Model updated to: {model_to_save}", style="info")
-            themed_console.print("Please restart QX for the change to take full effect.", style="warning")
+            themed_console.print(
+                "Please restart QX for the change to take full effect.", style="warning"
+            )
         else:
             themed_console.print(f"Model '{new_model_name}' not found.", style="error")
 
@@ -87,7 +93,9 @@ def _handle_tools_command(agent: QXLLMAgent):
         themed_console.print(text)
 
 
-async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent, config_manager: ConfigManager):
+async def _handle_inline_command(
+    command_input: str, llm_agent: QXLLMAgent, config_manager: ConfigManager
+):
     """Handle slash commands in inline mode."""
     parts = command_input.strip().split(maxsplit=1)
     command_name = parts[0].lower()
@@ -115,7 +123,8 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent, conf
     elif command_name == "/help":
         themed_console.print("Available Commands:", style="app.header")
         themed_console.print(
-            "  /model [<model-name>] - Show or update LLM model configuration", style="primary"
+            "  /model [<model-name>] - Show or update LLM model configuration",
+            style="primary",
         )
         themed_console.print(
             "  /tools      - List active tools with simple descriptions",
@@ -147,21 +156,28 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent, conf
             "  Ctrl+O      - Toggle stdout visibility", style="primary"
         )
         themed_console.print(
-            "  Ctrl+P      - Toggle between PLANNING and IMPLEMENTING modes", style="primary"
+            "  Ctrl+P      - Toggle between PLANNING and IMPLEMENTING modes",
+            style="primary",
         )
         themed_console.print(
             "  Ctrl+R      - Fuzzy history search (fzf)", style="primary"
         )
         themed_console.print("  Ctrl+T      - Toggle 'Details' mode", style="primary")
         themed_console.print("  F12         - Emergency cancel", style="primary")
-        themed_console.print("  Esc+Enter   - Toggle multiline mode (Alt+Enter)", style="primary")
+        themed_console.print(
+            "  Esc+Enter   - Toggle multiline mode (Alt+Enter)", style="primary"
+        )
 
         themed_console.print("\nInteraction Modes:", style="app.header")
         themed_console.print("  • IMPLEMENTING Mode (default):", style="warning")
-        themed_console.print("    - Focus on execution, coding, and implementation tasks", style="info")
+        themed_console.print(
+            "    - Focus on execution, coding, and implementation tasks", style="info"
+        )
         themed_console.print("    - Green indicator in footer toolbar", style="info")
         themed_console.print("  • PLANNING Mode:", style="warning")
-        themed_console.print("    - Focus on analysis, planning, and strategic thinking", style="info")
+        themed_console.print(
+            "    - Focus on analysis, planning, and strategic thinking", style="info"
+        )
         themed_console.print("    - Blue indicator in footer toolbar", style="info")
         themed_console.print("    - Toggle with Ctrl+P", style="info")
 
@@ -180,10 +196,19 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent, conf
         )
 
         themed_console.print("\nFooter Toolbar Status:", style="app.header")
-        themed_console.print("  • Mode: Shows current interaction mode (PLANNING/IMPLEMENTING)", style="info")
-        themed_console.print("  • Details: Shows if AI reasoning is visible (ON/OFF)", style="info")
-        themed_console.print("  • Stdout: Shows if command output is visible (ON/OFF)", style="info")
-        themed_console.print("  • Approve All: Shows automatic approval status (ON/OFF)", style="info")
+        themed_console.print(
+            "  • Mode: Shows current interaction mode (PLANNING/IMPLEMENTING)",
+            style="info",
+        )
+        themed_console.print(
+            "  • Details: Shows if AI reasoning is visible (ON/OFF)", style="info"
+        )
+        themed_console.print(
+            "  • Stdout: Shows if command output is visible (ON/OFF)", style="info"
+        )
+        themed_console.print(
+            "  • Approve All: Shows automatic approval status (ON/OFF)", style="info"
+        )
 
         themed_console.print("\nEditor Configuration:", style="app.header")
         themed_console.print(
@@ -198,7 +223,8 @@ async def _handle_inline_command(command_input: str, llm_agent: QXLLMAgent, conf
             "    - Example: export QX_DEFAULT_EDITOR=emacs", style="info"
         )
         themed_console.print(
-            "    - Can also be set in qx.conf files (system, user, or project level)", style="info"
+            "    - Can also be set in qx.conf files (system, user, or project level)",
+            style="info",
         )
 
     else:
