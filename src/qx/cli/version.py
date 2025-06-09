@@ -8,7 +8,7 @@ from qx.cli.commands import _handle_model_command
 from qx.core.logging_config import configure_logging
 
 # Qx Version
-QX_VERSION = "0.3.45"
+QX_VERSION = "0.3.46"
 
 
 def display_version_info():

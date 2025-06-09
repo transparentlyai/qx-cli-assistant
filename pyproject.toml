@@ -1,6 +1,6 @@
 [project]
 name = "qx"
-version = "0.3.45"
+version = "0.3.46"
 description = "Qx is a coding cli agent built by Transparently.AI"
 authors = [{ name = "Transparently.AI", email = "mauro@transparently.ai" }]
 dependencies = [
@@ -31,7 +31,6 @@ requires-python = ">= 3.13"
 
 [project.scripts]
 qx = "qx.main:main"
-qx-api = "uvicorn qx.api:app --reload"
 
 [build-system]
 requires = ["hatchling"]
