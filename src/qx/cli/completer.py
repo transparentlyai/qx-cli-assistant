@@ -3,6 +3,8 @@ from pathlib import Path
 
 from prompt_toolkit.completion import Completer, Completion
 
+from qx.core.constants import MODELS
+
 
 class QXCompleter(Completer):
     """Custom completer that handles both commands and path completion."""
@@ -16,10 +18,25 @@ class QXCompleter(Completer):
             "/print",
             "/tools",
         ]
+        self.models = MODELS
 
     def get_completions(self, document, complete_event):
-        # Get the current text and cursor position
         text = document.text
+        word_before_cursor = document.get_word_before_cursor(WORD=True)
+
+        if text.startswith("/model "):
+            for model in self.models:
+                model_name = model["name"]
+                if model_name.startswith(word_before_cursor):
+                    yield Completion(
+                        model_name,
+                        start_position=-len(word_before_cursor),
+                        display=model_name,
+                        display_meta=model["description"],
+                    )
+            return
+
+        # Get the current text and cursor position
         cursor_position = document.cursor_position
 
         # Find the start of the current word

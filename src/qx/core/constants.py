@@ -241,3 +241,18 @@ APPROVAL_STATUSES_OK = ["approved", "session_approved"]
 DEFAULT_SYNTAX_HIGHLIGHT_THEME = (
     "rrt"  # Default theme for syntax highlighting in Markdown code blocks
 )
+
+
+MODELS = (
+    {
+        "name": "gemini-2.5-pro",
+        "model": "openrouter/google/gemini-2.5-pro-preview-06-05",
+        "description": "Preview 06-05 (OPENROUTER)",
+    },
+    {
+        "name": "gemini-2.5-flash",
+        "model": "openrouter/google/gemini-2.5-flash-preview-05-20",
+        "description": "Preview 05-20 (OPENROUTER)",
+        "accepts": ("thinking"),
+    },
+)
