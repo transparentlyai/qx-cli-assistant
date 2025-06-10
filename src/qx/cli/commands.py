@@ -11,7 +11,7 @@ from qx.core.llm import QXLLMAgent, initialize_llm_agent
 from qx.core.session_manager import reset_session
 from qx.core.config_manager import ConfigManager
 import qx.core.user_prompts
-from qx.core.constants import MODELS
+from qx.core.constants import MODELS, QX_VERSION
 from qx.core.agent_manager import get_agent_manager
 
 logger = logging.getLogger("qx")
@@ -114,7 +114,7 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
         development_agents = []
         user_agents = []
         system_agents = []
-        
+
         for agent in agents_info:
             agent_path = agent.get("path", "")
             if ".Q/agents" in agent_path:
@@ -127,7 +127,7 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
                 system_agents.append(agent)
 
         themed_console.print("Available Agents:", style="app.header")
-        
+
         # Show project agents first (most relevant)
         if project_agents:
             themed_console.print("\n📁 Project Agents (.Q/agents/):", style="bold blue")
@@ -135,7 +135,7 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
                 name = agent["name"]
                 mode = agent.get("execution_mode", "unknown")
                 status = " [CURRENT]" if agent.get("is_current") else ""
-                
+
                 text = Text()
                 text.append(f"  📁 {name}: ", style="blue")
                 text.append(f"{mode}{status}", style="dim white")
@@ -148,7 +148,7 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
                 name = agent["name"]
                 mode = agent.get("execution_mode", "unknown")
                 status = " [CURRENT]" if agent.get("is_current") else ""
-                
+
                 text = Text()
                 text.append(f"  - {name}: ", style="primary")
                 text.append(f"{mode}{status}", style="dim white")
@@ -156,12 +156,14 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
 
         # Show user agents
         if user_agents:
-            themed_console.print("\n👤 User Agents (~/.config/qx/agents/):", style="bold yellow")
+            themed_console.print(
+                "\n👤 User Agents (~/.config/qx/agents/):", style="bold yellow"
+            )
             for agent in user_agents:
                 name = agent["name"]
                 mode = agent.get("execution_mode", "unknown")
                 status = " [CURRENT]" if agent.get("is_current") else ""
-                
+
                 text = Text()
                 text.append(f"  - {name}: ", style="primary")
                 text.append(f"{mode}{status}", style="dim white")
@@ -169,17 +171,19 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
 
         # Show system agents
         if system_agents:
-            themed_console.print("\n🌐 System Agents (/etc/qx/agents/):", style="bold white")
+            themed_console.print(
+                "\n🌐 System Agents (/etc/qx/agents/):", style="bold white"
+            )
             for agent in system_agents:
                 name = agent["name"]
                 mode = agent.get("execution_mode", "unknown")
                 status = " [CURRENT]" if agent.get("is_current") else ""
-                
+
                 text = Text()
                 text.append(f"  - {name}: ", style="primary")
                 text.append(f"{mode}{status}", style="dim white")
                 themed_console.print(text)
-        
+
         # If no agents found
         if not (project_agents or development_agents or user_agents or system_agents):
             themed_console.print("No agents found.", style="warning")
@@ -203,7 +207,8 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
                 if current_agent:
                     agent_display_name = current_agent.name or agent_name
                     themed_console.print(
-                        f"You are now talking to {agent_display_name}", style="text.muted"
+                        f"You are now talking to {agent_display_name}",
+                        style="text.muted",
                     )
             else:
                 themed_console.print(
@@ -241,17 +246,25 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
             if current_agent.model:
                 model_name = current_agent.model.name
                 themed_console.print(f"Model: {model_name}", style="dim white")
-                
+
             # Show agent source location
-            agent_info = agent_manager.get_agent_info(current_agent_name, cwd=os.getcwd())
+            agent_info = agent_manager.get_agent_info(
+                current_agent_name, cwd=os.getcwd()
+            )
             if agent_info and "path" in agent_info:
                 agent_path = Path(agent_info["path"])
                 if ".Q/agents" in str(agent_path):
-                    themed_console.print(f"Source: {agent_path} (Project Agent)", style="dim blue")
+                    themed_console.print(
+                        f"Source: {agent_path} (Project Agent)", style="dim blue"
+                    )
                 elif "src/qx/agents" in str(agent_path):
-                    themed_console.print(f"Source: {agent_path} (Development Agent)", style="dim green")
+                    themed_console.print(
+                        f"Source: {agent_path} (Development Agent)", style="dim green"
+                    )
                 elif ".config/qx/agents" in str(agent_path):
-                    themed_console.print(f"Source: {agent_path} (User Agent)", style="dim yellow")
+                    themed_console.print(
+                        f"Source: {agent_path} (User Agent)", style="dim yellow"
+                    )
                 else:
                     themed_console.print(f"Source: {agent_path}", style="dim white")
         else:
@@ -278,29 +291,49 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
                 f"Failed to reload agent '{reload_agent_name}': {result.error}",
                 style="error",
             )
-    
+
     elif subcommand == "refresh":
         # Refresh agent discovery to pick up new project agents
         agent_names = agent_manager.refresh_agent_discovery(cwd=os.getcwd())
-        themed_console.print(f"Refreshed agent discovery. Found {len(agent_names)} agents.", style="info")
-        
+        themed_console.print(
+            f"Refreshed agent discovery. Found {len(agent_names)} agents.", style="info"
+        )
+
         # Show any new project agents
-        project_agents = []
+        project_agent_names = []
         for name in agent_names:
             agent_info = agent_manager.get_agent_info(name, cwd=os.getcwd())
             if agent_info and ".Q/agents" in agent_info.get("path", ""):
-                project_agents.append(name)
-        
-        if project_agents:
-            themed_console.print(f"Project agents: {', '.join(project_agents)}", style="blue")
+                project_agent_names.append(name)
+
+        if project_agent_names:
+            themed_console.print(
+                f"Project agents: {', '.join(project_agent_names)}", style="blue"
+            )
         else:
-            themed_console.print("No project agents found in .Q/agents/", style="dim white")
+            themed_console.print(
+                "No project agents found in .Q/agents/", style="dim white"
+            )
 
     else:
         themed_console.print(f"Unknown agents subcommand: {subcommand}", style="error")
         themed_console.print(
-            "Available subcommands: list, switch, info, reload, refresh", style="text.muted"
+            "Available subcommands: list, switch, info, reload, refresh",
+            style="text.muted",
         )
+
+
+def _show_header(llm_agent: QXLLMAgent):
+    """Displays the header with version, model, and cwd."""
+    themed_console.print(
+        f"\n[dim]Qx ver:[info]{QX_VERSION}[/] | [dim]model:[/][info]{os.path.basename(llm_agent.model_name)}[/] | [dim]cwd:[/][info]{os.getcwd()}[/]"
+    )
+
+
+def _handle_clear_command(llm_agent: QXLLMAgent):
+    """Clears the console and displays the header."""
+    themed_console.clear()
+    _show_header(llm_agent)
 
 
 async def _handle_inline_command(
@@ -321,6 +354,8 @@ async def _handle_inline_command(
         # Just reset message history in inline mode
         reset_session()
         themed_console.print("Session reset, system prompt reloaded.", style="info")
+    elif command_name == "/clear":
+        _handle_clear_command(llm_agent)
     elif command_name == "/approve-all":
         async with qx.core.user_prompts._approve_all_lock:
             qx.core.user_prompts._approve_all_active = True
@@ -348,6 +383,9 @@ async def _handle_inline_command(
         )
         themed_console.print(
             "  /reset      - Reset session and clear message history", style="primary"
+        )
+        themed_console.print(
+            "  /clear      - Clear the console and show the header", style="primary"
         )
         themed_console.print(
             "  /approve-all - Activate 'approve all' mode for tool confirmations",
@@ -399,7 +437,8 @@ async def _handle_inline_command(
 
         themed_console.print("\nInput Modes:", style="app.header")
         themed_console.print(
-            "  • Single-line mode (default): Qx⏵ prompt (color matches active agent)", style="warning"
+            "  • Single-line mode (default): Qx⏵ prompt (color matches active agent)",
+            style="warning",
         )
         themed_console.print("    - Enter: Submit input", style="info")
         themed_console.print("    - Esc+Enter: Switch to multiline mode", style="info")
@@ -476,7 +515,7 @@ async def _handle_inline_command(
     else:
         themed_console.print(f"Unknown command: {command_name}", style="error")
         themed_console.print(
-            "Available commands: /model, /tools, /agents, /reset, /approve-all, /print, /help",
+            "Available commands: /model, /tools, /agents, /reset, /clear, /approve-all, /print, /help",
             style="text.muted",
         )
 
@@ -518,6 +557,8 @@ async def handle_command(
         # Note: We can't actually replace the agent reference here since it's passed by value
         themed_console.print("Session reset, system prompt reloaded.", style="info")
         return None  # Clear history after reset
+    elif command_name == "/clear":
+        _handle_clear_command(llm_agent)
     elif command_name == "/print":  # Added to handle_command as well for consistency
         if command_args:
             themed_console.print(command_args)
@@ -526,6 +567,7 @@ async def handle_command(
     else:
         themed_console.print(f"Unknown command: {command_name}", style="error")
         themed_console.print(
-            "Available commands: /model, /tools, /reset, /print", style="text.muted"
+            "Available commands: /model, /tools, /reset, /clear, /print",
+            style="text.muted",
         )
     return current_message_history

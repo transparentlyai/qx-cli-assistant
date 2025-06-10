@@ -1,5 +1,7 @@
 # qx/core/constants.py
 
+QX_VERSION = "0.3.46"
+
 # Default model name if not specified by the user
 # Using LiteLLM format for OpenRouter
 DEFAULT_MODEL = "openrouter/anthropic/claude-3.5-sonnet"
