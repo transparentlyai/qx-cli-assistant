@@ -1,4 +1,3 @@
-
 import argparse
 import asyncio
 import logging
@@ -21,6 +20,7 @@ from qx.core.config_manager import ConfigManager
 from qx.core.constants import DEFAULT_SYNTAX_HIGHLIGHT_THEME
 from qx.core.llm import QXLLMAgent, load_and_format_system_prompt
 from qx.core.llm_utils import initialize_agent_with_mcp
+from qx.core.agent_manager import get_agent_manager
 from qx.core.logging_config import configure_logging, remove_temp_stream_handler
 from qx.core.session_manager import (
     clean_old_sessions,
@@ -43,6 +43,7 @@ async def _async_main(
     Asynchronous main function to handle the Qx agent logic.
     """
     init_db()
+    agent_manager = None
     try:
         async with anyio.create_task_group() as tg:
             config_manager = ConfigManager(None, parent_task_group=tg)
@@ -70,10 +71,58 @@ async def _async_main(
                 f"Using syntax highlighting theme for Markdown code blocks: {code_theme_to_use}"
             )
 
-            # Initialize LLM Agent with MCP Manager
-            llm_agent: Optional[QXLLMAgent] = await initialize_agent_with_mcp(
-                config_manager.mcp_manager
-            )
+            # Initialize Agent Manager and load default agent
+            agent_manager = get_agent_manager()
+
+            # Try to load default agent (configurable via QX_DEFAULT_AGENT)
+            default_agent_name = os.environ.get("QX_DEFAULT_AGENT", "qx")
+            try:
+                default_agent_result = await agent_manager.load_agent(
+                    default_agent_name,
+                    context={
+                        "user_context": os.environ.get("QX_USER_CONTEXT", ""),
+                        "project_context": os.environ.get("QX_PROJECT_CONTEXT", ""),
+                        "project_files": os.environ.get("QX_PROJECT_FILES", ""),
+                        "ignore_paths": "",  # Will be filled by prompt formatting
+                    },
+                    cwd=os.getcwd(),
+                )
+
+                # Initialize LLM Agent with loaded agent configuration
+                if (
+                    default_agent_result.success
+                    and default_agent_result.agent is not None
+                ):
+                    logger.info(
+                        f"Loaded agent '{default_agent_name}' from {default_agent_result.source_path}"
+                    )
+                    llm_agent: Optional[QXLLMAgent] = await initialize_agent_with_mcp(
+                        config_manager.mcp_manager,
+                        agent_config=default_agent_result.agent,
+                    )
+
+                    # Set the current agent session in the agent manager
+                    # This is needed so /agents info works correctly
+                    # Use the internal method to avoid deadlock issues
+                    agent_manager._set_current_agent_session(
+                        default_agent_name, default_agent_result.agent
+                    )
+
+                    # Register the active LLM agent so it can be updated during agent switching
+                    agent_manager.set_active_llm_agent(llm_agent)
+                else:
+                    raise Exception(
+                        f"Failed to load agent '{default_agent_name}': {default_agent_result.error}"
+                    )
+
+            except Exception as e:
+                logger.warning(f"Agent-based initialization failed: {e}")
+                logger.info("Falling back to legacy system prompt loading")
+                # Fallback to legacy initialization
+                fallback_llm_agent: Optional[
+                    QXLLMAgent
+                ] = await initialize_agent_with_mcp(config_manager.mcp_manager)
+                llm_agent = fallback_llm_agent
 
             # Get QX_KEEP_SESSIONS from environment, default to 20 if not set or invalid
             try:
@@ -120,7 +169,13 @@ async def _async_main(
                     )
                     loaded_history = load_session_from_path(Path(recover_session_path))
                     if loaded_history:
-                        system_prompt = load_and_format_system_prompt()
+                        # Use agent-based system prompt if available, fallback to legacy
+                        current_agent = await agent_manager.get_current_agent()
+                        if current_agent:
+                            system_prompt = load_and_format_system_prompt(current_agent)
+                        else:
+                            system_prompt = load_and_format_system_prompt()
+
                         current_message_history = [
                             ChatCompletionSystemMessageParam(
                                 role="system", content=system_prompt
@@ -184,7 +239,10 @@ async def _async_main(
                 try:
                     # Run inline interactive loop
                     await _run_inline_mode(
-                        llm_agent, current_message_history, keep_sessions, config_manager
+                        llm_agent,
+                        current_message_history,
+                        keep_sessions,
+                        config_manager,
                     )
                 except KeyboardInterrupt:
                     logger.debug("Qx terminated by user (Ctrl+C)")
@@ -207,10 +265,20 @@ async def _async_main(
                     except Exception as e:
                         logger.error(f"Error during LLM cleanup: {e}", exc_info=True)
 
+                    # Clean up agent manager resources
+                    try:
+                        if agent_manager:
+                            await agent_manager.cleanup()
+                    except Exception as e:
+                        logger.error(
+                            f"Error during agent manager cleanup: {e}", exc_info=True
+                        )
+
     except Exception as e:
         logger.critical(f"Critical error in _async_main: {e}", exc_info=True)
         print(f"Critical error: {e}")
         traceback.print_exc()
+
 
 def main():
     configure_logging()

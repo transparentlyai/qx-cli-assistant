@@ -443,9 +443,40 @@ async def _run_inline_mode(
             )
             save_session(current_message_history)
 
+            # Get the currently active LLM agent (may have been switched)
+            from qx.core.agent_manager import get_agent_manager
+
+            agent_manager = get_agent_manager()
+            active_llm_agent = agent_manager.get_active_llm_agent() or llm_agent
+
+            # Check if agent has changed - if so, reset conversation history for clean switch
+            if active_llm_agent != llm_agent:
+                # Agent has been switched - create fresh history with new system prompt
+                from openai.types.chat import ChatCompletionSystemMessageParam
+                from qx.core.llm_components.prompts import load_and_format_system_prompt
+
+                current_agent = await agent_manager.get_current_agent()
+                if current_agent:
+                    new_system_prompt = load_and_format_system_prompt(current_agent)
+                    current_message_history = [
+                        ChatCompletionSystemMessageParam(
+                            role="system", content=new_system_prompt
+                        ),
+                        ChatCompletionUserMessageParam(
+                            role="user", content=final_user_input
+                        ),
+                    ]
+                else:
+                    # Fallback: just reset with user message
+                    current_message_history = [
+                        ChatCompletionUserMessageParam(
+                            role="user", content=final_user_input
+                        )
+                    ]
+
             llm_task = asyncio.create_task(
                 _handle_llm_interaction(
-                    llm_agent,
+                    active_llm_agent,
                     final_user_input,
                     current_message_history,
                     "rrt",
