@@ -79,6 +79,9 @@ class QXCompleter(Completer):
                                             description = agent_data.get(
                                                 "description", description
                                             )
+                                            if len(description) > 50:
+                                                description = description[:47] + "..."
+
                                             # Get execution mode
                                             execution = agent_data.get("execution", {})
                                             mode = execution.get("mode", "interactive")
