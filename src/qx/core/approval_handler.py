@@ -97,8 +97,12 @@ class ApprovalHandler:
                 
                 if self.use_console_manager and self._console_manager:
                     self._console_manager.print(bordered_md, console=self.console, markup=True, end="")
+                    # Add newline after final tool result to separate from next agent response
+                    self._console_manager.print("", console=self.console)
                 else:
                     self.console.print(bordered_md, markup=True, end="")
+                    # Add newline after final tool result to separate from next agent response
+                    self.console.print("")
                 return
             except Exception:
                 # Fall through to regular printing if BorderedMarkdown fails
