@@ -79,14 +79,18 @@ class ApprovalHandler:
                 from rich.markdown import Markdown
                 
                 # Format with appropriate colors: green for success, red for failure
+                # Use Rich Text instead of Markdown to support Rich markup
+                from rich.text import Text
+                
                 status_icon = "✓" if success else "✗"
                 status_color = "dim green" if success else "dim red"
-                markdown_content = f"[{status_color}]└─ {status_icon} {action} {outcome}[/{status_color}]"
+                rich_content = f"[{status_color}]└─ {status_icon} {action} {outcome}[/{status_color}]"
                 
                 # Use agent color for border
                 color = get_agent_color(agent_name, agent_color)
+                rich_text = Text.from_markup(rich_content)
                 bordered_md = BorderedMarkdown(
-                    Markdown(markdown_content, code_theme="rrt"),
+                    rich_text,
                     border_style=f"dim {color}",
                     background_color="#080808"
                 )
