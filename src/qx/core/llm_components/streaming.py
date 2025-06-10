@@ -58,10 +58,12 @@ class StreamingHandler:
         make_litellm_call_func: Callable,
         handle_timeout_fallback_func: Callable,
         process_tool_calls_func: Callable,
+        console: Any = None,
     ):
         self._make_litellm_call = make_litellm_call_func
         self._handle_timeout_fallback = handle_timeout_fallback_func
         self._process_tool_calls_and_continue = process_tool_calls_func
+        self._console = console
         self._current_agent_name = None
         self._current_agent_color = None
     
@@ -122,8 +124,8 @@ class StreamingHandler:
                     from rich.text import Text
                     from qx.cli.theme import custom_theme
                     
-                    # Create console with custom theme
-                    rich_console = Console(theme=custom_theme)
+                    # Use the main console if available, otherwise create one with theme
+                    rich_console = self._console if self._console else Console(theme=custom_theme)
                     
                     # Show agent title for the first meaningful content
                     if show_agent_title:
@@ -139,23 +141,29 @@ class StreamingHandler:
                     color = get_agent_color(agent_name, agent_color)
                     bordered_md = BorderedMarkdown(
                         Markdown(processed_content, code_theme="rrt"),
-                        border_style=color
+                        border_style=color,
+                        background_color="#080808"
                     )
                     rich_console.print(bordered_md, end="", markup=True)
                 else:
-                    # Fallback to standard markdown rendering
+                    # Fallback to standard markdown rendering with BorderedMarkdown
                     from rich.console import Console
                     from rich.markdown import Markdown
                     from qx.cli.theme import custom_theme
+                    from qx.cli.quote_bar_component import BorderedMarkdown
 
-                    rich_console = Console(theme=custom_theme)
+                    # Use the main console if available, otherwise create one with theme
+                    rich_console = self._console if self._console else Console(theme=custom_theme)
                     # Pre-process content to handle Rich markup within markdown
                     processed_content = content
-                    # Use Rich's markup parsing capabilities by printing with markup=True
-                    # This allows both markdown and Rich markup to coexist
-                    rich_console.print(
-                        Markdown(processed_content, code_theme="rrt"), end="", markup=True
+                    
+                    # Use BorderedMarkdown for consistent styling
+                    bordered_md = BorderedMarkdown(
+                        Markdown(processed_content, code_theme="rrt"),
+                        border_style="dim blue",
+                        background_color="#080808"
                     )
+                    rich_console.print(bordered_md, end="", markup=True)
 
         # Stream content directly to console
         stream = None
@@ -182,8 +190,9 @@ class StreamingHandler:
 
         try:
             from rich.console import Console
+            from qx.cli.theme import custom_theme
 
-            console = Console()
+            console = self._console if self._console else Console(theme=custom_theme)
 
             with console.status(
                 "[dim]Processing[/dim]", spinner="point", speed=2, refresh_per_second=25
@@ -252,8 +261,9 @@ class StreamingHandler:
                                     status.stop()
 
                                 from rich.console import Console
+                                from qx.cli.theme import custom_theme
 
-                                reasoning_console = Console()
+                                reasoning_console = self._console if self._console else Console(theme=custom_theme)
                                 reasoning_console.print(
                                     f"[dim]{reasoning_text}[/dim]", end=""
                                 )
