@@ -102,8 +102,19 @@ class StreamingHandler:
 
         markdown_buffer = create_markdown_buffer()
         
-        # Track if we should show agent title for this response
+        # Track if we should show agent title for this response  
         show_agent_title = True
+        
+        # Track if we need to show agent title for tool execution
+        tools_executed = False
+        
+        # If this is a continuation after tools, add spacing
+        if user_input == "__CONTINUE_AFTER_TOOLS__":
+            from rich.console import Console
+            from qx.cli.theme import custom_theme
+            
+            console = self._console if self._console else Console(theme=custom_theme)
+            console.print()  # Add spacing before agent response after tools
 
         # Helper function to render content as markdown via rich console
         async def render_content(content: str) -> None:
@@ -537,12 +548,58 @@ class StreamingHandler:
 
         # Process tool calls if any
         if accumulated_tool_calls:
+            tools_executed = True
+            
+            # Add spacing and agent headers for tool execution if we haven't shown agent title yet
+            # or if we had content rendered (meaning this is a separate tool execution block)
+            if has_rendered_content or accumulated_content.strip():
+                # Add spacing before tool execution block
+                from rich.console import Console
+                from qx.cli.theme import custom_theme
+                
+                console = self._console if self._console else Console(theme=custom_theme)
+                console.print()  # Add spacing
+            
+            # Show agent headers for tool execution
+            agent_name = getattr(self, '_current_agent_name', None)
+            agent_color = getattr(self, '_current_agent_color', None)
+            
+            if agent_name:
+                from qx.cli.quote_bar_component import get_agent_color
+                from rich.text import Text
+                from rich.console import Console
+                from qx.cli.theme import custom_theme
+                
+                console = self._console if self._console else Console(theme=custom_theme)
+                color = get_agent_color(agent_name, agent_color)
+                console.print(Text(agent_name, style="bold"))
+                console.print(Text("─" * len(agent_name), style=color))
+            
             # Pass empty content if we cleared narration
             streaming_response_message.content = (
                 accumulated_content if accumulated_content else None
             )
-            return await self._process_tool_calls_and_continue(
-                streaming_response_message, messages, user_input, recursion_depth
-            )
+            
+            # Set agent context for tools to use BorderedMarkdown
+            from qx.core.approval_handler import set_global_agent_context, clear_global_agent_context
+            
+            if agent_name:
+                set_global_agent_context(agent_name, agent_color)
+            
+            try:
+                result = await self._process_tool_calls_and_continue(
+                    streaming_response_message, messages, user_input, recursion_depth
+                )
+                
+                # After tool execution, ensure next agent response gets headers
+                # Reset the agent title flag for the next response
+                if hasattr(result, '_reset_agent_title'):
+                    result._reset_agent_title = True
+                    
+                return result
+            finally:
+                # Clean up agent context
+                if agent_name:
+                    clear_global_agent_context()
         else:
             return QXRunResult(accumulated_content or "", messages)
