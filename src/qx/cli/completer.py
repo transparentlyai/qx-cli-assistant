@@ -194,7 +194,7 @@ class QXCompleter(Completer):
                                 yield Completion(
                                     agent_name,
                                     start_position=-len(word_before_cursor),
-                                    display=f"{agent_name}  [{agent_info['mode']}]",
+                                    display=agent_name,
                                     display_meta=agent_info["description"],
                                 )
             return
@@ -253,14 +253,14 @@ class QXCompleter(Completer):
                             yield Completion(
                                 completion_text,
                                 start_position=-len(current_word),
-                                display=f"{candidate}{display_suffix}  [{'dir' if is_dir else 'file'}]",
+                                display=f"{candidate}{display_suffix}",
                             )
                         except OSError:
                             # Handle permission errors or other OS errors
                             yield Completion(
                                 candidate,
                                 start_position=-len(current_word),
-                                display=f"{candidate}  [file]",
+                                display=candidate,
                             )
             except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
                 # Fall back to no completions on error
