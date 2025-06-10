@@ -27,7 +27,10 @@ class QXCompleter(Completer):
             {"name": "switch", "description": "Switch to a different agent"},
             {"name": "info", "description": "Show current agent information"},
             {"name": "reload", "description": "Reload agent configuration"},
-            {"name": "refresh", "description": "Refresh agent discovery (find new project agents)"},
+            {
+                "name": "refresh",
+                "description": "Refresh agent discovery (find new project agents)",
+            },
         ]
         self._cached_agents: List[Dict[str, Any]] = []
         self._cache_timestamp = 0
@@ -45,8 +48,8 @@ class QXCompleter(Completer):
         # Cache for 10 seconds to avoid repeated filesystem access
         # Also refresh if working directory changed (for project agents)
         cache_expired = current_time - self._cache_timestamp > 10
-        cwd_changed = getattr(self, '_last_cwd', None) != current_cwd
-        
+        cwd_changed = getattr(self, "_last_cwd", None) != current_cwd
+
         if cache_expired or cwd_changed:
             try:
                 # This is a synchronous version, so we'll use a simple approach
@@ -100,8 +103,10 @@ class QXCompleter(Completer):
                                     "mode": mode,
                                 }
                                 if is_project_agent:
-                                    agent_info["description"] = f"📁 {description}"  # Project folder emoji
-                                
+                                    agent_info["description"] = (
+                                        f"📁 {description}"  # Project folder emoji
+                                    )
+
                                 agents_info.append(agent_info)
 
                 self._cached_agents = agents_info
@@ -171,7 +176,7 @@ class QXCompleter(Completer):
                         yield Completion(
                             subcommand,
                             start_position=-len(word_before_cursor),
-                            display=f"{subcommand}  [agent cmd]",
+                            display=subcommand,
                             display_meta=subcommand_info["description"],
                         )
             elif len(parts) >= 1:
@@ -221,7 +226,7 @@ class QXCompleter(Completer):
                     yield Completion(
                         command,
                         start_position=-len(current_word),
-                        display=f"{command}  [cmd]",
+                        display=command,
                         display_meta=command_descriptions.get(command, "Command"),
                     )
             return
