@@ -322,8 +322,10 @@ class QXLLMAgent:
             if self.enable_streaming:
                 # Add streaming parameter
                 chat_params["stream"] = True
-                # Note: Removed empty line before streaming response to prevent spacing issues
-                # with BorderedMarkdown tool messages
+                # Add an empty line before the streaming response starts
+                from rich.console import Console
+
+                Console().print("")
                 return await self._streaming_handler.handle_streaming_response(
                     chat_params, messages, user_input, _recursion_depth
                 )

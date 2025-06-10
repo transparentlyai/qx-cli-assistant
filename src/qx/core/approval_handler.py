@@ -187,8 +187,11 @@ class ApprovalHandler:
                 additional_content=content_to_display
             )
             
-            # Note: Removed empty line after permission request to prevent spacing issues
-            # between tool messages when using BorderedMarkdown
+            # Add empty line after permission request
+            if self.use_console_manager and self._console_manager:
+                self._console_manager.print("", console=self.console)
+            else:
+                self.console.print("")
         else:
             # Fallback to standard display
             header = f"{operation}: {parameter_value}"

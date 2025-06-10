@@ -311,7 +311,7 @@ def _display_todo_with_tasks(console: RichConsole, todo: Dict[str, Any]) -> None
     
     # Use thread-safe console output
     _managed_plugin_print(panel)
-    # Note: Removed spacing to prevent extra lines between tool messages
+    _managed_plugin_print("")  # Add spacing
 
 async def todo_manager_tool(
     console: RichConsole, 
