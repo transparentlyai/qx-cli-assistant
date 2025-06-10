@@ -184,6 +184,13 @@ class AgentLoader:
         Validate agent data and create AgentConfig instance.
         """
         try:
+            # Check mandatory fields first
+            mandatory_fields = ["name", "enabled", "description", "role", "instructions"]
+            missing_fields = [field for field in mandatory_fields if field not in agent_data or agent_data[field] is None]
+            
+            if missing_fields:
+                raise ValueError(f"Missing mandatory fields: {', '.join(missing_fields)}")
+
             # Ensure model configuration exists with environment variable fallback
             if "model" not in agent_data:
                 from qx.core.constants import DEFAULT_MODEL
@@ -323,6 +330,8 @@ class AgentLoader:
                 "name": agent_name,
                 "description": agent_data.get("description", "No description"),
                 "version": agent_data.get("version", "Unknown"),
+                "type": agent_data.get("type", "user"),
+                "enabled": agent_data.get("enabled", True),
                 "tools": agent_data.get("tools", []),
                 "model": agent_data.get("model", {}),
                 "path": str(agent_path),
@@ -333,6 +342,58 @@ class AgentLoader:
         except Exception as e:
             logger.error(f"Failed to get info for agent '{agent_name}': {e}")
             return None
+
+    def discover_user_agents(self, cwd: Optional[str] = None) -> List[str]:
+        """
+        Discover only user-facing agents (excludes system agents).
+        Returns list of agent names that are not marked as type='system'.
+        """
+        all_agents = self.discover_agents(cwd)
+        user_agents = []
+        
+        for agent_name in all_agents:
+            agent_info = self.get_agent_info(agent_name, cwd)
+            if agent_info and agent_info.get("type", "user") != "system":
+                user_agents.append(agent_name)
+                
+        return user_agents
+
+    def discover_system_agents(self, cwd: Optional[str] = None) -> List[str]:
+        """
+        Discover only system agents (type='system').
+        Returns list of agent names that are marked as type='system'.
+        """
+        all_agents = self.discover_agents(cwd)
+        system_agents = []
+        
+        for agent_name in all_agents:
+            agent_info = self.get_agent_info(agent_name, cwd)
+            if agent_info and agent_info.get("type") == "system":
+                system_agents.append(agent_name)
+                
+        return system_agents
+
+    def discover_enabled_agents(self, cwd: Optional[str] = None, agent_type: Optional[str] = None) -> List[str]:
+        """
+        Discover only enabled agents, optionally filtered by type.
+        
+        Args:
+            cwd: Current working directory for path resolution
+            agent_type: Filter by agent type ('user', 'system', or None for all)
+        
+        Returns:
+            List of enabled agent names
+        """
+        all_agents = self.discover_agents(cwd)
+        enabled_agents = []
+        
+        for agent_name in all_agents:
+            agent_info = self.get_agent_info(agent_name, cwd)
+            if agent_info and agent_info.get("enabled", True):
+                if agent_type is None or agent_info.get("type", "user") == agent_type:
+                    enabled_agents.append(agent_name)
+                    
+        return enabled_agents
 
 
 # Global singleton instance

@@ -245,22 +245,18 @@ class AgentLifecycleHooks(BaseModel):
 class AgentConfig(BaseModel):
     """Complete agent configuration schema that preserves existing YAML structure"""
 
-    # Basic agent metadata
-    name: Optional[str] = Field(
-        default_factory=lambda: os.environ.get("QX_AGENT_NAME", AGENT_NAME_DEFAULT)
-    )
+    # Basic agent metadata (mandatory fields)
+    name: str = Field(..., description="Agent name")
+    enabled: bool = Field(..., description="Whether the agent is enabled")
+    description: str = Field(..., description="Agent description")
+    type: Optional[str] = Field(default="user", description="Agent type: 'user' (default) or 'system'")
     version: Optional[str] = Field(
         default_factory=lambda: os.environ.get(
             "QX_AGENT_VERSION", AGENT_VERSION_DEFAULT
         )
     )
-    description: Optional[str] = Field(
-        default_factory=lambda: os.environ.get(
-            "QX_AGENT_DESCRIPTION", AGENT_DESCRIPTION_DEFAULT
-        )
-    )
 
-    # Core agent configuration (preserving existing structure)
+    # Core agent configuration (mandatory fields)
     role: str = Field(..., description="Agent role and persona")
     instructions: str = Field(..., description="Detailed operational guidelines")
     context: Optional[str] = Field(
