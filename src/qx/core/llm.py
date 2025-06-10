@@ -322,10 +322,13 @@ class QXLLMAgent:
             if self.enable_streaming:
                 # Add streaming parameter
                 chat_params["stream"] = True
-                # Add an empty line before the streaming response starts
-                from rich.console import Console
-
-                Console().print("")
+                
+                # Only add empty line for initial responses, not for tool continuations
+                if user_input != "__CONTINUE_AFTER_TOOLS__":
+                    # Add an empty line before the streaming response starts
+                    from rich.console import Console
+                    Console().print("")
+                
                 return await self._streaming_handler.handle_streaming_response(
                     chat_params, messages, user_input, _recursion_depth
                 )
