@@ -76,18 +76,9 @@ class QXCompleter(Completer):
                                     with open(agent_file, "r") as f:
                                         agent_data = yaml.safe_load(f)
                                         if agent_data:
-                                            # Extract description from role field
-                                            role = agent_data.get("role", "")
-                                            if role:
-                                                # Get first line of role as description
-                                                description = role.split("\n")[
-                                                    0
-                                                ].strip()
-                                                if len(description) > 50:
-                                                    description = (
-                                                        description[:47] + "..."
-                                                    )
-
+                                            description = agent_data.get(
+                                                "description", description
+                                            )
                                             # Get execution mode
                                             execution = agent_data.get("execution", {})
                                             mode = execution.get("mode", "interactive")
