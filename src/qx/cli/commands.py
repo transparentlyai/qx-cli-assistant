@@ -198,22 +198,12 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
             )
 
             if success:
-                themed_console.print(
-                    f"Successfully switched to agent '{agent_name}'", style="info"
-                )
-
-                # Show the new agent info
+                # Show simple agent switch message
                 current_agent = await agent_manager.get_current_agent()
                 if current_agent:
-                    role_preview = (
-                        current_agent.role[:100] + "..."
-                        if len(current_agent.role) > 100
-                        else current_agent.role
-                    )
-                    themed_console.print(f"Role: {role_preview}", style="dim white")
+                    agent_display_name = current_agent.name or agent_name
                     themed_console.print(
-                        "Agent is now active and will respond to your queries.",
-                        style="info",
+                        f"You are now talking to {agent_display_name}", style="text.muted"
                     )
             else:
                 themed_console.print(
@@ -409,11 +399,11 @@ async def _handle_inline_command(
 
         themed_console.print("\nInput Modes:", style="app.header")
         themed_console.print(
-            "  • Single-line mode (default): Qx⏵ prompt", style="warning"
+            "  • Single-line mode (default): Qx⏵ prompt (color matches active agent)", style="warning"
         )
         themed_console.print("    - Enter: Submit input", style="info")
         themed_console.print("    - Esc+Enter: Switch to multiline mode", style="info")
-        themed_console.print("  • Multiline mode: Qm⏵ prompt", style="warning")
+        themed_console.print("  • Multiline mode: Qxm⏵ prompt (blue)", style="warning")
         themed_console.print(
             "    - Enter: Add newline (continue editing)", style="info"
         )

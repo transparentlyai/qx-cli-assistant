@@ -309,3 +309,6 @@ class AgentConfig(BaseModel):
     created_at: Optional[str] = Field(default=None)
     updated_at: Optional[str] = Field(default=None)
     tags: List[str] = Field(default_factory=list)
+    
+    # UI configuration
+    color: Optional[str] = Field(default=None, description="Agent display color (hex format)")

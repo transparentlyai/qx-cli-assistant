@@ -249,8 +249,10 @@ class AgentLoader:
             # Validate and create agent config
             agent_config = self.validate_and_create_agent(agent_data)
 
-            # Update metadata
-            agent_config.name = agent_name
+            # Update metadata - preserve YAML name if specified, otherwise use filename
+            if not agent_config.name or agent_config.name.strip() == "":
+                agent_config.name = agent_name
+            
             if not agent_config.execution.console.source_identifier:
                 agent_config.execution.console.source_identifier = agent_name.upper()
 

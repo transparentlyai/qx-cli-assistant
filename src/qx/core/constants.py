@@ -304,3 +304,14 @@ MODELS = (
         "accepts": ("thinking"),
     },
 )
+
+RANDOM_AGENT_COLORS = [
+    "#ff5f00",
+    "#0087ff",
+    "#00d700",
+    "#5f5fff",
+    "#ff87ff",
+    "#ffd700",
+    "#d787ff",
+    "#af87d7",
+]
