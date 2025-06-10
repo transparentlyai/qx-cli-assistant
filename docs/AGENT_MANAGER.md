@@ -435,8 +435,8 @@ The agent system maintains full backward compatibility:
 - **Solution**: Check file location and ensure `.agent.yaml` suffix
 
 #### Configuration Validation Errors
-- **Cause**: Invalid YAML syntax or missing required fields
-- **Solution**: Validate YAML syntax and check against schema
+- **Cause**: Invalid YAML syntax or missing mandatory fields (name, enabled, description, role, instructions)
+- **Solution**: Validate YAML syntax and ensure all mandatory fields are present
 
 #### Template Context Errors
 - **Cause**: Invalid template placeholders or context variables

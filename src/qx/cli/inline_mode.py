@@ -357,7 +357,7 @@ async def _run_inline_mode(
         auto_suggest=AutoSuggestFromHistory(),
         enable_history_search=False,
         completer=qx_completer,
-        complete_style=CompleteStyle.MULTI_COLUMN,
+        complete_style=CompleteStyle.COLUMN,
         key_bindings=bindings,
         mouse_support=False,
         wrap_lines=True,
