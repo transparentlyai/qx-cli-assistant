@@ -370,10 +370,31 @@ async def _run_inline_mode(
             if not is_multiline_mode[0]:
                 is_multiline_mode[0] = False
 
+            # Get current agent color for prompt (text always remains "Qx")
+            from qx.core.agent_manager import get_agent_manager
+            
+            agent_manager = get_agent_manager()
+            current_agent_config = await agent_manager.get_current_agent()
+            
+            if current_agent_config:
+                agent_color = getattr(current_agent_config, 'color', None)
+                
+                # Use agent color if available, otherwise fallback to random color
+                if agent_color:
+                    prompt_color = agent_color
+                else:
+                    # Import color selection function and use agent name for consistent color
+                    from qx.cli.quote_bar_component import get_agent_color
+                    agent_name = current_agent_config.name or "Qx"
+                    prompt_color = get_agent_color(agent_name, None)
+            else:
+                # Fallback when no agent is loaded
+                prompt_color = "#ff5f00"
+            
             current_prompt = (
-                HTML('<style fg="#0087ff">Qm⏵</style> ')
+                HTML('<style fg="#0087ff">Qxm⏵</style> ')
                 if is_multiline_mode[0]
-                else HTML('<style fg="#ff5f00">Qx⏵</style> ')
+                else HTML(f'<style fg="{prompt_color}">Qx⏵</style> ')
             )
 
             # Stop global hotkeys before prompt_toolkit takes control

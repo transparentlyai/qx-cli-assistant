@@ -119,10 +119,7 @@ class AgentManager:
                         except Exception as e:
                             logger.error(f"Error in agent loaded callback: {e}")
 
-                    self._console_print(
-                        f"Loaded agent '{agent_name}' from {result.source_path}",
-                        style="green",
-                    )
+                    logger.debug(f"Loaded agent '{agent_name}' from {result.source_path}")
                 else:
                     self._console_print(
                         f"Failed to load agent '{agent_name}': {result.error}",
@@ -190,10 +187,7 @@ class AgentManager:
                     except Exception as e:
                         logger.error(f"Error in agent switched callback: {e}")
 
-                self._console_print(
-                    f"Switched to agent '{agent_name}' (was '{old_agent_name}')",
-                    style="blue",
-                )
+                logger.debug(f"Switched to agent '{agent_name}' (was '{old_agent_name}')")
 
             return result
 

@@ -62,6 +62,18 @@ class StreamingHandler:
         self._make_litellm_call = make_litellm_call_func
         self._handle_timeout_fallback = handle_timeout_fallback_func
         self._process_tool_calls_and_continue = process_tool_calls_func
+        self._current_agent_name = None
+        self._current_agent_color = None
+    
+    def set_agent_context(self, agent_name: str, agent_color: str = None) -> None:
+        """Set the current agent context for quote bar rendering."""
+        self._current_agent_name = agent_name
+        self._current_agent_color = agent_color
+    
+    def clear_agent_context(self) -> None:
+        """Clear the current agent context."""
+        self._current_agent_name = None
+        self._current_agent_color = None
 
     async def handle_streaming_response(
         self,
@@ -87,27 +99,63 @@ class StreamingHandler:
         from qx.core.markdown_buffer import create_markdown_buffer
 
         markdown_buffer = create_markdown_buffer()
+        
+        # Track if we should show agent title for this response
+        show_agent_title = True
 
         # Helper function to render content as markdown via rich console
         async def render_content(content: str) -> None:
-            nonlocal has_rendered_content, total_rendered_content
+            nonlocal has_rendered_content, total_rendered_content, show_agent_title
             if content and content.strip():
                 has_rendered_content = True
                 total_rendered_content += content  # Track for validation
-                # Output as markdown with Rich markup support
-                from rich.console import Console
-                from rich.markdown import Markdown
+                
+                # Check if we have agent context for quote bar rendering
+                agent_name = getattr(self, '_current_agent_name', None)
+                agent_color = getattr(self, '_current_agent_color', None)
+                
+                if agent_name:
+                    # Use agent quote bar rendering
+                    from qx.cli.quote_bar_component import BorderedMarkdown, get_agent_color
+                    from rich.console import Console
+                    from rich.markdown import Markdown
+                    from rich.text import Text
+                    from qx.cli.theme import custom_theme
+                    
+                    # Create console with custom theme
+                    rich_console = Console(theme=custom_theme)
+                    
+                    # Show agent title for the first meaningful content
+                    if show_agent_title:
+                        color = get_agent_color(agent_name, agent_color)
+                        rich_console.print(Text(agent_name, style="bold"))
+                        rich_console.print(Text("─" * len(agent_name), style=color))
+                        show_agent_title = False
+                    
+                    # Pre-process content to handle Rich markup within markdown
+                    processed_content = content
+                    
+                    # Render with border for all chunks
+                    color = get_agent_color(agent_name, agent_color)
+                    bordered_md = BorderedMarkdown(
+                        Markdown(processed_content, code_theme="rrt"),
+                        border_style=color
+                    )
+                    rich_console.print(bordered_md, end="", markup=True)
+                else:
+                    # Fallback to standard markdown rendering
+                    from rich.console import Console
+                    from rich.markdown import Markdown
+                    from qx.cli.theme import custom_theme
 
-                from qx.cli.theme import custom_theme
-
-                rich_console = Console(theme=custom_theme)
-                # Pre-process content to handle Rich markup within markdown
-                processed_content = content
-                # Use Rich's markup parsing capabilities by printing with markup=True
-                # This allows both markdown and Rich markup to coexist
-                rich_console.print(
-                    Markdown(processed_content, code_theme="rrt"), end="", markup=True
-                )
+                    rich_console = Console(theme=custom_theme)
+                    # Pre-process content to handle Rich markup within markdown
+                    processed_content = content
+                    # Use Rich's markup parsing capabilities by printing with markup=True
+                    # This allows both markdown and Rich markup to coexist
+                    rich_console.print(
+                        Markdown(processed_content, code_theme="rrt"), end="", markup=True
+                    )
 
         # Stream content directly to console
         stream = None

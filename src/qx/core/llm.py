@@ -51,6 +51,8 @@ class QXLLMAgent:
         max_output_tokens: Optional[int] = None,
         reasoning_effort: Optional[str] = None,
         enable_streaming: bool = True,
+        agent_name: Optional[str] = None,
+        agent_color: Optional[str] = None,
     ):
         self.model_name = model_name
         self.system_prompt = system_prompt
@@ -59,6 +61,8 @@ class QXLLMAgent:
         self.max_output_tokens = max_output_tokens
         self.reasoning_effort = reasoning_effort
         self.enable_streaming = enable_streaming
+        self.agent_name = agent_name
+        self.agent_color = agent_color
 
         self._tool_functions: Dict[str, Callable] = {}
         self._openai_tools_schema: List[ChatCompletionToolParam] = []
@@ -104,6 +108,15 @@ class QXLLMAgent:
             self._handle_timeout_fallback,
             self._process_tool_calls_and_continue,
         )
+        
+        # Set agent context for streaming handler if available
+        if self.agent_name:
+            self._streaming_handler.set_agent_context(self.agent_name, self.agent_color)
+            
+            # Set global agent context for approval handlers in plugins
+            from qx.core.approval_handler import set_global_agent_context
+            set_global_agent_context(self.agent_name, self.agent_color)
+        
         self._tool_processor = ToolProcessor(
             self._tool_functions, self._tool_input_models, self.console, self.run
         )
@@ -479,6 +492,17 @@ def initialize_llm_agent(
         # Use a default console if none provided
         effective_console = console if console is not None else RichConsoleClass()
 
+        # Extract agent name and color from agent config
+        agent_name = None
+        agent_color = None
+        if agent_config is not None:
+            try:
+                agent_name = getattr(agent_config, "name", None)
+                agent_color = getattr(agent_config, "color", None)
+                logger.debug(f"Agent context: name='{agent_name}', color='{agent_color}'")
+            except AttributeError:
+                logger.debug("No agent name/color found in config")
+
         agent = QXLLMAgent(
             model_name=model_name_str,
             system_prompt=system_prompt_content,
@@ -488,6 +512,8 @@ def initialize_llm_agent(
             max_output_tokens=max_output_tokens,
             reasoning_effort=reasoning_effort,
             enable_streaming=enable_streaming,
+            agent_name=agent_name,
+            agent_color=agent_color,
         )
         return agent
 

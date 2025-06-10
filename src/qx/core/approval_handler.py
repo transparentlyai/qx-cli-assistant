@@ -8,6 +8,23 @@ from qx.core.user_prompts import (
     _approve_all_lock,
 )
 
+# Global agent context for approval handlers
+_global_agent_context: Optional[dict] = None
+
+def set_global_agent_context(agent_name: str, agent_color: Optional[str] = None) -> None:
+    """Set global agent context for approval handlers."""
+    global _global_agent_context
+    _global_agent_context = {"name": agent_name, "color": agent_color}
+
+def get_global_agent_context() -> Optional[dict]:
+    """Get global agent context."""
+    return _global_agent_context
+
+def clear_global_agent_context() -> None:
+    """Clear global agent context."""
+    global _global_agent_context
+    _global_agent_context = None
+
 
 class ApprovalHandler:
     """
@@ -21,6 +38,8 @@ class ApprovalHandler:
         self.console = console
         self.use_console_manager = use_console_manager
         self._console_manager = None
+        self._current_agent_name = None
+        self._current_agent_color = None
         
         if self.use_console_manager:
             try:
@@ -29,6 +48,16 @@ class ApprovalHandler:
             except Exception:
                 # Fallback to direct console usage if manager unavailable
                 self.use_console_manager = False
+    
+    def set_agent_context(self, agent_name: str, agent_color: str = None) -> None:
+        """Set the current agent context for permission request rendering."""
+        self._current_agent_name = agent_name
+        self._current_agent_color = agent_color
+    
+    def clear_agent_context(self) -> None:
+        """Clear the current agent context."""
+        self._current_agent_name = None
+        self._current_agent_color = None
 
     def print_outcome(self, action: str, outcome: str, success: bool = True):
         """Prints the final outcome of an operation."""
@@ -63,23 +92,77 @@ class ApprovalHandler:
         """
         if await is_approve_all_active():
             header = f"{operation} (Auto-approved) {parameter_name}: [primary]'{parameter_value}'[/]"
+            
+            # Use local or global agent context
+            agent_name = self._current_agent_name
+            agent_color = self._current_agent_color
+            if not agent_name:
+                global_context = get_global_agent_context()
+                if global_context:
+                    agent_name = global_context.get("name")
+                    agent_color = global_context.get("color")
+            
+            if agent_name:
+                # Use agent quote bar for auto-approved requests
+                from qx.cli.quote_bar_component import render_agent_permission_request
+                request_text = f"{operation} (Auto-approved)\n\n{parameter_name}: `{parameter_value}`"
+                render_agent_permission_request(
+                    request_text, 
+                    agent_name, 
+                    agent_color, 
+                    console=self.console,
+                    additional_content=None
+                )
+            else:
+                if self.use_console_manager and self._console_manager:
+                    self._console_manager.print(header, console=self.console)
+                else:
+                    self.console.print(header)
+            return "session_approved", "a"
+
+        # Format permission request content
+        agent_name = self._current_agent_name
+        agent_color = self._current_agent_color
+        
+        # Fall back to global agent context if local context not available
+        if not agent_name:
+            global_context = get_global_agent_context()
+            if global_context:
+                agent_name = global_context.get("name")
+                agent_color = global_context.get("color")
+        
+        if agent_name:
+            # Use agent quote bar for permission requests
+            from qx.cli.quote_bar_component import render_agent_permission_request
+            
+            request_content = f"{operation}\n\n{parameter_name}: `{parameter_value}`"
+            
+            render_agent_permission_request(
+                request_content, 
+                agent_name, 
+                agent_color, 
+                console=self.console,
+                additional_content=content_to_display
+            )
+            
+            # Add empty line after permission request
+            if self.use_console_manager and self._console_manager:
+                self._console_manager.print("", console=self.console)
+            else:
+                self.console.print("")
+        else:
+            # Fallback to standard display
+            header = f"{operation}: {parameter_value}"
             if self.use_console_manager and self._console_manager:
                 self._console_manager.print(header, console=self.console)
             else:
                 self.console.print(header)
-            return "session_approved", "a"
 
-        header = f"{operation}: {parameter_value}"
-        if self.use_console_manager and self._console_manager:
-            self._console_manager.print(header, console=self.console)
-        else:
-            self.console.print(header)
-
-        if content_to_display:
-            if self.use_console_manager and self._console_manager:
-                self._console_manager.print(content_to_display, console=self.console)
-            else:
-                self.console.print(content_to_display)
+            if content_to_display:
+                if self.use_console_manager and self._console_manager:
+                    self._console_manager.print(content_to_display, console=self.console)
+                else:
+                    self.console.print(content_to_display)
 
         options = [
             ("y", "Yes", "approved"),
