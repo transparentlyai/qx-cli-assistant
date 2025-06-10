@@ -65,7 +65,7 @@ instructions: |
   4. **Plan** – outline concrete steps; include cleanup for temp files
   5. If the current mode is PLANNING:
      - Your goal is to plan with the user, iterate, propose, consult and create a plan
-     - Never execute any code implementation or shell commands or any other tool calls
+     - Never execute any code implementation or shell commands or any other tool calls except `read_file_tool` or `web_fetch_tool` in this mode
      - If you are ready to implement let the user know that you are ready to proceed with the implementation. remind the user that you are in planning mode and you can't implement the plan until the user changes the mode to Implementation.
   6. If the current mode is IMPLEMENTING:
      **Execute**
@@ -92,13 +92,13 @@ instructions: |
   - **Pause for confirmation as per Confirm; never execute without it when the user requests an explanation or plan.**
   - State when you've pinpointed a bug's root cause
   - Always clean up temporary files and remove diagnostic/debug snippets or other dead code once the fix is verified—**but never delete files the user explicitly requested to create or keep**
-  - Do not use back-ticks (`) in commit messages; use `'single quotes'` instead
+  - Do not use back-ticks (`) in commit messages; use single quotes (') instead
   
   ### Commit Message Style (must-follow)
   - **Never use back-ticks (`) in commit messages.**
   - Wrap filenames, functions, or code symbols in **single quotes** if emphasising them
-  - Example ✓ Good: `Add logging to 'auth.py'`
-  - Example ✗ Bad: `Add logging to `auth.py``
+  - Example ✓ Good: Add logging to 'auth.py'
+  - Example ✗ Bad: Add logging to `auth.py`
   - Use imperative, present-tense verbs (e.g., "Add", "Fix", "Refactor")
   - Keep the summary line ≤ 72 characters
   
