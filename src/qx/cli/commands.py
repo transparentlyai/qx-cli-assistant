@@ -354,8 +354,6 @@ async def _handle_inline_command(
         # Just reset message history in inline mode
         reset_session()
         themed_console.print("Session reset, system prompt reloaded.", style="info")
-    elif command_name == "/clear":
-        _handle_clear_command(llm_agent)
     elif command_name == "/approve-all":
         async with qx.core.user_prompts._approve_all_lock:
             qx.core.user_prompts._approve_all_active = True
@@ -383,9 +381,6 @@ async def _handle_inline_command(
         )
         themed_console.print(
             "  /reset      - Reset session and clear message history", style="primary"
-        )
-        themed_console.print(
-            "  /clear      - Clear the console and show the header", style="primary"
         )
         themed_console.print(
             "  /approve-all - Activate 'approve all' mode for tool confirmations",
@@ -515,7 +510,7 @@ async def _handle_inline_command(
     else:
         themed_console.print(f"Unknown command: {command_name}", style="error")
         themed_console.print(
-            "Available commands: /model, /tools, /agents, /reset, /clear, /approve-all, /print, /help",
+            "Available commands: /model, /tools, /agents, /reset, /approve-all, /print, /help",
             style="text.muted",
         )
 
@@ -557,8 +552,6 @@ async def handle_command(
         # Note: We can't actually replace the agent reference here since it's passed by value
         themed_console.print("Session reset, system prompt reloaded.", style="info")
         return None  # Clear history after reset
-    elif command_name == "/clear":
-        _handle_clear_command(llm_agent)
     elif command_name == "/print":  # Added to handle_command as well for consistency
         if command_args:
             themed_console.print(command_args)
@@ -567,7 +560,7 @@ async def handle_command(
     else:
         themed_console.print(f"Unknown command: {command_name}", style="error")
         themed_console.print(
-            "Available commands: /model, /tools, /reset, /clear, /print",
+            "Available commands: /model, /tools, /reset, /print",
             style="text.muted",
         )
     return current_message_history

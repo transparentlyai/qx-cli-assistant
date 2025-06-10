@@ -16,7 +16,7 @@ from prompt_toolkit.shortcuts.prompt import CompleteStyle
 from prompt_toolkit.styles import Style
 from prompt_toolkit.validation import ValidationError, Validator
 
-from qx.cli.commands import _handle_inline_command
+from qx.cli.commands import _handle_inline_command, _handle_clear_command
 from qx.cli.completer import QXCompleter
 from qx.cli.history import QXHistory
 from qx.cli.theme import themed_console
@@ -447,6 +447,10 @@ async def _run_inline_mode(
 
             if user_input.lower() in ["exit", "quit"]:
                 break
+
+            if user_input.lower() == "clear":
+                _handle_clear_command(llm_agent)
+                continue
 
             if is_multiline_mode[0]:
                 try:
