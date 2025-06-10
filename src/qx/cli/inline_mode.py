@@ -15,7 +15,6 @@ from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.shortcuts.prompt import CompleteStyle
 from prompt_toolkit.styles import Style
 from prompt_toolkit.validation import ValidationError, Validator
-from rich.markdown import Markdown
 
 from qx.cli.commands import _handle_inline_command
 from qx.cli.completer import QXCompleter
@@ -111,11 +110,11 @@ async def _handle_llm_interaction(
             # Use BorderedMarkdown for consistent #050505 background color
             from qx.cli.quote_bar_component import BorderedMarkdown
             from rich.markdown import Markdown
-            
+
             bordered_md = BorderedMarkdown(
                 Markdown(output_content, code_theme="rrt"),
                 border_style="dim blue",
-                background_color="#050505"
+                background_color="#050505",
             )
             themed_console.print(bordered_md, markup=True)
             themed_console.print()
@@ -172,6 +171,12 @@ async def _run_inline_mode(
             "bottom-toolbar.key": "fg:black bg:black",
             "toolbar": "fg:black bg:black",
             "status": "fg:black bg:black",
+            # --- Custom styles for completion menu ---
+            "completion-menu": "bg:#333333 #dddddd",
+            "completion-menu.completion": "fg:#dddddd",
+            "completion-menu.completion.current": "bg:#007bff #ffffff",
+            "completion-menu.meta": "fg:#aaaaaa",
+            "completion-menu.meta.current": "fg:#ffffff bg:#007bff italic",
         }
     )
 
@@ -379,25 +384,26 @@ async def _run_inline_mode(
 
             # Get current agent color for prompt (text always remains "Qx")
             from qx.core.agent_manager import get_agent_manager
-            
+
             agent_manager = get_agent_manager()
             current_agent_config = await agent_manager.get_current_agent()
-            
+
             if current_agent_config:
-                agent_color = getattr(current_agent_config, 'color', None)
-                
+                agent_color = getattr(current_agent_config, "color", None)
+
                 # Use agent color if available, otherwise fallback to random color
                 if agent_color:
                     prompt_color = agent_color
                 else:
                     # Import color selection function and use agent name for consistent color
                     from qx.cli.quote_bar_component import get_agent_color
+
                     agent_name = current_agent_config.name or "Qx"
                     prompt_color = get_agent_color(agent_name, None)
             else:
                 # Fallback when no agent is loaded
                 prompt_color = "#ff5f00"
-            
+
             current_prompt = (
                 HTML('<style fg="#0087ff">Qxm⏵</style> ')
                 if is_multiline_mode[0]

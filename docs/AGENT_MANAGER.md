@@ -19,12 +19,14 @@ The Agent Manager is a comprehensive system for creating, managing, and executin
 Agents are defined using YAML files with the following structure:
 
 ```yaml
-# Basic agent metadata
-name: "agent_name"
-version: "1.0.0" 
-description: "Agent description"
+# Basic agent metadata (mandatory fields)
+name: "agent_name"           # Required: Display name
+enabled: true               # Required: Whether agent is available
+description: "Agent description"  # Required: Brief description
+type: "user"               # Optional: "user" (default) or "system"
+version: "1.0.0"           # Optional: Version number
 
-# Core agent configuration (preserves existing QX structure)
+# Core agent configuration (mandatory fields)
 role: |
   Agent persona and context...
   
@@ -103,6 +105,70 @@ Agents are discovered in hierarchical order (lowest to highest priority):
 Agent files must follow the naming convention: `{agent_name}.agent.yaml`
 
 Example: `code_reviewer.agent.yaml`, `devops_automation.agent.yaml`
+
+### Agent Discovery Filtering
+
+The agent loader provides several methods for discovering agents based on different criteria:
+
+#### All Agents
+```python
+# Discover all agents regardless of type or enabled status
+all_agents = loader.discover_agents()
+```
+
+#### User Agents Only
+```python
+# Discover only user-facing agents (excludes type="system")
+user_agents = loader.discover_user_agents()
+```
+
+#### System Agents Only
+```python
+# Discover only system agents (type="system")
+system_agents = loader.discover_system_agents()
+```
+
+#### Enabled Agents with Type Filtering
+```python
+# Discover all enabled agents
+enabled_agents = loader.discover_enabled_agents()
+
+# Discover only enabled user agents
+enabled_user_agents = loader.discover_enabled_agents(agent_type="user")
+
+# Discover only enabled system agents
+enabled_system_agents = loader.discover_enabled_agents(agent_type="system")
+```
+
+### Agent Types
+
+Agents are categorized by type to control their visibility and usage:
+
+- **User Agents** (`type: "user"` or omitted): Regular agents shown in CLI/UI interfaces
+- **System Agents** (`type: "system"`): Backend agents for internal processing, hidden from user interfaces
+
+#### Use Cases for System Agents
+- **Context Compression**: Summarizing large amounts of text for efficient processing
+- **Data Transformation**: Background data processing and transformation tasks
+- **Internal Operations**: System maintenance and optimization tasks
+- **Pipeline Processing**: Automated workflow steps that don't require user interaction
+
+#### Example System Agent Configuration
+```yaml
+name: "Context Compressor"
+enabled: true
+description: "System agent for compressing context information"
+type: "system"
+role: You are a context compression specialist.
+instructions: |
+  Compress large amounts of text while preserving key information.
+  Focus on efficiency and accuracy.
+tools: []
+model:
+  name: openrouter/google/gemini-2.5-flash-preview-05-20
+  parameters:
+    temperature: 0.1
+```
 
 ### Template Context Injection
 

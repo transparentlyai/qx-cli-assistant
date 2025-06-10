@@ -142,6 +142,9 @@ mkdir -p .Q/agents
 
 # Create a project-specific agent
 cat > .Q/agents/project_helper.agent.yaml << 'EOF'
+name: "Project Helper"
+enabled: true
+description: "Specialist for this specific project"
 role: You are a specialist for this specific project.
 instructions: |
   Help with tasks specific to this codebase.
@@ -160,10 +163,13 @@ EOF
 
 ### Minimal Agent (Quick Start)
 
-The simplest agent requires only two lines:
+The simplest agent requires these mandatory fields:
 
 ```yaml
 # minimal_agent.agent.yaml
+name: "My Helper"
+enabled: true
+description: "A helpful assistant for general tasks"
 role: You are a helpful assistant.
 instructions: Answer questions and help users with their tasks.
 ```
@@ -176,6 +182,9 @@ For most use cases, include tools and model settings:
 
 ```yaml
 # my_agent.agent.yaml
+name: "Domain Specialist"
+enabled: true
+description: "Specialized assistant for [your domain]"
 role: You are a specialized assistant for [your domain].
 
 instructions: |
@@ -197,6 +206,9 @@ model:
 **Code Helper:**
 ```yaml
 # code_helper.agent.yaml
+name: "Code Helper"
+enabled: true
+description: "Coding assistant for development tasks"
 role: You are a coding assistant.
 instructions: Help write and debug code.
 tools: [read_file_tool, write_file_tool, execute_shell_tool]
@@ -205,6 +217,9 @@ tools: [read_file_tool, write_file_tool, execute_shell_tool]
 **Documentation Bot:**
 ```yaml
 # docs_bot.agent.yaml
+name: "Documentation Bot"
+enabled: true
+description: "Documentation writer and maintainer"
 role: You are a documentation writer.
 instructions: Create clear, helpful documentation.
 tools: [read_file_tool, write_file_tool, web_fetch_tool]
@@ -213,6 +228,9 @@ tools: [read_file_tool, write_file_tool, web_fetch_tool]
 **Data Analyst:**
 ```yaml
 # analyst.agent.yaml
+name: "Data Analyst"
+enabled: true
+description: "Data analysis and insights specialist"
 role: You are a data analyst.
 instructions: Analyze data and provide insights.
 tools: [read_file_tool, web_fetch_tool]
@@ -226,6 +244,49 @@ tools: [read_file_tool, web_fetch_tool]
   - `~/.config/qx/agents/` (user-wide)
   - `/etc/qx/agents/` (system-wide)
 - **Agent Name**: Derived from filename (`my_helper.agent.yaml` → `my_helper`)
+
+### Mandatory Fields
+
+Every agent configuration must include these required fields:
+
+- **name**: Display name for the agent (string)
+- **enabled**: Whether the agent is available for use (boolean)
+- **description**: Brief description of the agent's purpose (string)
+- **role**: The agent's persona and expertise (string)
+- **instructions**: Detailed operational guidelines (string)
+
+### Agent Types
+
+Agents can be categorized by type to control their visibility:
+
+- **type: "user"** (default): Regular agents shown to users in CLI/UI
+- **type: "system"**: Backend agents for internal tasks, hidden from user interfaces
+
+```yaml
+# User-facing agent (default)
+name: "My Assistant"
+enabled: true
+description: "General purpose assistant"
+type: "user"  # Optional, defaults to "user"
+role: You are a helpful assistant.
+instructions: Help users with their tasks.
+
+# System agent for internal use
+name: "Context Compressor"
+enabled: true
+description: "System agent for compressing context"
+type: "system"  # Hidden from user interfaces
+role: You compress and summarize information.
+instructions: Efficiently compress text while preserving key information.
+```
+
+System agents are useful for:
+- Context compression and summarization
+- Background processing tasks
+- Internal system operations
+- Data transformation pipelines
+
+The backend can use filtering methods to discover only user agents or system agents as needed.
 
 ### Testing Your Agent
 
@@ -293,6 +354,11 @@ For full control over agent behavior:
 
 ```yaml
 # advanced_agent.agent.yaml
+name: "Advanced Specialist"
+enabled: true
+description: "Specialized assistant for [your specific domain]"
+type: "user"  # Optional, defaults to "user"
+
 role: |
   You are a specialized assistant for [your specific domain].
   [Describe the agent's personality and expertise]
@@ -526,7 +592,7 @@ If an agent isn't found when switching:
 If an agent file is found but won't load:
 
 1. Validate the YAML syntax using a YAML validator
-2. Check that required fields (role, instructions, tools, model) are present
+2. Check that all mandatory fields are present: name, enabled, description, role, instructions
 3. Verify tool names are correct and available
 4. Check the QX logs for detailed error messages
 
@@ -680,6 +746,9 @@ Create a new UserProfile component that follows our existing patterns
 Create `docs_agent.agent.yaml`:
 
 ```yaml
+name: "Documentation Agent"
+enabled: true
+description: "Technical documentation specialist"
 role: |
   You are a technical documentation specialist who excels at creating clear,
   comprehensive documentation for software projects.
@@ -720,6 +789,9 @@ Then switch to it:
 Create `.Q/agents/web_dev.agent.yaml` for a React/Node.js project:
 
 ```yaml
+name: "Web Dev Specialist"
+enabled: true
+description: "Full-stack web development specialist for React/Node.js projects"
 role: |
   You are a full-stack web development specialist for this React/Node.js project.
   You understand modern web development practices and this project's architecture.
@@ -757,6 +829,9 @@ model:
 Create `.Q/agents/data_scientist.agent.yaml` for a Python data project:
 
 ```yaml
+name: "Data Scientist"
+enabled: true
+description: "Data scientist specializing in Python data analysis projects"
 role: |
   You are a data scientist specializing in this Python data analysis project.
   You understand the project's data sources, analysis goals, and methodology.
@@ -794,6 +869,9 @@ model:
 Create `.Q/agents/devops.agent.yaml` for infrastructure projects:
 
 ```yaml
+name: "DevOps Engineer"
+enabled: true
+description: "DevOps engineer specializing in infrastructure projects"
 role: |
   You are a DevOps engineer specializing in this infrastructure project.
   You understand the deployment pipeline, monitoring, and operational requirements.
