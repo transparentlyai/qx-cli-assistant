@@ -78,14 +78,16 @@ class ApprovalHandler:
                 from qx.cli.quote_bar_component import BorderedMarkdown, get_agent_color
                 from rich.markdown import Markdown
                 
-                # Format as markdown with tree structure and dimmed red text
+                # Format with appropriate colors: green for success, red for failure
                 status_icon = "✓" if success else "✗"
-                markdown_content = f"[dim red]└─ {status_icon} {action} {outcome}[/dim red]"
+                status_color = "dim green" if success else "dim red"
+                markdown_content = f"[{status_color}]└─ {status_icon} {action} {outcome}[/{status_color}]"
                 
-                # Use dimmed red for both success and error messages
+                # Use agent color for border
+                color = get_agent_color(agent_name, agent_color)
                 bordered_md = BorderedMarkdown(
                     Markdown(markdown_content, code_theme="rrt"),
-                    border_style="dim red",
+                    border_style=f"dim {color}",
                     background_color="#080808"
                 )
                 
