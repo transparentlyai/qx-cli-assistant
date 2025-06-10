@@ -80,12 +80,12 @@ class ApprovalHandler:
                 
                 # Format as markdown with tree structure
                 status_icon = "✓" if success else "✗"
-                markdown_content = f"└─ {status_icon} **{action}** {outcome}"
+                markdown_content = f"└─ {status_icon} {action} {outcome}"
                 
-                color = get_agent_color(agent_name, agent_color)
+                # Use dimmed red for both success and error messages
                 bordered_md = BorderedMarkdown(
                     Markdown(markdown_content, code_theme="rrt"),
-                    border_style=f"dim {color}",
+                    border_style="dim red",
                     background_color="#080808"
                 )
                 
