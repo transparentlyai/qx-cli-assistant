@@ -108,9 +108,16 @@ async def _handle_llm_interaction(
             print(output_content)
         elif not agent.enable_streaming and output_content.strip():
             themed_console.print()
-            themed_console.print(
-                Markdown(output_content, code_theme="rrt"), markup=True
+            # Use BorderedMarkdown for consistent #050505 background color
+            from qx.cli.quote_bar_component import BorderedMarkdown
+            from rich.markdown import Markdown
+            
+            bordered_md = BorderedMarkdown(
+                Markdown(output_content, code_theme="rrt"),
+                border_style="dim blue",
+                background_color="#050505"
             )
+            themed_console.print(bordered_md, markup=True)
             themed_console.print()
         return (
             run_result.all_messages()

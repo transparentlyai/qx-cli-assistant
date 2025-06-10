@@ -210,7 +210,7 @@ def render_agent_permission_request(
         content_to_render,
         border_char="▊",
         border_style=color,
-        background_color="#050505",
+        background_color="#080808",
     )
     console.print(bordered_md)
 

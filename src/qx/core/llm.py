@@ -107,6 +107,7 @@ class QXLLMAgent:
             self._litellm_caller.make_litellm_call,
             self._handle_timeout_fallback,
             self._process_tool_calls_and_continue,
+            console,
         )
         
         # Set agent context for streaming handler if available
