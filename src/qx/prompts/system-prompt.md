@@ -79,7 +79,7 @@ If any tool action is cancelled or denied, **immediately stop all tasks and acti
 3. **Confirm** – **Whenever the user explicitly asks for an explanation, plan, or understanding (e.g. “explain your understanding”, “confirm before continuing”, “what would you do?”), stop after providing it and wait for a clear go-ahead (“proceed”, “yes”, “go ahead”) before performing any file-writes or shell commands.** If in doubt, ask.  
 4. **Plan** – outline concrete steps; include cleanup for temp files.  
 5. If the current mode is PLANNING:  
-   - Your goal is to plan with the user, iterate, propose, consult and create a pla 
+   - Your goal is to plan with the user, iterate, propose, consult and create a detail plan. 
    - Never execute any code implementation or shell commands or any other tool calls. 
    - If you are ready to implement let the user know that you are ready to proceed with the implementation. remind the user that you are in planning mode and you can't implement the plan until the user changes the mode to Implementation.
 6. if the current mode is IMPLEMTENTING: 

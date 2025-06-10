@@ -4,6 +4,54 @@
 # Using LiteLLM format for OpenRouter
 DEFAULT_MODEL = "openrouter/anthropic/claude-3.5-sonnet"
 
+# === AGENT SYSTEM DEFAULTS ===
+# Simple constant values used as fallbacks for environment variables
+# Environment variable lookups happen at runtime in schemas.py
+
+# Agent Metadata Constants
+AGENT_NAME_DEFAULT = "qx_agent"
+AGENT_VERSION_DEFAULT = "1.0.0"
+AGENT_DESCRIPTION_DEFAULT = "QX Agent"
+AGENT_CONTEXT_DEFAULT = None
+AGENT_OUTPUT_DEFAULT = None
+
+# Agent Tools Constants
+AGENT_TOOLS_DEFAULT: list[str] = []
+
+# Agent Model Parameter Constants
+AGENT_TEMPERATURE_DEFAULT = 0.73
+AGENT_MAX_TOKENS_DEFAULT = 4096
+AGENT_TOP_P_DEFAULT = 1.0
+AGENT_FREQUENCY_PENALTY_DEFAULT = 0.0
+AGENT_PRESENCE_PENALTY_DEFAULT = 0.0
+AGENT_REASONING_BUDGET_DEFAULT = "medium"
+
+# Agent Execution Constants
+AGENT_EXECUTION_MODE_DEFAULT = "interactive"
+AGENT_MAX_EXECUTION_TIME_DEFAULT = 300
+AGENT_MAX_ITERATIONS_DEFAULT = 10
+
+# Agent Autonomous Configuration Constants
+AGENT_AUTONOMOUS_ENABLED_DEFAULT = False
+AGENT_MAX_CONCURRENT_TASKS_DEFAULT = 1
+AGENT_TASK_TIMEOUT_DEFAULT = 600
+AGENT_HEARTBEAT_INTERVAL_DEFAULT = 30
+AGENT_AUTO_RESTART_DEFAULT = False
+AGENT_POLL_INTERVAL_DEFAULT = 5
+
+# Agent Constraints Constants
+AGENT_MAX_FILE_SIZE_DEFAULT = "10MB"
+AGENT_ALLOWED_PATHS_DEFAULT = ["./"]
+AGENT_FORBIDDEN_PATHS_DEFAULT = ["/etc", "/sys", "/proc"]
+AGENT_APPROVAL_REQUIRED_TOOLS_DEFAULT: list[str] = []
+AGENT_MAX_TOOL_CALLS_DEFAULT = 10
+
+# Agent Console Configuration Constants
+AGENT_USE_CONSOLE_MANAGER_DEFAULT = True
+AGENT_SOURCE_IDENTIFIER_DEFAULT = None
+AGENT_ENABLE_RICH_OUTPUT_DEFAULT = True
+AGENT_LOG_INTERACTIONS_DEFAULT = True
+
 # Default tree ignore patterns
 DEFAULT_TREE_IGNORE_PATTERNS = [
     ".git",

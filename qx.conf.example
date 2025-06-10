@@ -109,6 +109,57 @@ QX_DEBUG_STREAMING=false  # Debug streaming issues
 # HELICONE_API_KEY=sk-helicone-your_helicone_api_key
 # LUNARY_PUBLIC_KEY=your_lunary_public_key
 
+# === AGENT SYSTEM CONFIGURATION ===
+
+# Default Agent Selection
+QX_DEFAULT_AGENT=qx                    # Which agent to load on startup
+
+# Agent Model Parameters (overrides for all agents unless specified in YAML)
+QX_AGENT_TEMPERATURE=0.73              # Model creativity/randomness (0.0-2.0)
+QX_AGENT_MAX_TOKENS=4096               # Maximum response length
+QX_AGENT_TOP_P=1.0                     # Nucleus sampling parameter (0.0-1.0)
+QX_AGENT_FREQUENCY_PENALTY=0.0         # Repetition penalty (-2.0 to 2.0)
+QX_AGENT_PRESENCE_PENALTY=0.0          # Topic diversity penalty (-2.0 to 2.0)
+QX_AGENT_REASONING_BUDGET=medium        # For reasoning models: none, low, medium, high
+
+# Agent Metadata Defaults
+QX_AGENT_NAME=qx_agent                 # Default agent name
+QX_AGENT_VERSION=1.0.0                 # Default agent version
+QX_AGENT_DESCRIPTION=QX Agent          # Default agent description
+
+# Agent Execution Configuration
+QX_AGENT_EXECUTION_MODE=interactive     # Default execution mode: interactive, autonomous, hybrid
+QX_AGENT_MAX_EXECUTION_TIME=300        # Maximum execution time per task (seconds)
+QX_AGENT_MAX_ITERATIONS=10             # Maximum iterations per task
+
+# Agent Tools Configuration
+QX_AGENT_TOOLS=                        # Default tools for agents (comma-separated)
+QX_AGENT_MAX_TOOL_CALLS=10             # Maximum tool calls per conversation turn
+
+# Agent Security Constraints  
+QX_AGENT_MAX_FILE_SIZE=10MB            # Maximum file size agents can read/write
+QX_AGENT_ALLOWED_PATHS=./              # Paths agents can access (comma-separated)
+QX_AGENT_FORBIDDEN_PATHS=/etc,/sys,/proc  # Paths agents cannot access (comma-separated)
+QX_AGENT_APPROVAL_REQUIRED_TOOLS=      # Tools requiring approval (comma-separated)
+
+# Agent Console Configuration
+QX_AGENT_USE_CONSOLE_MANAGER=true      # Use console manager for output
+QX_AGENT_SOURCE_IDENTIFIER=            # Agent identifier in console output
+QX_AGENT_ENABLE_RICH_OUTPUT=true       # Enable rich text formatting
+QX_AGENT_LOG_INTERACTIONS=true         # Log agent interactions
+
+# Autonomous Agent Configuration
+QX_AGENT_AUTONOMOUS_ENABLED=false      # Enable autonomous mode by default
+QX_AGENT_MAX_CONCURRENT_TASKS=1        # Max concurrent tasks for autonomous agents
+QX_AGENT_TASK_TIMEOUT=600              # Task timeout for autonomous agents (seconds)
+QX_AGENT_HEARTBEAT_INTERVAL=30         # Heartbeat interval for autonomous agents (seconds)
+QX_AGENT_AUTO_RESTART=false            # Auto-restart failed autonomous agents
+QX_AGENT_POLL_INTERVAL=5               # Polling interval for autonomous agents (seconds)
+
+# Agent Context Templates (optional)
+QX_AGENT_CONTEXT=                      # Default context template
+QX_AGENT_OUTPUT=                       # Default output formatting template
+
 # === ENVIRONMENT-SPECIFIC SETTINGS ===
 
 # Project Context (automatically loaded if present)
@@ -139,3 +190,38 @@ QX_DEBUG_STREAMING=false  # Debug streaming issues
 # Example 4: Multi-Region Azure Setup
 # QX_MODEL_NAME=azure/gpt-4
 # QX_FALLBACK_API_BASES={"azure":[{"api_key":"key1","api_base":"https://east.openai.azure.com"},{"api_key":"key2","api_base":"https://west.openai.azure.com"}]}
+
+# === AGENT SYSTEM EXAMPLES ===
+
+# Example 1: Security-Focused Agent Environment
+# QX_DEFAULT_AGENT=code_reviewer
+# QX_AGENT_TEMPERATURE=0.3                    # Lower temperature for more consistent security analysis
+# QX_AGENT_MAX_TOOL_CALLS=20                  # Allow more tool calls for thorough analysis
+# QX_AGENT_APPROVAL_REQUIRED_TOOLS=execute_shell_tool,write_file_tool  # Require approval for risky operations
+
+# Example 2: Autonomous Development Agent
+# QX_DEFAULT_AGENT=devops_automation
+# QX_AGENT_EXECUTION_MODE=autonomous          # Enable autonomous operation
+# QX_AGENT_AUTONOMOUS_ENABLED=true            # Enable autonomous features
+# QX_AGENT_MAX_CONCURRENT_TASKS=3             # Allow multiple concurrent tasks
+# QX_AGENT_TASK_TIMEOUT=1800                  # 30 minutes per task
+# QX_AGENT_AUTO_RESTART=true                  # Auto-restart if failed
+
+# Example 3: Documentation-Focused Environment  
+# QX_DEFAULT_AGENT=documentation_writer
+# QX_AGENT_TEMPERATURE=0.7                    # Balanced creativity for writing
+# QX_AGENT_MAX_TOKENS=8192                    # Longer responses for documentation
+# QX_AGENT_TOOLS=read_file_tool,write_file_tool,web_fetch_tool  # Documentation-specific tools
+
+# Example 4: High-Security Environment
+# QX_AGENT_ALLOWED_PATHS=./src,./docs,./tests # Restrict file access to safe directories
+# QX_AGENT_FORBIDDEN_PATHS=/,/etc,/sys,/proc,/home  # Comprehensive path restrictions
+# QX_AGENT_MAX_FILE_SIZE=1MB                  # Smaller file size limit
+# QX_AGENT_APPROVAL_REQUIRED_TOOLS=execute_shell_tool,write_file_tool,agent_manager_tool  # Require approval for all risky tools
+
+# Example 5: Custom Agent Defaults
+# QX_AGENT_NAME=my_company_agent             # Custom agent naming
+# QX_AGENT_VERSION=2.1.0                     # Custom versioning
+# QX_AGENT_DESCRIPTION=Company Development Assistant  # Custom description
+# QX_AGENT_CONTEXT=Company: {company_name}\nProject: {project_name}\nEnvironment: {environment}  # Custom context template
+# QX_AGENT_OUTPUT=Format responses in markdown with clear headings and examples  # Custom output formatting

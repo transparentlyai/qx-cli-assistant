@@ -390,11 +390,48 @@ def initialize_llm_agent(
     console: Optional[RichConsole],
     mcp_manager: MCPManager,  # New parameter
     enable_streaming: bool = True,
+    agent_config: Optional[Any] = None,  # New parameter for agent configuration
 ) -> Optional[QXLLMAgent]:
     """
     Initializes the QXLLMAgent with system prompt and discovered tools.
+    Supports both legacy (markdown) and agent-based prompt loading.
+
+    Args:
+        model_name_str: Model name string
+        console: Console for output
+        mcp_manager: MCP manager instance
+        enable_streaming: Whether to enable streaming
+        agent_config: Optional agent configuration for agent-based initialization
     """
-    system_prompt_content = load_and_format_system_prompt()
+    # Load system prompt (agent-based or legacy)
+    system_prompt_content = load_and_format_system_prompt(agent_config)
+
+    # Use agent configuration for model parameters if available
+    if agent_config is not None:
+        try:
+            # Override model parameters from agent config
+            model_name_str = getattr(agent_config.model, "name", model_name_str)
+            temperature = getattr(agent_config.model.parameters, "temperature", 0.7)
+            max_output_tokens = getattr(
+                agent_config.model.parameters, "max_tokens", 4096
+            )
+            reasoning_effort = getattr(
+                agent_config.model.parameters, "reasoning_budget", None
+            )
+            logger.info(f"Using agent-based model configuration: {model_name_str}")
+        except AttributeError as e:
+            logger.warning(
+                f"Could not extract model config from agent: {e}. Using environment defaults."
+            )
+            # Fall back to environment variables
+            temperature = float(os.environ.get("QX_MODEL_TEMPERATURE", "0.7"))
+            max_output_tokens = int(os.environ.get("QX_MODEL_MAX_TOKENS", "4096"))
+            reasoning_effort = os.environ.get("QX_MODEL_REASONING_EFFORT")
+    else:
+        # Use environment variables (legacy behavior)
+        temperature = float(os.environ.get("QX_MODEL_TEMPERATURE", "0.7"))
+        max_output_tokens = int(os.environ.get("QX_MODEL_MAX_TOKENS", "4096"))
+        reasoning_effort = os.environ.get("QX_MODEL_REASONING_EFFORT")
 
     plugin_manager = PluginManager()
     try:
@@ -425,11 +462,7 @@ def initialize_llm_agent(
         logger.info(f"Added {len(mcp_tools)} tools from active MCP servers.")
 
     try:
-        temperature = float(os.environ.get("QX_MODEL_TEMPERATURE", "0.7"))
-        max_output_tokens = int(os.environ.get("QX_MODEL_MAX_TOKENS", "4096"))
-
-        # Retrieve reasoning_effort as a string directly
-        reasoning_effort: Optional[str] = os.environ.get("QX_MODEL_REASONING_EFFORT")
+        # Validate reasoning_effort if provided
         if reasoning_effort and reasoning_effort.lower() not in [
             "high",
             "medium",
@@ -437,7 +470,7 @@ def initialize_llm_agent(
             "none",
         ]:
             logger.warning(
-                f"Invalid value for QX_MODEL_REASONING_EFFORT: '{reasoning_effort}'. Expected 'high', 'medium', 'low', or 'none'. Setting to None."
+                f"Invalid value for reasoning_effort: '{reasoning_effort}'. Expected 'high', 'medium', 'low', or 'none'. Setting to None."
             )
             reasoning_effort = None
         elif reasoning_effort and reasoning_effort.lower() == "none":
