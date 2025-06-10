@@ -134,7 +134,7 @@ async def execute_shell_tool(
     status = "approved"
     if _is_command_auto_approved(command):
         _managed_plugin_print(
-            f"**Execute Shell Command (Auto-approved):** `{command}`", 
+            f"[dim]Execute Shell Command (Auto-approved):[/dim] [dim cyan]{command}[/dim cyan]", 
             use_bordered_markdown=True
         )
     else:
