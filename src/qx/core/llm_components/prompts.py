@@ -42,12 +42,12 @@ def _load_agent_based_prompt(agent_config: Any) -> str:
     if hasattr(agent_config, "output") and agent_config.output:
         system_prompt_parts.append(agent_config.output)
 
-    # Join parts with double newlines
-    template = "\n\n".join(system_prompt_parts)
+    # Join parts with triple dashes
+    template = "\n---\n".join(system_prompt_parts)
 
     # Format with context if available
     if hasattr(agent_config, "context") and agent_config.context:
-        template = agent_config.context + "\n\n" + template
+        template = agent_config.context + "\n---\n" + template
 
     # Apply standard context formatting
     return _format_prompt_template(template)

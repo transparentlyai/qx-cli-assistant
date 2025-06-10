@@ -504,10 +504,43 @@ def initialize_llm_agent(
             except AttributeError:
                 logger.debug("No agent name/color found in config")
 
+        # Filter tools based on agent configuration
+        filtered_tools = registered_tools
+        if agent_config is not None and hasattr(agent_config, "tools") and agent_config.tools:
+            # Create a mapping of tool names to tool objects
+            tool_mapping = {}
+            for tool in registered_tools:
+                # Handle tuple structure from PluginManager: (func, schema_dict, model_class)
+                if isinstance(tool, tuple) and len(tool) >= 1:
+                    func = tool[0]  # Extract function from tuple
+                    if hasattr(func, '__name__'):
+                        tool_mapping[func.__name__] = tool
+                # Handle direct function objects and other tool types
+                elif hasattr(tool, '__name__'):
+                    tool_mapping[tool.__name__] = tool
+                elif hasattr(tool, 'name'):
+                    tool_mapping[tool.name] = tool
+                elif isinstance(tool, dict) and 'name' in tool:
+                    tool_mapping[tool['name']] = tool
+            
+            # Add name aliases for common mismatches
+            if 'get_current_time_tool' in tool_mapping:
+                tool_mapping['current_time_tool'] = tool_mapping['get_current_time_tool']
+            
+            # Filter to only include tools specified in agent config
+            filtered_tools = []
+            for tool_name in agent_config.tools:
+                if tool_name in tool_mapping:
+                    filtered_tools.append(tool_mapping[tool_name])
+                else:
+                    logger.warning(f"Tool '{tool_name}' specified in agent config but not found in available tools. Available tools: {list(tool_mapping.keys())}")
+            
+            logger.info(f"Filtered tools for agent '{agent_name}': {len(filtered_tools)} of {len(registered_tools)} available tools")
+
         agent = QXLLMAgent(
             model_name=model_name_str,
             system_prompt=system_prompt_content,
-            tools=registered_tools,  # Pass combined tools
+            tools=filtered_tools,  # Pass filtered tools
             console=effective_console,
             temperature=temperature,
             max_output_tokens=max_output_tokens,
