@@ -174,9 +174,9 @@ async def _run_inline_mode(
             # --- Custom styles for completion menu ---
             "completion-menu": "bg:#333333 #dddddd",
             "completion-menu.completion": "fg:#dddddd",
-            "completion-menu.completion.current": "bg:#007bff #ffffff",
+            "completion-menu.completion.current": "bg:#ffffff #007bff",
             "completion-menu.meta": "fg:#aaaaaa",
-            "completion-menu.meta.current": "fg:#ffffff bg:#007bff italic",
+            "completion-menu.meta.current": "fg:#007bff bg:#ffffff italic",
         }
     )
 
