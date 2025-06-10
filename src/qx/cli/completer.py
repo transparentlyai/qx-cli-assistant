@@ -20,7 +20,6 @@ class QXCompleter(Completer):
             "/print",
             "/tools",
             "/agents",
-            "/clear",
         ]
         self.models = MODELS
         self.agent_subcommands = [
@@ -214,7 +213,6 @@ class QXCompleter(Completer):
                 "/print": "Print text to the console",
                 "/tools": "List active tools with descriptions",
                 "/agents": "Manage agents (list, switch, info, reload)",
-                "/clear": "Clear the console and show the header",
             }
 
             for command in self.commands:
