@@ -78,9 +78,9 @@ class ApprovalHandler:
                 from qx.cli.quote_bar_component import BorderedMarkdown, get_agent_color
                 from rich.markdown import Markdown
                 
-                # Format as markdown with tree structure
+                # Format as markdown with tree structure and dimmed red text
                 status_icon = "✓" if success else "✗"
-                markdown_content = f"└─ {status_icon} {action} {outcome}"
+                markdown_content = f"[dim red]└─ {status_icon} {action} {outcome}[/dim red]"
                 
                 # Use dimmed red for both success and error messages
                 bordered_md = BorderedMarkdown(
