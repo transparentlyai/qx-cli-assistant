@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import time
-from typing import Any, Callable, Dict, List, cast
+from typing import Any, Callable, Dict, List, Optional, cast
 
 import httpx
 from openai.types.chat import ChatCompletionMessageParam
@@ -17,36 +17,41 @@ logger = logging.getLogger(__name__)
 def _managed_stream_print(content: Any, use_manager: bool = False, **kwargs) -> None:
     """
     Print helper for streaming that optionally uses console manager.
-    
+
     For performance-critical streaming content, use_manager should be False.
     For status messages and error reporting, use_manager can be True.
     """
     from rich.console import Console
-    
+
     if use_manager:
         try:
             from qx.core.console_manager import get_console_manager
+
             manager = get_console_manager()
             if manager and manager._running:
-                style = kwargs.get('style')
-                markup = kwargs.get('markup', True)
-                end = kwargs.get('end', '\n')
-                console = kwargs.get('console')
+                style = kwargs.get("style")
+                markup = kwargs.get("markup", True)
+                end = kwargs.get("end", "\n")
+                console = kwargs.get("console")
                 if not console:
                     from qx.cli.theme import custom_theme
+
                     console = Console(theme=custom_theme)
-                manager.print(content, style=style, markup=markup, end=end, console=console)
+                manager.print(
+                    content, style=style, markup=markup, end=end, console=console
+                )
                 return
         except Exception:
             pass
-    
+
     # Fallback to direct console creation and printing
-    console = kwargs.get('console')
+    console = kwargs.get("console")
     if not console:
         from qx.cli.theme import custom_theme
+
         console = Console(theme=custom_theme)
-    
-    print_kwargs = {k: v for k, v in kwargs.items() if k != 'console'}
+
+    print_kwargs = {k: v for k, v in kwargs.items() if k != "console"}
     console.print(content, **print_kwargs)
 
 
@@ -64,14 +69,14 @@ class StreamingHandler:
         self._handle_timeout_fallback = handle_timeout_fallback_func
         self._process_tool_calls_and_continue = process_tool_calls_func
         self._console = console
-        self._current_agent_name = None
-        self._current_agent_color = None
-    
-    def set_agent_context(self, agent_name: str, agent_color: str = None) -> None:
+        self._current_agent_name: Optional[str] = None
+        self._current_agent_color: Optional[str] = None
+
+    def set_agent_context(self, agent_name: str, agent_color: Optional[str] = None) -> None:
         """Set the current agent context for quote bar rendering."""
         self._current_agent_name = agent_name
         self._current_agent_color = agent_color
-    
+
     def clear_agent_context(self) -> None:
         """Clear the current agent context."""
         self._current_agent_name = None
@@ -101,18 +106,15 @@ class StreamingHandler:
         from qx.core.markdown_buffer import create_markdown_buffer
 
         markdown_buffer = create_markdown_buffer()
-        
-        # Track if we should show agent title for this response  
+
+        # Track if we should show agent title for this response
         show_agent_title = True
-        
-        # Track if we need to show agent title for tool execution
-        tools_executed = False
-        
+
         # If this is a continuation after tools, add spacing
         if user_input == "__CONTINUE_AFTER_TOOLS__":
             from rich.console import Console
             from qx.cli.theme import custom_theme
-            
+
             console = self._console if self._console else Console(theme=custom_theme)
             console.print()  # Add spacing before agent response after tools
 
@@ -122,38 +124,43 @@ class StreamingHandler:
             if content and content.strip():
                 has_rendered_content = True
                 total_rendered_content += content  # Track for validation
-                
+
                 # Check if we have agent context for quote bar rendering
-                agent_name = getattr(self, '_current_agent_name', None)
-                agent_color = getattr(self, '_current_agent_color', None)
-                
+                agent_name = getattr(self, "_current_agent_name", None)
+                agent_color = getattr(self, "_current_agent_color", None)
+
                 if agent_name:
                     # Use agent quote bar rendering
-                    from qx.cli.quote_bar_component import BorderedMarkdown, get_agent_color
+                    from qx.cli.quote_bar_component import (
+                        BorderedMarkdown,
+                        get_agent_color,
+                    )
                     from rich.console import Console
                     from rich.markdown import Markdown
                     from rich.text import Text
                     from qx.cli.theme import custom_theme
-                    
+
                     # Use the main console if available, otherwise create one with theme
-                    rich_console = self._console if self._console else Console(theme=custom_theme)
-                    
+                    rich_console = (
+                        self._console if self._console else Console(theme=custom_theme)
+                    )
+
                     # Show agent title for the first meaningful content
                     if show_agent_title:
                         color = get_agent_color(agent_name, agent_color)
                         rich_console.print(Text(agent_name, style="bold"))
                         rich_console.print(Text("─" * len(agent_name), style=color))
                         show_agent_title = False
-                    
+
                     # Pre-process content to handle Rich markup within markdown
                     processed_content = content
-                    
+
                     # Render with border for all chunks
                     color = get_agent_color(agent_name, agent_color)
                     bordered_md = BorderedMarkdown(
                         Markdown(processed_content, code_theme="rrt"),
                         border_style=color,
-                        background_color="#080808"
+                        background_color="#080808",
                     )
                     rich_console.print(bordered_md, end="", markup=True)
                 else:
@@ -164,15 +171,17 @@ class StreamingHandler:
                     from qx.cli.quote_bar_component import BorderedMarkdown
 
                     # Use the main console if available, otherwise create one with theme
-                    rich_console = self._console if self._console else Console(theme=custom_theme)
+                    rich_console = (
+                        self._console if self._console else Console(theme=custom_theme)
+                    )
                     # Pre-process content to handle Rich markup within markdown
                     processed_content = content
-                    
+
                     # Use BorderedMarkdown for consistent styling
                     bordered_md = BorderedMarkdown(
                         Markdown(processed_content, code_theme="rrt"),
                         border_style="dim blue",
-                        background_color="#080808"
+                        background_color="#080808",
                     )
                     rich_console.print(bordered_md, end="", markup=True)
 
@@ -274,7 +283,11 @@ class StreamingHandler:
                                 from rich.console import Console
                                 from qx.cli.theme import custom_theme
 
-                                reasoning_console = self._console if self._console else Console(theme=custom_theme)
+                                reasoning_console = (
+                                    self._console
+                                    if self._console
+                                    else Console(theme=custom_theme)
+                                )
                                 reasoning_console.print(
                                     f"[dim]{reasoning_text}[/dim]", end=""
                                 )
@@ -388,7 +401,9 @@ class StreamingHandler:
             if accumulated_content:
                 from rich.console import Console
 
-                _managed_stream_print("\n[warning]⚠ Response interrupted[/]", use_manager=True)
+                _managed_stream_print(
+                    "\n[warning]⚠ Response interrupted[/]", use_manager=True
+                )
 
                 response_message = cast(
                     ChatCompletionMessageParam,
@@ -404,7 +419,9 @@ class StreamingHandler:
                 return QXRunResult(accumulated_content, messages)
             else:
                 # No content was generated before cancellation
-                _managed_stream_print("\n[warning]Operation cancelled[/]", use_manager=True)
+                _managed_stream_print(
+                    "\n[warning]Operation cancelled[/]", use_manager=True
+                )
                 return QXRunResult("Operation cancelled", messages)
         except Exception as e:
             logger.error(f"Error during streaming: {e}", exc_info=True)
@@ -548,54 +565,60 @@ class StreamingHandler:
 
         # Process tool calls if any
         if accumulated_tool_calls:
-            tools_executed = True
-            
+
             # Add spacing and agent headers for tool execution if we haven't shown agent title yet
             # or if we had content rendered (meaning this is a separate tool execution block)
             if has_rendered_content or accumulated_content.strip():
                 # Add spacing before tool execution block
                 from rich.console import Console
                 from qx.cli.theme import custom_theme
-                
-                console = self._console if self._console else Console(theme=custom_theme)
+
+                console = (
+                    self._console if self._console else Console(theme=custom_theme)
+                )
                 console.print()  # Add spacing
-            
+
             # Show agent headers for tool execution
-            agent_name = getattr(self, '_current_agent_name', None)
-            agent_color = getattr(self, '_current_agent_color', None)
-            
+            agent_name = getattr(self, "_current_agent_name", None)
+            agent_color = getattr(self, "_current_agent_color", None)
+
             if agent_name:
                 from qx.cli.quote_bar_component import get_agent_color
                 from rich.text import Text
                 from rich.console import Console
                 from qx.cli.theme import custom_theme
-                
-                console = self._console if self._console else Console(theme=custom_theme)
+
+                console = (
+                    self._console if self._console else Console(theme=custom_theme)
+                )
                 color = get_agent_color(agent_name, agent_color)
                 console.print(Text(agent_name, style="bold"))
                 console.print(Text("─" * len(agent_name), style=color))
-            
+
             # Pass empty content if we cleared narration
             streaming_response_message.content = (
                 accumulated_content if accumulated_content else None
             )
-            
+
             # Set agent context for tools to use BorderedMarkdown
-            from qx.core.approval_handler import set_global_agent_context, clear_global_agent_context
-            
+            from qx.core.approval_handler import (
+                set_global_agent_context,
+                clear_global_agent_context,
+            )
+
             if agent_name:
                 set_global_agent_context(agent_name, agent_color)
-            
+
             try:
                 result = await self._process_tool_calls_and_continue(
                     streaming_response_message, messages, user_input, recursion_depth
                 )
-                
+
                 # After tool execution, ensure next agent response gets headers
                 # Reset the agent title flag for the next response
-                if hasattr(result, '_reset_agent_title'):
+                if hasattr(result, "_reset_agent_title"):
                     result._reset_agent_title = True
-                    
+
                 return result
             finally:
                 # Clean up agent context

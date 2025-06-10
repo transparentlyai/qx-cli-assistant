@@ -109,15 +109,16 @@ class QXLLMAgent:
             self._process_tool_calls_and_continue,
             console,
         )
-        
+
         # Set agent context for streaming handler if available
         if self.agent_name:
             self._streaming_handler.set_agent_context(self.agent_name, self.agent_color)
-            
+
             # Set global agent context for approval handlers in plugins
             from qx.core.approval_handler import set_global_agent_context
+
             set_global_agent_context(self.agent_name, self.agent_color)
-        
+
         self._tool_processor = ToolProcessor(
             self._tool_functions, self._tool_input_models, self.console, self.run
         )
@@ -322,13 +323,14 @@ class QXLLMAgent:
             if self.enable_streaming:
                 # Add streaming parameter
                 chat_params["stream"] = True
-                
+
                 # Only add empty line for initial responses, not for tool continuations
                 if user_input != "__CONTINUE_AFTER_TOOLS__":
                     # Add an empty line before the streaming response starts
                     from rich.console import Console
+
                     Console().print("")
-                
+
                 return await self._streaming_handler.handle_streaming_response(
                     chat_params, messages, user_input, _recursion_depth
                 )
@@ -503,42 +505,54 @@ def initialize_llm_agent(
             try:
                 agent_name = getattr(agent_config, "name", None)
                 agent_color = getattr(agent_config, "color", None)
-                logger.debug(f"Agent context: name='{agent_name}', color='{agent_color}'")
+                logger.debug(
+                    f"Agent context: name='{agent_name}', color='{agent_color}'"
+                )
             except AttributeError:
                 logger.debug("No agent name/color found in config")
 
         # Filter tools based on agent configuration
         filtered_tools = registered_tools
-        if agent_config is not None and hasattr(agent_config, "tools") and agent_config.tools:
+        if (
+            agent_config is not None
+            and hasattr(agent_config, "tools")
+            and agent_config.tools
+        ):
             # Create a mapping of tool names to tool objects
             tool_mapping = {}
             for tool in registered_tools:
                 # Handle tuple structure from PluginManager: (func, schema_dict, model_class)
                 if isinstance(tool, tuple) and len(tool) >= 1:
                     func = tool[0]  # Extract function from tuple
-                    if hasattr(func, '__name__'):
+                    if hasattr(func, "__name__"):
                         tool_mapping[func.__name__] = tool
                 # Handle direct function objects and other tool types
-                elif hasattr(tool, '__name__'):
+                elif hasattr(tool, "__name__"):
                     tool_mapping[tool.__name__] = tool
-                elif hasattr(tool, 'name'):
+                elif hasattr(tool, "name"):
                     tool_mapping[tool.name] = tool
-                elif isinstance(tool, dict) and 'name' in tool:
-                    tool_mapping[tool['name']] = tool
-            
+                elif isinstance(tool, dict) and "name" in tool:
+                    tool_mapping[tool["name"]] = tool
+
             # Add name aliases for common mismatches
-            if 'get_current_time_tool' in tool_mapping:
-                tool_mapping['current_time_tool'] = tool_mapping['get_current_time_tool']
-            
+            if "get_current_time_tool" in tool_mapping:
+                tool_mapping["current_time_tool"] = tool_mapping[
+                    "get_current_time_tool"
+                ]
+
             # Filter to only include tools specified in agent config
             filtered_tools = []
             for tool_name in agent_config.tools:
                 if tool_name in tool_mapping:
                     filtered_tools.append(tool_mapping[tool_name])
                 else:
-                    logger.warning(f"Tool '{tool_name}' specified in agent config but not found in available tools. Available tools: {list(tool_mapping.keys())}")
-            
-            logger.info(f"Filtered tools for agent '{agent_name}': {len(filtered_tools)} of {len(registered_tools)} available tools")
+                    logger.warning(
+                        f"Tool '{tool_name}' specified in agent config but not found in available tools. Available tools: {list(tool_mapping.keys())}"
+                    )
+
+            logger.info(
+                f"Filtered tools for agent '{agent_name}': {len(filtered_tools)} of {len(registered_tools)} available tools"
+            )
 
         agent = QXLLMAgent(
             model_name=model_name_str,
