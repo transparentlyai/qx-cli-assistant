@@ -85,7 +85,7 @@ class ApprovalHandler:
                 color = get_agent_color(agent_name, agent_color)
                 bordered_md = BorderedMarkdown(
                     Markdown(markdown_content, code_theme="rrt"),
-                    border_style=color,
+                    border_style=f"dim {color}",
                     background_color="#080808"
                 )
                 

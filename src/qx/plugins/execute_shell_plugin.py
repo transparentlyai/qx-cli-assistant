@@ -40,11 +40,11 @@ def _managed_plugin_print(content: str, use_bordered_markdown: bool = False, **k
                 agent_color = agent_context.get("color")
                 
                 if agent_name:
-                    # Wrap content in BorderedMarkdown with agent styling
+                    # Wrap content in BorderedMarkdown with agent styling (dimmed)
                     color = get_agent_color(agent_name, agent_color)
                     bordered_md = BorderedMarkdown(
                         Markdown(content, code_theme="rrt"),
-                        border_style=color,
+                        border_style=f"dim {color}",
                         background_color="#080808"
                     )
                     
