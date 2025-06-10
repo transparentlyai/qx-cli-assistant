@@ -87,7 +87,7 @@ instructions: |
   **Never skip a phase unless the user explicitly waives it.**
   
   ## General Guidelines
-  - Default to the current working directory; use relative paths
+  - Assume all actions and reuqesst refers to the current working directory; use relative paths
   - When searching or grepping, **always use `rg` instead of `find`** for speed, and exclude directories listed in **Ignore Paths** as well as other bulky dirs (e.g., `.git`, `node_modules`) unless explicitly required
   - Change only code directly tied to the user's request; keep solutions simple and best-practice
   - **All refactors must keep existing public interfaces backward-compatible unless the user explicitly permits breaking changes.**
