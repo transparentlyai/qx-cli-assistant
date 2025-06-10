@@ -515,8 +515,9 @@ class StreamingHandler:
                     f"Content validation passed: {accumulated_len} chars rendered successfully"
                 )
 
-        # Add final newline if we rendered any content
-        if accumulated_content.strip() and (has_rendered_content or remaining_content):
+        # Add final newline if we rendered any content (but not for tool executions)
+        # Tool executions should not have trailing newlines to maintain clean formatting
+        if accumulated_content.strip() and (has_rendered_content or remaining_content) and not accumulated_tool_calls:
             _managed_stream_print("", use_manager=True)
 
         # Create response message from accumulated data
