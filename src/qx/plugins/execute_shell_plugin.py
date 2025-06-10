@@ -41,9 +41,13 @@ def _managed_plugin_print(content: str, use_bordered_markdown: bool = False, **k
                 
                 if agent_name:
                     # Wrap content in BorderedMarkdown with agent styling (dimmed)
+                    # Use Rich Text instead of Markdown to support Rich markup
+                    from rich.text import Text
+                    
                     color = get_agent_color(agent_name, agent_color)
+                    rich_text = Text.from_markup(content)
                     bordered_md = BorderedMarkdown(
-                        Markdown(content, code_theme="rrt"),
+                        rich_text,
                         border_style=f"dim {color}",
                         background_color="#080808"
                     )
