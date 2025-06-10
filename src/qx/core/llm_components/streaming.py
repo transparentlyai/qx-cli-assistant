@@ -487,8 +487,9 @@ class StreamingHandler:
                     f"Content validation passed: {accumulated_len} chars rendered successfully"
                 )
 
-        # Note: Removed final newline as BorderedMarkdown includes its own line endings
-        # This prevents extra spacing between tool messages
+        # Add final newline if we rendered any content
+        if accumulated_content.strip() and (has_rendered_content or remaining_content):
+            _managed_stream_print("", use_manager=True)
 
         # Create response message from accumulated data
         response_message_dict: Dict[str, Any] = {
