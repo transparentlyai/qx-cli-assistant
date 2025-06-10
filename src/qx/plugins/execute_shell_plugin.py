@@ -176,15 +176,15 @@ async def execute_shell_tool(
 
         # Show stdout only if output control allows it
         if stdout and await should_show_stdout():
-            _managed_plugin_print(stdout, style="dim white")
+            _managed_plugin_print(stdout.strip(), style="dim white", use_bordered_markdown=True)
         # Show stderr only if output control allows it (usually always shown)
         if stderr and await should_show_stderr():
-            _managed_plugin_print(stderr, style="dim red")
+            _managed_plugin_print(stderr.strip(), style="dim red", use_bordered_markdown=True)
 
         return ExecuteShellPluginOutput(
             command=command,
-            stdout=stdout,
-            stderr=stderr,
+            stdout=stdout.strip() if stdout else None,
+            stderr=stderr.strip() if stderr else None,
             return_code=return_code,
         )
 
