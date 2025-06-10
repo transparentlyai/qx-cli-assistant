@@ -62,8 +62,44 @@ class ApprovalHandler:
     def print_outcome(self, action: str, outcome: str, success: bool = True):
         """Prints the final outcome of an operation."""
         style = "success" if success else "error"
-        message = f"  └─ {action} {outcome}"
         
+        # Get agent context for BorderedMarkdown styling
+        agent_name = self._current_agent_name
+        agent_color = self._current_agent_color
+        if not agent_name:
+            global_context = get_global_agent_context()
+            if global_context:
+                agent_name = global_context.get("name")
+                agent_color = global_context.get("color")
+        
+        # Use BorderedMarkdown if we have agent context
+        if agent_name:
+            try:
+                from qx.cli.quote_bar_component import BorderedMarkdown, get_agent_color
+                from rich.markdown import Markdown
+                
+                # Format as markdown with tree structure
+                status_icon = "✓" if success else "✗"
+                markdown_content = f"└─ {status_icon} **{action}** {outcome}"
+                
+                color = get_agent_color(agent_name, agent_color)
+                bordered_md = BorderedMarkdown(
+                    Markdown(markdown_content, code_theme="rrt"),
+                    border_style=color,
+                    background_color="#080808"
+                )
+                
+                if self.use_console_manager and self._console_manager:
+                    self._console_manager.print(bordered_md, console=self.console, markup=True, end="")
+                else:
+                    self.console.print(bordered_md, markup=True, end="")
+                return
+            except Exception:
+                # Fall through to regular printing if BorderedMarkdown fails
+                pass
+        
+        # Fallback to regular printing
+        message = f"  └─ {action} {outcome}"
         if self.use_console_manager and self._console_manager:
             self._console_manager.print(message, style=style, console=self.console)
         else:
