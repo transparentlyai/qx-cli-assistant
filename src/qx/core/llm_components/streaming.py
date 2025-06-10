@@ -490,7 +490,7 @@ class StreamingHandler:
         # Add final newline after complete agent response to separate response blocks
         # This provides spacing between different agent responses while keeping
         # tool messages within the same response block together
-        if accumulated_content.strip() and (has_rendered_content or remaining_content):
+        if has_rendered_content or remaining_content or accumulated_tool_calls:
             _managed_stream_print("", use_manager=True)
 
         # Create response message from accumulated data
