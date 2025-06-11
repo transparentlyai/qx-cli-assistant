@@ -47,7 +47,7 @@ class AgentLoader:
         1. System agents: /etc/qx/agents/
         2. User agents: ~/.config/qx/agents/
         3. Project agents: <project>/.Q/agents/
-        4. Local agents: ./src/qx/agents/ (for development)
+        4. Built-in agents: <app_installation>/agents/
         """
         paths = []
 
@@ -69,14 +69,13 @@ class AgentLoader:
                 if project_agents_path.exists():
                     paths.append(project_agents_path)
 
-        # Local development agents (always include if exists)
-        if cwd:
-            local_agents_path = Path(cwd) / "src" / "qx" / "agents"
-        else:
-            local_agents_path = Path.cwd() / "src" / "qx" / "agents"
-
-        if local_agents_path.exists():
-            paths.append(local_agents_path)
+        # Built-in agents (relative to app installation location)
+        # Get the directory where this module is located
+        app_root = Path(__file__).parent.parent  # Go up from core/ to qx/
+        builtin_agents_path = app_root / "agents"
+        
+        if builtin_agents_path.exists():
+            paths.append(builtin_agents_path)
 
         return paths
 

@@ -73,6 +73,59 @@ custom_theme = Theme(
 # console.print("This is an [error]error[/] message.")
 # console.print("This is a [success]success[/] message.")
 
+# Markdown-specific themes for BorderedMarkdown
+default_markdown_theme = Theme(
+    {
+        "markdown.h1": "bold underline bright_white",
+        "markdown.h2": "bold underline white",
+        "markdown.h3": "bold underline dim white",
+        "markdown.h4": "bold underline white",
+        "markdown.h5": "bold underline dim white",
+        "markdown.h6": "bold underline dim white",
+        "markdown.text": "white",
+        "markdown.paragraph": "#e4e4e4",
+        "markdown.emphasis": "italic",
+        "markdown.strong": "bold #ffd787",
+        "markdown.code": "#5f87d7",
+        "markdown.code_block": "cyan on grey11",
+        "markdown.link": "underline blue",
+        "markdown.link_url": "dim blue",
+        "markdown.list": "white",
+        "markdown.list_item": "white",
+        "markdown.quote": "italic dim white",
+        "markdown.hr": " #ff8700",
+        "markdown.item.bullet": "bold yellow",
+        "markdown.item.number": "bold yellow",
+        "code": "#5f87d7",
+    }
+)
+
+dimmed_grey_markdown_theme = Theme(
+    {
+        "markdown.h1": "bold grey42",
+        "markdown.h2": "bold grey39",
+        "markdown.h3": "bold grey35",
+        "markdown.h4": "grey30",
+        "markdown.h5": "grey27",
+        "markdown.h6": "grey23",
+        "markdown.text": "grey39",
+        "markdown.paragraph": "grey39",
+        "markdown.emphasis": "italic grey35",
+        "markdown.strong": "bold grey42",
+        "markdown.code": "bold grey46",
+        "markdown.code_block": "grey42 on grey11",
+        "markdown.link": "underline grey35",
+        "markdown.link_url": "grey27",
+        "markdown.list": "grey39",
+        "markdown.list_item": "grey39",
+        "markdown.quote": "italic grey27",
+        "markdown.hr": "grey23",
+        "markdown.item.bullet": "bold grey35",
+        "markdown.item.number": "bold grey35",
+        "code": "bold grey46",
+    }
+)
+
 # Global themed console instance
 themed_console = Console(theme=custom_theme)
 

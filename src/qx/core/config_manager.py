@@ -39,6 +39,7 @@ QX_MODEL_MAX_TOKENS=4096
 QX_ENABLE_STREAMING=true
 QX_SHOW_SPINNER=true
 QX_SHOW_DETAILS=true
+QX_PLANNING_MODE=false
 """
 
 CONFIG_LOCATIONS = """
@@ -85,6 +86,13 @@ class ConfigManager:
         # Fallback to user-level config
         user_config_path = QX_CONFIG_DIR / "qx.conf"
         return user_config_path
+
+    def get_config_value(self, key: str, default: str = "") -> str:
+        """
+        Gets a configuration value from environment variables.
+        Returns the default value if the key is not found.
+        """
+        return os.getenv(key, default)
 
     def set_config_value(self, key: str, value: str):
         """

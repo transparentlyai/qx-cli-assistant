@@ -149,6 +149,10 @@ async def _run_inline_mode(
     qx_completer = QXCompleter()
     _details_active_for_toolbar[0] = await details_manager.is_active()
     _stdout_active_for_toolbar[0] = await output_control_manager.should_show_stdout()
+    
+    # Load planning mode from configuration
+    planning_mode_config = config_manager.get_config_value("QX_PLANNING_MODE", "false")
+    _planning_mode_active[0] = planning_mode_config.lower() == "true"
 
     # Initialize global hotkey system but don't start it yet
     # We'll use suspend/resume pattern around prompt_toolkit usage
@@ -302,6 +306,10 @@ async def _run_inline_mode(
     def _(event):
         _planning_mode_active[0] = not _planning_mode_active[0]
         mode_text = "Planning" if _planning_mode_active[0] else "Implementing"
+        
+        # Save the planning mode state to configuration
+        config_manager.set_config_value("QX_PLANNING_MODE", str(_planning_mode_active[0]).lower())
+        
         style = "warning"
         run_in_terminal(
             lambda: themed_console.print(
