@@ -1,7 +1,9 @@
 name: "data_processor"
 enabled: true
 can_delegate: false
+max_instances: 2
 description: "Data analysis and processing automation agent"
+specializations: ["data_analysis", "data_processing", "statistics", "machine_learning", "data_visualization"]
 version: "1.0.0"
 
 role: |

@@ -406,7 +406,7 @@ async def _handle_inline_command(
             "  /print <text> - Print the specified text to the console", style="primary"
         )
         themed_console.print(
-            "  /team-add-member <agent> - Add agent to your team", style="primary"
+            "  /team-add-member <agent> [count] - Add agent(s) to your team", style="primary"
         )
         themed_console.print(
             "  /team-remove-member <agent> - Remove agent from your team",
@@ -552,7 +552,7 @@ async def _handle_inline_command(
             style="warning",
         )
         themed_console.print(
-            "  • Use /team-add-member <agent> to add specialists to your team",
+            "  • Use /team-add-member <agent> [count] to add specialists to your team",
             style="info",
         )
         themed_console.print(
@@ -650,12 +650,29 @@ async def handle_command(
 
 
 async def _handle_add_agent_command(command_args: str, config_manager: ConfigManager):
-    """Handle /team-add-member command."""
+    """Handle /team-add-member command with optional instance count."""
     if not command_args.strip():
-        themed_console.print("Usage: /team-add-member <agent_name>", style="error")
+        themed_console.print("Usage: /team-add-member <agent_name> [instance_count]", style="error")
+        themed_console.print("Examples:", style="dim white")
+        themed_console.print("  /team-add-member code_reviewer", style="dim white") 
+        themed_console.print("  /team-add-member code_reviewer 3", style="dim white")
         return
 
-    agent_name = command_args.strip()
+    # Parse command arguments
+    parts = command_args.strip().split()
+    agent_name = parts[0]
+    instance_count = 1
+    
+    if len(parts) > 1:
+        try:
+            instance_count = int(parts[1])
+            if instance_count <= 0:
+                themed_console.print("Instance count must be a positive integer", style="error")
+                return
+        except ValueError:
+            themed_console.print("Invalid instance count. Must be a positive integer", style="error")
+            return
+
     team_manager = get_team_manager(config_manager)
 
     # Check if agent exists
@@ -670,7 +687,26 @@ async def _handle_add_agent_command(command_args: str, config_manager: ConfigMan
             themed_console.print(f"  - {name}", style="dim white")
         return
 
-    await team_manager.add_agent(agent_name)
+    # Check max_instances constraint
+    agent_config = None
+    for agent in available_agents:
+        if agent["name"] == agent_name:
+            # Load the full agent config to check max_instances
+            result = await agent_manager.load_agent(agent_name)
+            if result.success and result.agent:
+                agent_config = result.agent
+                break
+    
+    if agent_config:
+        max_instances = getattr(agent_config, 'max_instances', 1)
+        if instance_count > max_instances:
+            themed_console.print(
+                f"Cannot add {instance_count} instances. Agent '{agent_name}' allows maximum {max_instances} instances.",
+                style="error"
+            )
+            return
+
+    await team_manager.add_agent(agent_name, instance_count)
 
 
 async def _handle_remove_agent_command(
@@ -693,18 +729,25 @@ async def _handle_team_status_command(config_manager: ConfigManager):
 
     if status["member_count"] == 0:
         themed_console.print(
-            "Your team is empty. Use /team-add-member <agent> to build your team.",
+            "Your team is empty. Use /team-add-member <agent> [count] to build your team.",
             style="warning",
         )
         return
 
     themed_console.print(
-        f"Team Status ({status['member_count']} members):", style="app.header"
+        f"Team Status ({status['member_count']} agents, {status['total_instances']} instances):", 
+        style="app.header"
     )
 
     for agent_name, agent_info in status["members"].items():
         text = Text()
-        text.append(f"  🤖 {agent_name}: ", style="primary")
+        
+        # Show instance count if > 1
+        if agent_info["instance_count"] > 1:
+            text.append(f"  🤖 {agent_name} (×{agent_info['instance_count']}): ", style="primary")
+        else:
+            text.append(f"  🤖 {agent_name}: ", style="primary")
+            
         text.append(agent_info["role_summary"], style="dim white")
         themed_console.print(text)
 
@@ -712,6 +755,13 @@ async def _handle_team_status_command(config_manager: ConfigManager):
             capabilities_text = ", ".join(agent_info["capabilities"])
             themed_console.print(
                 f"     Capabilities: {capabilities_text}", style="dim blue"
+            )
+            
+        # Show instance capacity info
+        if agent_info["max_instances"] > 1:
+            themed_console.print(
+                f"     Instances: {agent_info['instance_count']}/{agent_info['max_instances']} (max)",
+                style="dim yellow"
             )
 
 

@@ -1,7 +1,9 @@
 name: "documentation_writer"
 enabled: true
 can_delegate: false
+max_instances: 1
 description: "Technical documentation and content creation specialist"
+specializations: ["documentation", "technical_writing", "api_docs", "user_guides", "tutorials"]
 version: "1.0.0"
 
 role: |
