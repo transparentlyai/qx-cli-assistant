@@ -29,6 +29,7 @@ class TeamMember:
         self.capabilities = capabilities
         self.role_summary = self._extract_role_summary()
         self.console_manager = get_console_manager()
+        self.instance_count = 1  # Default to 1 instance
         
     def _extract_role_summary(self) -> str:
         """Extract a brief summary of the agent's role."""
@@ -203,36 +204,61 @@ class TeamManager:
                     
         return capabilities
 
-    async def add_agent(self, agent_name: str) -> bool:
-        """Add an agent to the team."""
-        if agent_name in self._team_members:
-            themed_console.print(f"Agent '{agent_name}' is already in your team", style="warning")
-            return False
-            
-        # Get the agent configuration
+    async def add_agent(self, agent_name: str, instance_count: int = 1) -> bool:
+        """Add an agent to the team with specified instance count."""
+        # Get the agent configuration first to check max_instances
         agent_manager = get_agent_manager()
         agent_config = agent_manager.get_agent_config(agent_name)
         
         if not agent_config:
             themed_console.print(f"Agent '{agent_name}' not found", style="error")
             return False
+        
+        # Check max_instances constraint
+        max_instances = getattr(agent_config, 'max_instances', 1)
+        
+        # Check current instance count
+        current_instances = 0
+        if agent_name in self._team_members:
+            current_instances = getattr(self._team_members[agent_name], 'instance_count', 1)
+        
+        total_instances = current_instances + instance_count
+        if total_instances > max_instances:
+            themed_console.print(
+                f"Cannot add {instance_count} instances. Agent '{agent_name}' allows maximum {max_instances} instances (currently has {current_instances}).",
+                style="error"
+            )
+            return False
             
         # Infer capabilities
         capabilities = self._infer_capabilities(agent_config)
         
-        # Add to team
-        team_member = TeamMember(agent_name, agent_config, capabilities)
-        self._team_members[agent_name] = team_member
+        if agent_name in self._team_members:
+            # Update existing agent with new instance count
+            self._team_members[agent_name].instance_count = total_instances
+            themed_console.print(
+                f"✓ Updated {agent_name} to {total_instances} instances", 
+                style="success"
+            )
+        else:
+            # Add new agent to team
+            team_member = TeamMember(agent_name, agent_config, capabilities)
+            team_member.instance_count = instance_count
+            self._team_members[agent_name] = team_member
+            
+            if instance_count == 1:
+                themed_console.print(f"✓ Added {agent_name} to your team", style="success")
+            else:
+                themed_console.print(f"✓ Added {agent_name} to your team ({instance_count} instances)", style="success")
+        
+        if capabilities:
+            themed_console.print(f"  Capabilities: {', '.join(capabilities)}", style="dim white")
         
         # Save to storage
         self._save_team_to_storage()
         
         # Rebuild supervisor workflow
         self._rebuild_supervisor_workflow()
-        
-        themed_console.print(f"✓ Added {agent_name} to your team", style="success")
-        if capabilities:
-            themed_console.print(f"  Capabilities: {', '.join(capabilities)}", style="dim white")
         
         return True
 
@@ -264,13 +290,18 @@ class TeamManager:
 
     def get_team_status(self) -> Dict[str, Any]:
         """Get the current team status."""
+        total_instances = sum(getattr(member, 'instance_count', 1) for member in self._team_members.values())
+        
         return {
             'member_count': len(self._team_members),
+            'total_instances': total_instances,
             'members': {
                 name: {
                     'capabilities': member.capabilities,
                     'role_summary': member.role_summary,
-                    'description': member.agent_config.description
+                    'description': member.agent_config.description,
+                    'instance_count': getattr(member, 'instance_count', 1),
+                    'max_instances': getattr(member.agent_config, 'max_instances', 1)
                 }
                 for name, member in self._team_members.items()
             }

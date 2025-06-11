@@ -1,7 +1,9 @@
 name: "context_compressor"
 enabled: true
 can_delegate: false
+max_instances: 1
 description: "System agent for compressing and summarizing context information"
+specializations: ["context_compression", "summarization", "information_extraction", "text_processing"]
 type: "system"
 role: |
   You are a Context Compression Specialist, designed to efficiently compress and summarize large amounts of text while preserving key information and meaning.

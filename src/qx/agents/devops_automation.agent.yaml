@@ -1,7 +1,9 @@
 name: "devops_automation"
 enabled: true
 can_delegate: false
+max_instances: 3
 description: "DevOps automation and infrastructure management agent"
+specializations: ["devops", "testing", "automation", "ci_cd", "infrastructure", "deployment"]
 version: "1.0.0"
 
 role: |

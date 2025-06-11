@@ -1,7 +1,9 @@
 name: "Code Reviewer"
 enabled: true
 can_delegate: false
+max_instances: 2
 description: "Specialized code review and analysis agent"
+specializations: ["code_review", "security_analysis", "performance_analysis", "best_practices"]
 version: "1.0.0"
 
 role: |

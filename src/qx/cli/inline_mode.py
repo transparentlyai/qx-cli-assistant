@@ -83,17 +83,7 @@ def get_bottom_toolbar():
         else '<style bg="#d75f00" fg="black">SINGLE</style>'
     )
 
-    # Delegation capability status
-    agent_manager = get_agent_manager()
-    active_llm_agent = agent_manager.get_active_llm_agent()
-    can_delegate = active_llm_agent.can_delegate if active_llm_agent else False
-    delegation_status = (
-        '<style bg="#22c55e" fg="black">ON</style>'
-        if can_delegate
-        else '<style bg="#ef4444" fg="black">OFF</style>'
-    )
-
-    toolbar_html = f'<style fg="black" bg="white">Mode: {mode_status} | {team_status} | Delegate: {delegation_status} | Details: {details_status} | StdOE: {stdout_status} | Approve All: {approve_all_status}</style>'
+    toolbar_html = f'<style fg="black" bg="white"> {mode_status} | {team_status} | Details: {details_status} | StdOE: {stdout_status} | Approve All: {approve_all_status}</style>'
     return HTML(toolbar_html)
 
 

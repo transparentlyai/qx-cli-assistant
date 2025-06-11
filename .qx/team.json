@@ -1,6 +1,7 @@
 {
   "agents": [
-    "data_processor"
+    "data_processor",
+    "code_reviewer"
   ],
   "version": "1.0"
 }
