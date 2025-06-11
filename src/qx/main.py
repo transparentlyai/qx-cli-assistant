@@ -28,7 +28,6 @@ from qx.core.session_manager import (
     save_session,
 )
 from qx.core.state_manager import details_manager
-from qx.core.database import init_db
 
 # Configure logging for the application
 logger = logging.getLogger("qx")
@@ -42,7 +41,6 @@ async def _async_main(
     """
     Asynchronous main function to handle the Qx agent logic.
     """
-    init_db()
     agent_manager = None
     try:
         async with anyio.create_task_group() as tg:
