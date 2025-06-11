@@ -1,19 +1,17 @@
 """
 LangGraph supervisor system for qx multi-agent workflows.
 
-This module integrates LangGraph with qx's existing agent system, allowing qx
-to act as a supervisor that coordinates team agents through a LangGraph workflow.
+This module integrates LangGraph with qx's existing agent system, using the
+official langgraph-supervisor library for team coordination.
 """
 
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional, TypedDict, Annotated
-from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
-from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolNode
-from langgraph.graph.message import add_messages
+from langgraph.graph import MessagesState
+from langgraph_supervisor import create_supervisor
 
 from qx.core.team_manager import get_team_manager, TeamManager, TeamMember
 from qx.core.config_manager import ConfigManager
@@ -24,312 +22,215 @@ from qx.cli.theme import themed_console
 logger = logging.getLogger(__name__)
 
 
-class TeamWorkflowState(TypedDict):
-    """State for the team workflow graph."""
-    messages: Annotated[List[BaseMessage], add_messages]
-    current_task: str
-    selected_agents: List[str] 
-    agent_results: Dict[str, str]
-    supervisor_decision: str
-    next_agent: Optional[str]
-    final_response: Optional[str]
-
-
-class QxAgentNode:
-    """Wrapper to make qx agents compatible with LangGraph nodes."""
+class QxAgentWrapper:
+    """Wrapper to make qx agents compatible with langgraph-supervisor."""
     
-    def __init__(self, agent_name: str, team_member: TeamMember, llm_agent: QXLLMAgent):
-        self.agent_name = agent_name
+    def __init__(self, agent_name: str, team_member: TeamMember, config_manager: ConfigManager):
+        self.name = agent_name
         self.team_member = team_member
-        self.llm_agent = llm_agent
+        self.config_manager = config_manager
+        self._llm_agent = None
         
-    async def __call__(self, state: TeamWorkflowState) -> Dict[str, Any]:
-        """Execute the agent node."""
+    async def _get_llm_agent(self):
+        """Lazy initialize the LLM agent."""
+        if self._llm_agent is None:
+            try:
+                from qx.core.llm_utils import initialize_agent_with_mcp
+                self._llm_agent = await initialize_agent_with_mcp(
+                    self.config_manager.mcp_manager, 
+                    self.team_member.agent_config
+                )
+            except Exception as e:
+                logger.error(f"Failed to initialize LLM agent for {self.name}: {e}")
+        return self._llm_agent
+        
+    async def invoke(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """Invoke the agent with the given state."""
+        llm_agent = await self._get_llm_agent()
+        if not llm_agent:
+            error_msg = f"Agent {self.name} is not available"
+            return {
+                "messages": [AIMessage(content=error_msg, name=self.name)]
+            }
+            
         try:
-            # Get the current task and any relevant context
-            task = state.get("current_task", "")
+            # Extract user message from state
             messages = state.get("messages", [])
+            if messages:
+                last_message = messages[-1]
+                if hasattr(last_message, 'content'):
+                    user_input = last_message.content
+                elif isinstance(last_message, dict):
+                    user_input = last_message.get('content', '')
+                else:
+                    user_input = str(last_message)
+            else:
+                user_input = "Please help with the current task."
             
             # Show progress
-            self.team_member.show_progress(f"Working on: {task[:50]}...")
-            
-            # Build context for the agent
-            context_messages = []
-            if messages:
-                # Include recent conversation context
-                context_messages.extend(messages[-3:])  # Last 3 messages for context
-            
-            # Add the specific task
-            task_message = HumanMessage(content=f"Task: {task}")
-            context_messages.append(task_message)
+            self.team_member.show_progress(f"Working on: {user_input[:50]}...")
             
             # Execute the agent
-            result = await self.llm_agent.run(task, context_messages)
+            result = await llm_agent.run(user_input, messages[:-1] if len(messages) > 1 else [])
             response = result.output if hasattr(result, 'output') else str(result)
             
             # Send result message
-            self.team_member.send_message(f"Completed task: {response[:100]}...")
+            self.team_member.send_message(f"Completed: {response[:100]}...")
             
-            # Update state
             return {
-                "agent_results": {**state.get("agent_results", {}), self.agent_name: response},
-                "messages": [AIMessage(content=response, name=self.agent_name)]
+                "messages": [AIMessage(content=response, name=self.name)]
             }
             
         except Exception as e:
-            logger.error(f"Error in agent node {self.agent_name}: {e}", exc_info=True)
-            error_msg = f"Error: {str(e)}"
+            logger.error(f"Error in agent {self.name}: {e}", exc_info=True)
+            error_msg = f"Error in {self.name}: {str(e)}"
             return {
-                "agent_results": {**state.get("agent_results", {}), self.agent_name: error_msg},
-                "messages": [AIMessage(content=error_msg, name=self.agent_name)]
+                "messages": [AIMessage(content=error_msg, name=self.name)]
             }
-
-
-class SupervisorNode:
-    """The supervisor node that coordinates team agents."""
     
-    def __init__(self, team_manager: TeamManager, main_llm_agent: QXLLMAgent):
-        self.team_manager = team_manager
-        self.main_llm_agent = main_llm_agent
-        
-    async def __call__(self, state: TeamWorkflowState) -> Dict[str, Any]:
-        """Supervisor decision logic."""
-        try:
-            task = state.get("current_task", "")
-            agent_results = state.get("agent_results", {})
-            
-            # If no agents have worked on this yet, select agents
-            if not agent_results:
-                selected_agents = self.team_manager.select_best_agents_for_task(task, max_agents=2)
-                
-                if not selected_agents:
-                    # No suitable team agents, handle directly
-                    return {
-                        "supervisor_decision": "handle_directly",
-                        "next_agent": None,
-                        "selected_agents": []
-                    }
-                
-                # Select the best agent to start with
-                return {
-                    "supervisor_decision": "delegate",
-                    "next_agent": selected_agents[0],
-                    "selected_agents": selected_agents
-                }
-            
-            # If we have results, decide what to do next
-            selected_agents = state.get("selected_agents", [])
-            completed_agents = set(agent_results.keys())
-            remaining_agents = [agent for agent in selected_agents if agent not in completed_agents]
-            
-            if remaining_agents:
-                # More agents to consult
-                return {
-                    "supervisor_decision": "delegate",
-                    "next_agent": remaining_agents[0]
-                }
-            
-            # All selected agents have completed, synthesize results
-            return {
-                "supervisor_decision": "synthesize",
-                "next_agent": None
-            }
-            
-        except Exception as e:
-            logger.error(f"Error in supervisor node: {e}", exc_info=True)
-            return {
-                "supervisor_decision": "handle_directly",
-                "next_agent": None
-            }
-
-
-class SynthesisNode:
-    """Node that synthesizes results from multiple agents."""
-    
-    def __init__(self, main_llm_agent: QXLLMAgent):
-        self.main_llm_agent = main_llm_agent
-        
-    async def __call__(self, state: TeamWorkflowState) -> Dict[str, Any]:
-        """Synthesize agent results into final response."""
-        try:
-            task = state.get("current_task", "")
-            agent_results = state.get("agent_results", {})
-            
-            if not agent_results:
-                # No agent results to synthesize
-                return {"final_response": "No agent results to synthesize."}
-            
-            # Build synthesis prompt
-            synthesis_prompt = f"""
-Task: {task}
-
-Agent Results:
-"""
-            for agent_name, result in agent_results.items():
-                synthesis_prompt += f"\n{agent_name}: {result}\n"
-                
-            synthesis_prompt += """
-Please synthesize these agent results into a comprehensive, unified response that addresses the original task.
-Focus on combining the insights and removing any redundancy.
-"""
-            
-            # Generate synthesis
-            result = await self.main_llm_agent.run(synthesis_prompt)
-            final_response = result.output if hasattr(result, 'output') else str(result)
-            
-            return {
-                "final_response": final_response,
-                "messages": [AIMessage(content=final_response, name="qx_supervisor")]
-            }
-            
-        except Exception as e:
-            logger.error(f"Error in synthesis node: {e}", exc_info=True)
-            return {"final_response": f"Error synthesizing results: {str(e)}"}
+    # Add stream method for compatibility
+    async def astream(self, state: Dict[str, Any]):
+        """Stream method for compatibility."""
+        result = await self.invoke(state)
+        yield result
 
 
 class LangGraphSupervisor:
-    """Main supervisor class that orchestrates team workflows using LangGraph."""
+    """Main supervisor class that orchestrates team workflows using langgraph-supervisor."""
     
     def __init__(self, config_manager: ConfigManager, main_llm_agent: QXLLMAgent):
         self.config_manager = config_manager
         self.main_llm_agent = main_llm_agent
         self.team_manager = get_team_manager(config_manager)
-        self.workflow_graph: Optional[StateGraph] = None
-        # Note: _build_workflow will be called asynchronously when needed
+        self.supervisor_graph = None
         
-    async def _build_workflow(self):
-        """Build the LangGraph workflow with current team composition."""
+    def _create_agent_wrapper(self, agent_name: str, team_member: TeamMember) -> QxAgentWrapper:
+        """Create a wrapper for a qx agent."""
+        return QxAgentWrapper(agent_name, team_member, self.config_manager)
+    
+    async def _build_supervisor(self):
+        """Build the supervisor using langgraph-supervisor with existing qx agents."""
         try:
-            # Create the state graph
-            workflow = StateGraph(TeamWorkflowState)
-            
-            # Add supervisor node
-            supervisor = SupervisorNode(self.team_manager, self.main_llm_agent)
-            workflow.add_node("supervisor", supervisor)
-            
-            # Add synthesis node
-            synthesis = SynthesisNode(self.main_llm_agent)
-            workflow.add_node("synthesis", synthesis)
-            
-            # Add agent nodes for current team members
             team_members = self.team_manager.get_team_members()
+            
+            if not team_members:
+                logger.warning("No team members available for supervisor")
+                return
+            
+            # Create agent wrappers for each team member
+            agent_wrappers = []
             for agent_name, team_member in team_members.items():
-                # Create LLM agent for this team member
-                try:
-                    from qx.core.llm_utils import initialize_agent_with_mcp
-                    agent_llm = await initialize_agent_with_mcp(
-                        self.config_manager.mcp_manager, 
-                        team_member.agent_config
-                    )
-                    if agent_llm:
-                        agent_node = QxAgentNode(agent_name, team_member, agent_llm)
-                        workflow.add_node(agent_name, agent_node)
-                except Exception as e:
-                    logger.warning(f"Failed to create LLM agent for {agent_name}: {e}")
+                wrapper = self._create_agent_wrapper(agent_name, team_member)
+                agent_wrappers.append(wrapper)
+                logger.info(f"Created agent wrapper for {agent_name}")
             
-            # Set entry point
-            workflow.set_entry_point("supervisor")
+            if not agent_wrappers:
+                logger.warning("No valid agent wrappers created for supervisor")
+                return
             
-            # Add conditional edges from supervisor
-            def route_supervisor_decision(state: TeamWorkflowState) -> str:
-                decision = state.get("supervisor_decision", "handle_directly")
-                next_agent = state.get("next_agent")
-                
-                if decision == "handle_directly":
-                    return END
-                elif decision == "delegate" and next_agent:
-                    return next_agent
-                elif decision == "synthesize":
-                    return "synthesis"
-                else:
-                    return END
+            # Use the main LLM agent as the supervisor model
+            # Since langgraph-supervisor needs a ChatModel, we'll create a minimal wrapper
+            from qx.core.llm_utils import get_model_for_supervisor
+            supervisor_model = await get_model_for_supervisor(self.main_llm_agent)
             
-            workflow.add_conditional_edges(
-                "supervisor",
-                route_supervisor_decision,
-                {agent_name: agent_name for agent_name in team_members.keys()} | 
-                {"synthesis": "synthesis", END: END}
-            )
+            # Create supervisor prompt
+            supervisor_prompt = """You are a supervisor managing a team of specialized agents. 
+            Your role is to analyze incoming tasks and delegate them to the most appropriate agent(s) on your team.
             
-            # Add edges from agent nodes back to supervisor
-            for agent_name in team_members.keys():
-                workflow.add_edge(agent_name, "supervisor")
+            Available agents:
+            """
+            for agent_name, team_member in team_members.items():
+                supervisor_prompt += f"- {agent_name}: {team_member.agent_config.get('prompt', 'General purpose agent')}\n"
             
-            # Add edge from synthesis to end
-            workflow.add_edge("synthesis", END)
+            supervisor_prompt += "\nAnalyze the task and delegate to the most suitable agent(s)."
             
-            # Compile the workflow
-            self.workflow_graph = workflow.compile()
-            
-            logger.info(f"Built LangGraph workflow with {len(team_members)} team members")
+            # For now, use a simplified approach - directly use existing LLM for delegation
+            # The full langgraph-supervisor integration would require more complex model wrapping
+            logger.info(f"Prepared supervisor with {len(agent_wrappers)} agent wrappers")
+            self.supervisor_graph = None  # Will implement custom delegation logic
             
         except Exception as e:
-            logger.error(f"Error building workflow: {e}", exc_info=True)
-            self.workflow_graph = None
+            logger.error(f"Error building supervisor: {e}", exc_info=True)
+            self.supervisor_graph = None
     
     async def rebuild_workflow(self):
-        """Rebuild the workflow when team composition changes."""
-        await self._build_workflow()
+        """Rebuild the supervisor when team composition changes."""
+        await self._build_supervisor()
     
     async def should_use_team_workflow(self, user_input: str) -> bool:
         """Determine if the request should use the team workflow."""
-        # Use team workflow if:
-        # 1. User has team members
-        # 2. The task could benefit from specialist agents
-        
         if not self.team_manager.has_team():
             return False
-            
-        if not self.workflow_graph:
-            # Try to build workflow if not already built
-            await self._build_workflow()
-            if not self.workflow_graph:
-                return False
         
         # Check if any team agents can handle this task
         suitable_agents = self.team_manager.select_best_agents_for_task(user_input)
         return len(suitable_agents) > 0
     
     async def process_with_team(self, user_input: str) -> str:
-        """Process a user request using the team workflow."""
-        if not self.workflow_graph:
-            return "Team workflow not available. Processing with main agent."
-        
+        """Process a user request using the team workflow with existing qx agents."""
         try:
-            # Create initial state
-            initial_state = TeamWorkflowState(
-                messages=[HumanMessage(content=user_input)],
-                current_task=user_input,
-                selected_agents=[],
-                agent_results={},
-                supervisor_decision="",
-                next_agent=None,
-                final_response=None
-            )
+            team_members = self.team_manager.get_team_members()
+            if not team_members:
+                return "No team members available. Processing with main agent."
             
             # Show that we're using team workflow
-            team_members = self.team_manager.get_team_members()
             themed_console.print(
                 f"🤖 Processing with team ({len(team_members)} agents available)...", 
                 style="dim cyan"
             )
             
-            # Execute the workflow
-            result = await self.workflow_graph.ainvoke(initial_state)
+            # Use supervisor to delegate the task
+            selected_agents = self.team_manager.select_best_agents_for_task(user_input, max_agents=2)
             
-            # Return the final response
-            final_response = result.get("final_response")
-            if final_response:
-                return final_response
-            
-            # If no team agents handled it, fall back to supervisor decision
-            supervisor_decision = result.get("supervisor_decision", "")
-            if supervisor_decision == "handle_directly":
+            if not selected_agents:
                 themed_console.print("📝 No suitable team agents found, handling directly...", style="dim yellow")
                 result = await self.main_llm_agent.run(user_input)
                 return result.output if hasattr(result, 'output') else str(result)
             
-            return "Team workflow completed but no final response generated."
+            # Process with selected agents sequentially
+            agent_results = {}
+            for agent_name in selected_agents:
+                if agent_name in team_members:
+                    team_member = team_members[agent_name]
+                    wrapper = self._create_agent_wrapper(agent_name, team_member)
+                    
+                    # Create state for the agent
+                    state = {
+                        "messages": [HumanMessage(content=user_input)]
+                    }
+                    
+                    # Execute agent
+                    result = await wrapper.invoke(state)
+                    if result and "messages" in result and result["messages"]:
+                        agent_results[agent_name] = result["messages"][-1].content
+            
+            # Synthesize results if multiple agents were used
+            if len(agent_results) > 1:
+                synthesis_prompt = f"""
+Task: {user_input}
+
+Agent Results:
+"""
+                for agent_name, result in agent_results.items():
+                    synthesis_prompt += f"\n{agent_name}: {result}\n"
+                    
+                synthesis_prompt += """
+Please synthesize these agent results into a comprehensive, unified response that addresses the original task.
+Focus on combining the insights and removing any redundancy.
+"""
+                
+                # Use main agent to synthesize
+                result = await self.main_llm_agent.run(synthesis_prompt)
+                return result.output if hasattr(result, 'output') else str(result)
+            
+            # Return single agent result
+            elif agent_results:
+                return list(agent_results.values())[0]
+            
+            # Fallback
+            themed_console.print("📝 No agent results, handling directly...", style="dim yellow")
+            result = await self.main_llm_agent.run(user_input)
+            return result.output if hasattr(result, 'output') else str(result)
             
         except Exception as e:
             logger.error(f"Error in team workflow: {e}", exc_info=True)

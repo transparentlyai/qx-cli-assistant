@@ -606,6 +606,25 @@ class AgentManager:
         if cwd is None:
             cwd = os.getcwd()
         return self._agent_loader.refresh_discovery(cwd=cwd)
+
+    def get_agent_config(self, agent_name: str, context: Optional[Dict[str, str]] = None, cwd: Optional[str] = None) -> Optional[AgentConfig]:
+        """
+        Get agent configuration by name without affecting current session.
+        
+        Args:
+            agent_name: Name of the agent to get configuration for
+            context: Template context for placeholder replacement
+            cwd: Current working directory for path resolution
+            
+        Returns:
+            AgentConfig if found, None otherwise
+        """
+        try:
+            result = self._agent_loader.load_agent(agent_name, context=context, cwd=cwd)
+            return result.agent if result.success else None
+        except Exception as e:
+            logger.error(f"Failed to get agent config for '{agent_name}': {e}")
+            return None
         
     async def cleanup(self):
         """Clean up all agent resources."""
