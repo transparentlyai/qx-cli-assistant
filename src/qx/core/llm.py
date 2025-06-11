@@ -595,32 +595,37 @@ async def query_llm(
     Queries the LLM agent, with optional team workflow coordination.
     """
     try:
-        # Check if we should use team workflow
+        # Check if we should use team workflow (only if team mode is enabled)
         if config_manager:
             try:
-                from qx.core.langgraph_supervisor import get_langgraph_supervisor
-                supervisor = get_langgraph_supervisor(config_manager, agent)
+                from qx.core.team_mode_manager import get_team_mode_manager
+                team_mode_manager = get_team_mode_manager()
                 
-                # Check if team workflow should be used
-                if await supervisor.should_use_team_workflow(user_input):
-                    # Process with team workflow
-                    team_response = await supervisor.process_with_team(user_input)
+                # Only use team workflow if team mode is explicitly enabled
+                if team_mode_manager.is_team_mode_enabled():
+                    from qx.core.langgraph_supervisor import get_langgraph_supervisor
+                    supervisor = get_langgraph_supervisor(config_manager, agent)
                     
-                    # Create a QXRunResult structure for consistency
-                    final_messages = list(message_history) if message_history else []
-                    if add_user_message_to_history:
+                    # Check if team workflow should be used
+                    if await supervisor.should_use_team_workflow(user_input):
+                        # Process with team workflow
+                        team_response = await supervisor.process_with_team(user_input)
+                        
+                        # Create a QXRunResult structure for consistency
+                        final_messages = list(message_history) if message_history else []
+                        if add_user_message_to_history:
+                            final_messages.append({
+                                "role": "user",
+                                "content": user_input
+                            })
+                        
+                        # Add team response
                         final_messages.append({
-                            "role": "user",
-                            "content": user_input
+                            "role": "assistant", 
+                            "content": team_response
                         })
-                    
-                    # Add team response
-                    final_messages.append({
-                        "role": "assistant", 
-                        "content": team_response
-                    })
-                    
-                    return QXRunResult(team_response, final_messages)
+                        
+                        return QXRunResult(team_response, final_messages)
                     
             except Exception as e:
                 logger.warning(f"Team workflow error, falling back to main agent: {e}")

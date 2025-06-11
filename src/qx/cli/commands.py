@@ -1,18 +1,18 @@
-import os
 import logging
+import os
 from pathlib import Path
 from typing import List, Optional
 
 from openai.types.chat import ChatCompletionMessageParam
 from rich.text import Text
 
+import qx.core.user_prompts
 from qx.cli.theme import themed_console
+from qx.core.agent_manager import get_agent_manager
+from qx.core.config_manager import ConfigManager
+from qx.core.constants import MODELS, QX_VERSION
 from qx.core.llm import QXLLMAgent, initialize_llm_agent
 from qx.core.session_manager import reset_session
-from qx.core.config_manager import ConfigManager
-import qx.core.user_prompts
-from qx.core.constants import MODELS, QX_VERSION
-from qx.core.agent_manager import get_agent_manager
 from qx.core.team_manager import get_team_manager
 from qx.core.team_mode_manager import get_team_mode_manager
 
@@ -409,7 +409,8 @@ async def _handle_inline_command(
             "  /team-add-member <agent> - Add agent to your team", style="primary"
         )
         themed_console.print(
-            "  /team-remove-member <agent> - Remove agent from your team", style="primary"
+            "  /team-remove-member <agent> - Remove agent from your team",
+            style="primary",
         )
         themed_console.print(
             "  /team-status - Show current team composition", style="primary"
@@ -430,7 +431,7 @@ async def _handle_inline_command(
 
         themed_console.print("\nKey Bindings:", style="app.header")
         themed_console.print(
-            "  Ctrl+A      - Toggle 'Approve All' mode", style="primary"
+            "  Ctrl+A / F5 - Toggle 'Approve All' mode", style="primary"
         )
         themed_console.print("  Ctrl+C      - Abort current operation", style="primary")
         themed_console.print("  Ctrl+D      - Exit QX", style="primary")
@@ -439,17 +440,17 @@ async def _handle_inline_command(
             style="primary",
         )
         themed_console.print(
-            "  Ctrl+O      - Toggle stdout visibility", style="primary"
+            "  F4          - Toggle stdout and stderr visibility", style="primary"
         )
         themed_console.print(
-            "  Ctrl+P      - Toggle between PLANNING and IMPLEMENTING modes",
+            "  F1          - Toggle between PLANNING and IMPLEMENTING modes",
             style="primary",
         )
         themed_console.print(
             "  Ctrl+R      - Fuzzy history search (fzf)", style="primary"
         )
-        themed_console.print("  Ctrl+T      - Toggle 'Details' mode", style="primary")
-        themed_console.print("  Ctrl+W      - Toggle team mode", style="primary")
+        themed_console.print("  F3          - Toggle 'Details' mode", style="primary")
+        themed_console.print("  F2          - Toggle team mode", style="primary")
         themed_console.print("  F12         - Emergency cancel", style="primary")
         themed_console.print(
             "  Esc+Enter   - Toggle multiline mode (Alt+Enter)", style="primary"
@@ -529,7 +530,7 @@ async def _handle_inline_command(
             style="info",
         )
         themed_console.print(
-            "  • Create custom agents with YAML files in ./src/qx/agents/ or ~/.config/qx/agents/",
+            "  • Create custom agents with YAML files in ~/.config/qx/agents/ or <project-path>/.Q/agents/",
             style="info",
         )
         themed_console.print(
@@ -656,23 +657,25 @@ async def _handle_add_agent_command(command_args: str, config_manager: ConfigMan
 
     agent_name = command_args.strip()
     team_manager = get_team_manager(config_manager)
-    
+
     # Check if agent exists
     agent_manager = get_agent_manager()
     available_agents = await agent_manager.list_agents(cwd=os.getcwd())
     agent_names = [agent["name"] for agent in available_agents]
-    
+
     if agent_name not in agent_names:
         themed_console.print(f"Agent '{agent_name}' not found.", style="error")
         themed_console.print("Available agents:", style="dim white")
         for name in agent_names:
             themed_console.print(f"  - {name}", style="dim white")
         return
-    
+
     await team_manager.add_agent(agent_name)
 
 
-async def _handle_remove_agent_command(command_args: str, config_manager: ConfigManager):
+async def _handle_remove_agent_command(
+    command_args: str, config_manager: ConfigManager
+):
     """Handle /team-remove-member command."""
     if not command_args.strip():
         themed_console.print("Usage: /team-remove-member <agent_name>", style="error")
@@ -687,22 +690,29 @@ async def _handle_team_status_command(config_manager: ConfigManager):
     """Handle /team-status command."""
     team_manager = get_team_manager(config_manager)
     status = team_manager.get_team_status()
-    
-    if status['member_count'] == 0:
-        themed_console.print("Your team is empty. Use /team-add-member <agent> to build your team.", style="warning")
+
+    if status["member_count"] == 0:
+        themed_console.print(
+            "Your team is empty. Use /team-add-member <agent> to build your team.",
+            style="warning",
+        )
         return
-    
-    themed_console.print(f"Team Status ({status['member_count']} members):", style="app.header")
-    
-    for agent_name, agent_info in status['members'].items():
+
+    themed_console.print(
+        f"Team Status ({status['member_count']} members):", style="app.header"
+    )
+
+    for agent_name, agent_info in status["members"].items():
         text = Text()
         text.append(f"  🤖 {agent_name}: ", style="primary")
-        text.append(agent_info['role_summary'], style="dim white")
+        text.append(agent_info["role_summary"], style="dim white")
         themed_console.print(text)
-        
-        if agent_info['capabilities']:
-            capabilities_text = ", ".join(agent_info['capabilities'])
-            themed_console.print(f"     Capabilities: {capabilities_text}", style="dim blue")
+
+        if agent_info["capabilities"]:
+            capabilities_text = ", ".join(agent_info["capabilities"])
+            themed_console.print(
+                f"     Capabilities: {capabilities_text}", style="dim blue"
+            )
 
 
 async def _handle_team_clear_command(config_manager: ConfigManager):
@@ -714,23 +724,31 @@ async def _handle_team_clear_command(config_manager: ConfigManager):
 async def _handle_team_enable_command(config_manager: ConfigManager):
     """Handle /team-enable command."""
     team_mode_manager = get_team_mode_manager()
-    
+
     if team_mode_manager.is_team_mode_enabled():
         themed_console.print("Team mode is already enabled", style="warning")
         return
-    
+
     success = team_mode_manager.set_team_mode_enabled(True, project_level=True)
     if success:
-        themed_console.print("✓ Team mode enabled - qx will now act as supervisor", style="success")
-        themed_console.print("  Use /team-add-member to build your team", style="dim white")
-        
+        themed_console.print(
+            "✓ Team mode enabled - qx will now act as supervisor", style="success"
+        )
+        themed_console.print(
+            "  Use /team-add-member to build your team", style="dim white"
+        )
+
         # Switch to supervisor agent
         agent_manager = get_agent_manager()
-        switch_success = await agent_manager.switch_llm_agent("qx.supervisor", config_manager.mcp_manager)
+        switch_success = await agent_manager.switch_llm_agent(
+            "qx.supervisor", config_manager.mcp_manager
+        )
         if switch_success:
             themed_console.print("  Switched to supervisor agent", style="dim green")
         else:
-            themed_console.print("  Warning: Failed to switch to supervisor agent", style="warning")
+            themed_console.print(
+                "  Warning: Failed to switch to supervisor agent", style="warning"
+            )
     else:
         themed_console.print("Failed to enable team mode", style="error")
 
@@ -738,22 +756,28 @@ async def _handle_team_enable_command(config_manager: ConfigManager):
 async def _handle_team_disable_command(config_manager: ConfigManager):
     """Handle /team-disable command."""
     team_mode_manager = get_team_mode_manager()
-    
+
     if not team_mode_manager.is_team_mode_enabled():
         themed_console.print("Team mode is already disabled", style="warning")
         return
-    
+
     success = team_mode_manager.set_team_mode_enabled(False, project_level=True)
     if success:
-        themed_console.print("✓ Team mode disabled - qx will act as single agent", style="success")
-        
+        themed_console.print(
+            "✓ Team mode disabled - qx will act as single agent", style="success"
+        )
+
         # Switch to single agent
         agent_manager = get_agent_manager()
-        switch_success = await agent_manager.switch_llm_agent("qx", config_manager.mcp_manager)
+        switch_success = await agent_manager.switch_llm_agent(
+            "qx", config_manager.mcp_manager
+        )
         if switch_success:
             themed_console.print("  Switched to single agent", style="dim green")
         else:
-            themed_console.print("  Warning: Failed to switch to single agent", style="warning")
+            themed_console.print(
+                "  Warning: Failed to switch to single agent", style="warning"
+            )
     else:
         themed_console.print("Failed to disable team mode", style="error")
 
@@ -762,28 +786,34 @@ async def _handle_team_mode_command(config_manager: ConfigManager):
     """Handle /team-mode command."""
     team_mode_manager = get_team_mode_manager()
     team_manager = get_team_manager(config_manager)
-    
+
     enabled = team_mode_manager.is_team_mode_enabled()
     config_source = team_mode_manager.get_config_source()
-    
+
     status_text = "enabled" if enabled else "disabled"
     status_style = "success" if enabled else "warning"
-    
+
     themed_console.print(f"Team Mode: {status_text}", style=status_style)
     themed_console.print(f"  Source: {config_source}", style="dim white")
-    
+
     if enabled:
         agent_manager = get_agent_manager()
         current_agent = await agent_manager.get_current_agent_name()
         themed_console.print(f"  Active agent: {current_agent}", style="dim white")
-        
+
         # Show team composition
         team_status = team_manager.get_team_status()
-        if team_status['member_count'] > 0:
-            themed_console.print(f"  Team members: {team_status['member_count']}", style="dim blue")
-            for agent_name in team_status['members'].keys():
+        if team_status["member_count"] > 0:
+            themed_console.print(
+                f"  Team members: {team_status['member_count']}", style="dim blue"
+            )
+            for agent_name in team_status["members"].keys():
                 themed_console.print(f"    - {agent_name}", style="dim blue")
         else:
-            themed_console.print("  No team members (supervisor mode)", style="dim yellow")
+            themed_console.print(
+                "  No team members (supervisor mode)", style="dim yellow"
+            )
     else:
-        themed_console.print("  Use /team-enable to activate team coordination", style="dim white")
+        themed_console.print(
+            "  Use /team-enable to activate team coordination", style="dim white"
+        )
