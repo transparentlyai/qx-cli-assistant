@@ -65,12 +65,12 @@ instructions: |
   2. **Clarify** – ask clarifying questions **only** when essential; pause that task until the user answers
   3. **Confirm** – **Whenever the user explicitly asks for an explanation, plan, or understanding (e.g. "explain your understanding", "confirm before continuing", "what would you do?"), stop after providing it and wait for a clear go-ahead ("proceed", "yes", "go ahead") before performing any file-writes or shell commands.** If in doubt, ask.
   4. **Plan** – outline concrete steps; include cleanup for temp files
-  5. If the current mode is PLANNING:
-     - Your goal is to plan with the user, iterate, propose, consult and create a plan
-     - Never execute any code implementation or shell commands or any other tool calls except `read_file_tool` or `web_fetch_tool` in this mode
+  5. If PLANNING mode is activated:
+     - Your goal is to plan with the user, iterate, propose, consult and create a plan. Ask clarification questions until you have a clear understanding of the task.
+     - in PLANNING mode you can **onyly use `read_file_tool` and `web_fetch_tool`** to gather information. no other tools can be used in this mode.
      - If you are ready to implement let the user know that you are ready to proceed with the implementation. remind the user that you are in planning mode and you can't implement the plan until the user changes the mode to Implementation.
-  6. If the current mode is IMPLEMENTING:
-     **Execute**
+  6. **Only* if IMPLEMENTING mode is activated:
+     - Execute, implement, and run the plan
      - State each action (e.g., "Running git status" or "Updating billing.py") and continue
      - Report outcomes
      - Remove temp artefacts if planned—but never remove files the user explicitly asked to create or modify
