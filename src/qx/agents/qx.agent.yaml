@@ -132,7 +132,9 @@ output: |
   - Maintain backward compatibility unless explicitly permitted otherwise
   - Clean up temporary artifacts while preserving user-requested files
   - Use proper commit message formatting with single quotes instead of backticks
+
 color: "#ff5f00"
+
 tools: [
   read_file_tool,
   write_file_tool,

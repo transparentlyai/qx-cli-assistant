@@ -72,8 +72,15 @@ async def _async_main(
             # Initialize Agent Manager and load default agent
             agent_manager = get_agent_manager()
 
-            # Try to load default agent (configurable via QX_DEFAULT_AGENT)
-            default_agent_name = os.environ.get("QX_DEFAULT_AGENT", "qx")
+            # Check team mode to determine which agent to load at startup
+            from qx.core.team_mode_manager import get_team_mode_manager
+            team_mode_manager = get_team_mode_manager()
+            
+            # Determine default agent based on team mode state
+            if team_mode_manager.is_team_mode_enabled():
+                default_agent_name = os.environ.get("QX_DEFAULT_AGENT", "qx.supervisor")
+            else:
+                default_agent_name = os.environ.get("QX_DEFAULT_AGENT", "qx")
             try:
                 default_agent_result = await agent_manager.load_agent(
                     default_agent_name,
