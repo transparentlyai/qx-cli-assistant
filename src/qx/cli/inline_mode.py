@@ -155,6 +155,9 @@ async def _run_inline_mode(
     # Load planning mode from configuration
     planning_mode_config = config_manager.get_config_value("QX_PLANNING_MODE", "false")
     _planning_mode_active[0] = planning_mode_config.lower() == "true"
+    
+    # Track the current agent to detect switches
+    current_active_agent = llm_agent
 
     # Initialize global hotkey system but don't start it yet
     # We'll use suspend/resume pattern around prompt_toolkit usage
@@ -542,7 +545,12 @@ async def _run_inline_mode(
                 is_multiline_mode[0] = False
 
             if user_input.startswith("/"):
-                await _handle_inline_command(user_input, llm_agent, config_manager)
+                # Get current active agent for command handling
+                from qx.core.agent_manager import get_agent_manager
+                agent_manager = get_agent_manager()
+                active_llm_agent = agent_manager.get_active_llm_agent() or llm_agent
+                
+                await _handle_inline_command(user_input, active_llm_agent, config_manager)
                 continue
 
             # Save user message immediately
@@ -565,10 +573,15 @@ async def _run_inline_mode(
             from qx.core.agent_manager import get_agent_manager
 
             agent_manager = get_agent_manager()
-            active_llm_agent = agent_manager.get_active_llm_agent() or llm_agent
+            active_llm_agent = agent_manager.get_active_llm_agent()
+            
+            # If no active agent in manager, something is wrong - keep using original
+            if active_llm_agent is None:
+                logger.warning("No active LLM agent found in agent manager, using original agent")
+                active_llm_agent = llm_agent
 
             # Check if agent has changed - if so, reset conversation history for clean switch
-            if active_llm_agent != llm_agent:
+            if active_llm_agent != current_active_agent:
                 # Agent has been switched - create fresh history with new system prompt
                 from openai.types.chat import ChatCompletionSystemMessageParam
 
@@ -592,6 +605,9 @@ async def _run_inline_mode(
                             role="user", content=final_user_input
                         )
                     ]
+                
+                # Update current agent tracker
+                current_active_agent = active_llm_agent
 
             llm_task = asyncio.create_task(
                 _handle_llm_interaction(

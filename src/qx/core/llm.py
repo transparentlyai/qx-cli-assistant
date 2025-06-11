@@ -430,10 +430,7 @@ def initialize_llm_agent(
         current_agent_name: Name of the current agent
         team_context: Team composition and context information
     """
-    # Load system prompt (agent-based or legacy) with agent context
-    system_prompt_content = load_and_format_system_prompt(
-        agent_config, agent_mode, current_agent_name, team_context
-    )
+    # Will generate discovered tools context after loading tools
 
     # Use agent configuration for model parameters if available
     if agent_config is not None:
@@ -489,6 +486,21 @@ def initialize_llm_agent(
     if mcp_tools:
         registered_tools.extend(mcp_tools)
         logger.info(f"Added {len(mcp_tools)} tools from active MCP servers.")
+
+    # Generate discovered tools context now that all tools are loaded
+    from qx.core.llm_components.prompts import generate_discovered_tools_context, generate_discovered_models_context, generate_discovered_agents_context
+    discovered_tools_context = generate_discovered_tools_context(registered_tools)
+    
+    # Generate discovered models context
+    discovered_models_context = generate_discovered_models_context()
+    
+    # Generate discovered agents context
+    discovered_agents_context = generate_discovered_agents_context()
+    
+    # Load system prompt (agent-based or legacy) with agent context, discovered tools, discovered models, and discovered agents
+    system_prompt_content = load_and_format_system_prompt(
+        agent_config, agent_mode, current_agent_name, team_context, discovered_tools_context, discovered_models_context, discovered_agents_context
+    )
 
     try:
         # Validate reasoning_effort if provided

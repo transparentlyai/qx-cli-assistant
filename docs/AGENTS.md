@@ -422,6 +422,133 @@ context: |
   
   **Current Directory:**
   {project_files}
+  
+  **Available Tools:**
+  {discovered_tools}
+  
+  **Available Models:**
+  {discovered_models}
+  
+  **Available Agents:**
+  {discovered_agents}
+```
+
+#### Available Template Variables
+
+- **`{user_context}`** - User context from QX_USER_CONTEXT environment variable
+- **`{project_context}`** - Project context from QX_PROJECT_CONTEXT environment variable  
+- **`{project_files}`** - Project file listing from QX_PROJECT_FILES environment variable
+- **`{ignore_paths}`** - Contents of .gitignore file from current directory
+- **`{agent_mode}`** - Current agent mode (single, supervisor, team_member)
+- **`{current_agent_name}`** - Name of the current agent
+- **`{team_context}`** - Team composition and context information
+- **`{discovered_tools}`** - Complete documentation of all available tools (plugins + MCP)
+- **`{discovered_models}`** - List of all available LLM models with descriptions
+- **`{discovered_agents}`** - List of all discovered agents with descriptions
+
+#### Using Template Variables
+
+Template variables can be used in **any text field** of your agent configuration:
+
+**In Instructions:**
+```yaml
+instructions: |
+  You are a helpful assistant with access to various tools, models, and agents.
+  
+  ## Available Tools
+  {discovered_tools}
+  
+  ## Available Models
+  {discovered_models}
+  
+  ## Available Agents
+  {discovered_agents}
+  
+  Use these tools, models, and agents appropriately to help users with their requests.
+  You can switch to specialized agents when needed.
+  Always explain which tools you're using and why.
+```
+
+**In Role:**
+```yaml
+role: |
+  You are a specialist agent with access to these tools:
+  {discovered_tools}
+  
+  Your expertise includes using these tools effectively to solve problems.
+```
+
+**In Context:**
+```yaml
+context: |
+  ## Project Information
+  **Project:** {project_context}
+  **Files:** {project_files}
+  
+  ## Available Tools
+  {discovered_tools}
+  
+  ## Team Context
+  {team_context}
+```
+
+**In Output:**
+```yaml
+output: |
+  When responding, remember you have access to:
+  {discovered_tools}
+  
+  Format responses clearly and mention which tools you'll use.
+```
+
+**Multiple Locations:**
+```yaml
+role: |
+  You are a development assistant with comprehensive tool access:
+  {discovered_tools}
+
+instructions: |
+  Help users with coding tasks using the available tools:
+  {discovered_tools}
+  
+  Always be explicit about your tool usage and reasoning.
+```
+
+#### Context Variable Formats
+
+**Discovered Tools Format:**
+
+The `{discovered_tools}` variable provides a simple list of available tools with descriptions:
+
+```
+- read_file_tool: Reads the contents of a file at a given path
+- write_file_tool: Creates or updates a file with the provided content
+- execute_shell_tool: Runs a specified command in the shell
+- web_fetch_tool: Retrieves content from a URL
+- current_time_tool: Provides the current date and time
+- todo_manager_tool: Helps manage tasks and to-do lists
+```
+
+**Available Models Format:**
+
+The `{discovered_models}` variable provides a simple list of available LLM models with their full identifiers and descriptions:
+
+```
+- openrouter/google/gemini-2.5-pro-preview-06-05: Preview 06-05 (OPENROUTER)
+- openrouter/google/gemini-2.5-flash-preview-05-20: Preview 05-20 (OPENROUTER)
+```
+
+**Available Agents Format:**
+
+The `{discovered_agents}` variable provides a simple list of all discovered agents with descriptions:
+
+```
+- qx: Main agent
+- code_reviewer: Specialized code review and analysis agent
+- devops_automation: DevOps automation and infrastructure management agent
+- documentation_writer: Technical documentation and content creation specialist
+- data_processor: Data analysis and processing automation agent
+- qx.supervisor: Team supervisor and coordinator for multi-agent workflows
 ```
 
 ## Execution Modes
