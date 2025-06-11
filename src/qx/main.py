@@ -266,6 +266,14 @@ async def _async_main(
                     except Exception as e:
                         logger.error(f"Error during MCP cleanup: {e}", exc_info=True)
 
+                    # Clean up HTTP client resources
+                    try:
+                        from qx.core.http_client_manager import http_client_manager
+                        logger.debug("Cleaning up HTTP client before exit.")
+                        await http_client_manager.cleanup()
+                    except Exception as e:
+                        logger.error(f"Error during HTTP client cleanup: {e}", exc_info=True)
+
                     # Clean up LLM agent resources
                     try:
                         if llm_agent:
