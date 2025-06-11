@@ -36,6 +36,7 @@ pending_text = [""]
 _details_active_for_toolbar = [True]
 _stdout_active_for_toolbar = [True]
 _planning_mode_active = [False]
+_team_mode_active_for_toolbar = [False]
 
 
 class SingleLineNonEmptyValidator(Validator):
@@ -48,6 +49,7 @@ class SingleLineNonEmptyValidator(Validator):
 
 def get_bottom_toolbar():
     import qx.core.user_prompts as user_prompts
+    from qx.core.team_mode_manager import get_team_mode_manager
 
     approve_all_status = (
         '<style bg="#22c55e" fg="black">ON</style>'
@@ -70,8 +72,17 @@ def get_bottom_toolbar():
         if _planning_mode_active[0]
         else '<style bg="#22c55e" fg="black">IMPLEMENTING</style>'
     )
+    
+    # Team mode status
+    team_mode_manager = get_team_mode_manager()
+    team_mode_enabled = team_mode_manager.is_team_mode_enabled()
+    team_status = (
+        '<style bg="#3b82f6" fg="black">TEAM</style>'
+        if team_mode_enabled
+        else '<style bg="#6b7280" fg="black">SINGLE</style>'
+    )
 
-    toolbar_html = f'<style fg="black" bg="white">Mode: {mode_status} | Details: {details_status} | Stdout: {stdout_status} | Approve All: {approve_all_status}</style>'
+    toolbar_html = f'<style fg="black" bg="white">Mode: {mode_status} | {team_status} | Details: {details_status} | Stdout: {stdout_status} | Approve All: {approve_all_status}</style>'
     return HTML(toolbar_html)
 
 
@@ -82,6 +93,7 @@ async def _handle_llm_interaction(
     code_theme_to_use: str,
     plain_text_output: bool = False,
     add_user_message_to_history: bool = True,
+    config_manager: Optional[Any] = None,
 ) -> Optional[List[ChatCompletionMessageParam]]:
     run_result: Optional[Any] = None
     try:
@@ -91,6 +103,7 @@ async def _handle_llm_interaction(
             message_history=current_message_history,
             console=themed_console,
             add_user_message_to_history=add_user_message_to_history,
+            config_manager=config_manager,
         )
     except asyncio.CancelledError:
         logger.info("LLM interaction cancelled by user")
@@ -297,6 +310,35 @@ async def _run_inline_mode(
         )
         event.app.invalidate()
 
+    @bindings.add("c-w")
+    async def _(event):
+        from qx.core.team_mode_manager import get_team_mode_manager
+        from qx.core.agent_manager import get_agent_manager
+        
+        team_mode_manager = get_team_mode_manager()
+        current_state = team_mode_manager.is_team_mode_enabled()
+        new_state = team_mode_manager.toggle_team_mode(project_level=True)
+        
+        mode_text = "enabled" if new_state else "disabled"
+        agent_name = "qx.supervisor" if new_state else "qx"
+        
+        # Switch agent
+        agent_manager = get_agent_manager()
+        switch_success = await agent_manager.switch_llm_agent(agent_name, config_manager.mcp_manager)
+        
+        if switch_success:
+            status_msg = f"✓ [dim green]Team mode:[/] {mode_text} (switched to {agent_name})"
+        else:
+            status_msg = f"✓ [dim green]Team mode:[/] {mode_text} (warning: agent switch failed)"
+        
+        run_in_terminal(
+            lambda: themed_console.print(status_msg, style="warning")
+        )
+        
+        # Clear the current prompt line and force restart with new agent color
+        event.current_buffer.reset()
+        event.app.exit(result="__AGENT_SWITCHED__")
+
     @bindings.add("c-e")
     def _(event):
         import tempfile
@@ -425,10 +467,18 @@ async def _run_inline_mode(
                     global_hotkey_manager.start()
                     logger.debug("Restarted global hotkeys after prompt input")
 
-            if result != "__TOGGLE_MULTILINE__":
+            if result not in ["__TOGGLE_MULTILINE__", "__AGENT_SWITCHED__"]:
                 pending_text[0] = ""
 
             if result == "__TOGGLE_MULTILINE__":
+                try:
+                    print("\033[1A\r\033[K", end="", flush=True)
+                except Exception:
+                    pass
+                continue
+                
+            if result == "__AGENT_SWITCHED__":
+                # Agent was switched, clear the prompt line and continue with new colors
                 try:
                     print("\033[1A\r\033[K", end="", flush=True)
                 except Exception:
@@ -519,6 +569,7 @@ async def _run_inline_mode(
                     current_message_history,
                     "rrt",
                     add_user_message_to_history=False,
+                    config_manager=config_manager,
                 )
             )
 

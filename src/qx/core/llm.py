@@ -410,6 +410,9 @@ def initialize_llm_agent(
     mcp_manager: MCPManager,  # New parameter
     enable_streaming: bool = True,
     agent_config: Optional[Any] = None,  # New parameter for agent configuration
+    agent_mode: str = "single",  # Agent mode (single, supervisor, team_member)
+    current_agent_name: str = "",  # Current agent name
+    team_context: str = "",  # Team context information
 ) -> Optional[QXLLMAgent]:
     """
     Initializes the QXLLMAgent with system prompt and discovered tools.
@@ -421,9 +424,14 @@ def initialize_llm_agent(
         mcp_manager: MCP manager instance
         enable_streaming: Whether to enable streaming
         agent_config: Optional agent configuration for agent-based initialization
+        agent_mode: Type of agent (single, supervisor, team_member)
+        current_agent_name: Name of the current agent
+        team_context: Team composition and context information
     """
-    # Load system prompt (agent-based or legacy)
-    system_prompt_content = load_and_format_system_prompt(agent_config)
+    # Load system prompt (agent-based or legacy) with agent context
+    system_prompt_content = load_and_format_system_prompt(
+        agent_config, agent_mode, current_agent_name, team_context
+    )
 
     # Use agent configuration for model parameters if available
     if agent_config is not None:
@@ -581,17 +589,50 @@ async def query_llm(
     console: RichConsole,
     message_history: Optional[List[ChatCompletionMessageParam]] = None,
     add_user_message_to_history: bool = True,
+    config_manager: Optional[Any] = None,
 ) -> Optional[Any]:
     """
-    Queries the LLM agent.
+    Queries the LLM agent, with optional team workflow coordination.
     """
     try:
+        # Check if we should use team workflow
+        if config_manager:
+            try:
+                from qx.core.langgraph_supervisor import get_langgraph_supervisor
+                supervisor = get_langgraph_supervisor(config_manager, agent)
+                
+                # Check if team workflow should be used
+                if await supervisor.should_use_team_workflow(user_input):
+                    # Process with team workflow
+                    team_response = await supervisor.process_with_team(user_input)
+                    
+                    # Create a QXRunResult structure for consistency
+                    final_messages = list(message_history) if message_history else []
+                    if add_user_message_to_history:
+                        final_messages.append({
+                            "role": "user",
+                            "content": user_input
+                        })
+                    
+                    # Add team response
+                    final_messages.append({
+                        "role": "assistant", 
+                        "content": team_response
+                    })
+                    
+                    return QXRunResult(team_response, final_messages)
+                    
+            except Exception as e:
+                logger.warning(f"Team workflow error, falling back to main agent: {e}")
+        
+        # Default: use main agent
         result = await agent.run(
             user_input,
             message_history=message_history,
             add_user_message_to_history=add_user_message_to_history,
         )
         return result
+        
     except Exception as e:
         logger.error(f"Error during LLM query: {e}", exc_info=True)
         console.print(f"[error]Error:[/] LLM query: {e}")

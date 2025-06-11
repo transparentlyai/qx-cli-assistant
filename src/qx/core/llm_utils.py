@@ -26,6 +26,47 @@ async def initialize_agent_with_mcp(
     Returns:
         Initialized QXLLMAgent instance
     """
+    # Determine agent context
+    agent_mode = "single"  # Default
+    current_agent_name = ""
+    team_context = ""
+    
+    if agent_config:
+        current_agent_name = getattr(agent_config, "name", "")
+        
+        # Determine agent mode based on agent name
+        if current_agent_name == "qx.supervisor":
+            agent_mode = "supervisor"
+        elif current_agent_name == "qx":
+            agent_mode = "single"
+        else:
+            # Other agents are likely team members when in team mode
+            from qx.core.team_mode_manager import get_team_mode_manager
+            team_mode_manager = get_team_mode_manager()
+            if team_mode_manager.is_team_mode_enabled():
+                agent_mode = "team_member"
+        
+        # Get team context if in team mode
+        if agent_mode in ["supervisor", "team_member"]:
+            try:
+                from qx.core.config_manager import ConfigManager
+                from qx.core.team_manager import get_team_manager
+                
+                # Create a minimal config manager to get team context
+                config_manager = ConfigManager(None, None)
+                team_manager = get_team_manager(config_manager)
+                team_status = team_manager.get_team_status()
+                
+                if team_status['member_count'] > 0:
+                    team_members = list(team_status['members'].keys())
+                    team_context = f"Team members: {', '.join(team_members)}"
+                else:
+                    team_context = "No team members currently assigned"
+                    
+            except Exception as e:
+                logger.warning(f"Failed to get team context: {e}")
+                team_context = ""
+    
     # Determine model name from agent config or environment
     if agent_config is not None:
         try:
@@ -69,6 +110,9 @@ async def initialize_agent_with_mcp(
         mcp_manager=mcp_manager,
         enable_streaming=enable_streaming,
         agent_config=agent_config,  # Pass agent config to initialization
+        agent_mode=agent_mode,
+        current_agent_name=current_agent_name,
+        team_context=team_context,
     )
 
     if agent is None:

@@ -27,6 +27,9 @@ dependencies = [
     "uvicorn>=0.34.3",
     "pyyaml>=6.0.2",
     "types-pyyaml>=6.0.12.20250516",
+    "langgraph>=0.2.0",
+    "langchain-core>=0.3.0",
+    "langchain-community>=0.3.0",
 ]
 readme = "README.md"
 requires-python = ">= 3.13"

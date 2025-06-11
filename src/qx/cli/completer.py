@@ -20,6 +20,13 @@ class QXCompleter(Completer):
             "/print",
             "/tools",
             "/agents",
+            "/team-add-member",
+            "/team-remove-member",
+            "/team-status",
+            "/team-clear",
+            "/team-enable",
+            "/team-disable",
+            "/team-mode",
         ]
         self.models = MODELS
         self.agent_subcommands = [
@@ -193,6 +200,53 @@ class QXCompleter(Completer):
                                 )
             return
 
+        # Team command completion for /team-add-member and /team-remove-member
+        if text.startswith("/team-add-member "):
+            # Complete with available agent names
+            available_agents = self._get_available_agents()
+            for agent_info in available_agents:
+                agent_name = agent_info["name"]
+                if agent_name.startswith(word_before_cursor):
+                    yield Completion(
+                        agent_name,
+                        start_position=-len(word_before_cursor),
+                        display=agent_name,
+                        display_meta=f"Add {agent_info['description']} to team",
+                    )
+            return
+
+        if text.startswith("/team-remove-member "):
+            # Complete with current team member names
+            try:
+                from qx.core.config_manager import ConfigManager
+                from qx.core.team_manager import get_team_manager
+                # Note: This is a best-effort completion - may not work if config manager not available
+                # But it's better than no completion
+                config_manager = ConfigManager(None)
+                team_manager = get_team_manager(config_manager)
+                team_members = team_manager.get_team_members()
+                for agent_name in team_members.keys():
+                    if agent_name.startswith(word_before_cursor):
+                        yield Completion(
+                            agent_name,
+                            start_position=-len(word_before_cursor),
+                            display=agent_name,
+                            display_meta="Remove from team",
+                        )
+            except Exception:
+                # Fallback to all available agents if team manager not accessible
+                available_agents = self._get_available_agents()
+                for agent_info in available_agents:
+                    agent_name = agent_info["name"]
+                    if agent_name.startswith(word_before_cursor):
+                        yield Completion(
+                            agent_name,
+                            start_position=-len(word_before_cursor),
+                            display=agent_name,
+                            display_meta="Remove from team",
+                        )
+            return
+
         # Get the current text and cursor position
         cursor_position = document.cursor_position
 
@@ -213,6 +267,13 @@ class QXCompleter(Completer):
                 "/print": "Print text to the console",
                 "/tools": "List active tools with descriptions",
                 "/agents": "Manage agents (list, switch, info, reload)",
+                "/team-add-member": "Add an agent to your team",
+                "/team-remove-member": "Remove an agent from your team",
+                "/team-status": "Show current team composition",
+                "/team-clear": "Remove all agents from team",
+                "/team-enable": "Enable team mode (use supervisor agent)",
+                "/team-disable": "Disable team mode (use single agent)",
+                "/team-mode": "Show current team mode status",
             }
 
             for command in self.commands:
