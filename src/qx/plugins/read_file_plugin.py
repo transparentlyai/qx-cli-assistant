@@ -7,9 +7,9 @@ from typing import Optional, Tuple
 from pydantic import BaseModel, Field
 from rich.console import Console as RichConsole
 
+from qx.cli.console import themed_console
 from qx.core.approval_handler import ApprovalHandler
 from qx.core.paths import USER_HOME_DIR, _find_project_root
-from qx.cli.console import themed_console
 
 
 def _managed_plugin_print(
@@ -27,8 +27,8 @@ def _managed_plugin_print(
     # Check if we should use BorderedMarkdown with agent styling
     if use_bordered_markdown:
         try:
-            from qx.core.approval_handler import get_global_agent_context
             from qx.cli.quote_bar_component import BorderedMarkdown, get_agent_color
+            from qx.core.approval_handler import get_global_agent_context
 
             agent_context = get_global_agent_context()
             if agent_context:
@@ -159,8 +159,9 @@ async def read_file_tool(
     )
 
     if is_in_project:
+        absolute_path_str = str(absolute_path).strip()
         _managed_plugin_print(
-            f"[dim]Read (Auto-approved) path:[/dim] [dim cyan]{absolute_path}[/dim cyan]",
+            f"[dim]Read (Auto-approved) path:[/dim] [dim cyan]{absolute_path_str}[/dim cyan]",
             use_bordered_markdown=True,
         )
         status = "approved"

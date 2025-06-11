@@ -134,11 +134,12 @@ class StreamingHandler:
                     from qx.cli.quote_bar_component import (
                         BorderedMarkdown,
                         get_agent_color,
+                        LeftAlignedMarkdown,
                     )
                     from rich.console import Console
                     from rich.markdown import Markdown
                     from rich.text import Text
-                    from qx.cli.theme import custom_theme
+                    from qx.cli.theme import custom_theme, default_markdown_theme
 
                     # Use the main console if available, otherwise create one with theme
                     rich_console = (
@@ -148,6 +149,7 @@ class StreamingHandler:
                     # Show agent title for the first meaningful content
                     if show_agent_title:
                         color = get_agent_color(agent_name, agent_color)
+                        rich_console.print()  # Add blank line before agent title
                         rich_console.print(Text(agent_name, style="bold"))
                         rich_console.print(Text("─" * len(agent_name), style=color))
                         show_agent_title = False
@@ -158,17 +160,18 @@ class StreamingHandler:
                     # Render with border for all chunks
                     color = get_agent_color(agent_name, agent_color)
                     bordered_md = BorderedMarkdown(
-                        Markdown(processed_content, code_theme="rrt"),
+                        LeftAlignedMarkdown(processed_content, code_theme="rrt"),
                         border_style=color,
                         background_color="#080808",
+                        markdown_theme=default_markdown_theme,
                     )
                     rich_console.print(bordered_md, end="", markup=True)
                 else:
                     # Fallback to standard markdown rendering with BorderedMarkdown
                     from rich.console import Console
                     from rich.markdown import Markdown
-                    from qx.cli.theme import custom_theme
-                    from qx.cli.quote_bar_component import BorderedMarkdown
+                    from qx.cli.theme import custom_theme, default_markdown_theme
+                    from qx.cli.quote_bar_component import BorderedMarkdown, LeftAlignedMarkdown
 
                     # Use the main console if available, otherwise create one with theme
                     rich_console = (
@@ -179,9 +182,10 @@ class StreamingHandler:
 
                     # Use BorderedMarkdown for consistent styling
                     bordered_md = BorderedMarkdown(
-                        Markdown(processed_content, code_theme="rrt"),
+                        LeftAlignedMarkdown(processed_content, code_theme="rrt"),
                         border_style="dim blue",
                         background_color="#080808",
+                        markdown_theme=default_markdown_theme,
                     )
                     rich_console.print(bordered_md, end="", markup=True)
 
@@ -195,6 +199,8 @@ class StreamingHandler:
         stream_start_time = time.time()
         max_stream_time = 300  # 5 minutes timeout
         last_thinking_message = ""  # Track last thinking message for spinner
+        showing_thinking_details = False  # Track if we're showing detailed thinking
+        thinking_title_shown = False  # Track if we've already shown the thinking title
 
         # Helper function to update spinner with thinking message
         def update_spinner_text(thinking_text: str) -> None:
@@ -275,26 +281,73 @@ class StreamingHandler:
 
                         if reasoning_text and reasoning_text.strip():
                             if show_details:
-                                # Temporarily stop spinner to print thinking message cleanly
-                                was_spinning = not spinner_stopped
-                                if was_spinning:
+                                # Stop spinner when we first start showing thinking details
+                                if not showing_thinking_details and not spinner_stopped:
                                     status.stop()
+                                    spinner_stopped = True
+                                    showing_thinking_details = True
 
-                                from rich.console import Console
-                                from qx.cli.theme import custom_theme
+                                # Use BorderedMarkdown for think messages - render directly
+                                try:
+                                    from qx.cli.quote_bar_component import BorderedMarkdown, get_agent_color, LeftAlignedMarkdown
+                                    from rich.markdown import Markdown
+                                    from rich.console import Console, Group
+                                    from rich.text import Text
+                                    from qx.cli.theme import custom_theme, dimmed_grey_markdown_theme
 
-                                reasoning_console = (
-                                    self._console
-                                    if self._console
-                                    else Console(theme=custom_theme)
-                                )
-                                reasoning_console.print(
-                                    f"[dim]{reasoning_text}[/dim]", end=""
-                                )
-
-                                # Restart spinner if it was running
-                                if was_spinning:
-                                    status.start()
+                                    # Get agent context for proper formatting
+                                    agent_name = getattr(self, "_current_agent_name", None)
+                                    agent_color = getattr(self, "_current_agent_color", None)
+                                    
+                                    reasoning_console = (
+                                        self._console
+                                        if self._console
+                                        else Console(theme=custom_theme)
+                                    )
+                                    
+                                    if agent_name:
+                                        color = get_agent_color(agent_name, agent_color)
+                                        
+                                        # Show title and separator only once at the beginning
+                                        if not thinking_title_shown:
+                                            # Add blank line before first thinking block
+                                            reasoning_console.print()
+                                            
+                                            thinking_title = f"{agent_name} Thinking"
+                                            title_text = Text(thinking_title, style="bold")
+                                            separator_line = Text("─" * len(thinking_title), style=f"{color} dim")
+                                            reasoning_console.print(title_text)
+                                            reasoning_console.print(separator_line)
+                                            thinking_title_shown = True
+                                        
+                                        # Create BorderedMarkdown for the thinking content only
+                                        reasoning_md = LeftAlignedMarkdown(reasoning_text, code_theme="rrt")
+                                        bordered_thinking = BorderedMarkdown(
+                                            reasoning_md,
+                                            border_style=f"{color} dim",  # Use dim style for thinking
+                                            background_color="#0a0a0a",  # Slightly darker background for thinking
+                                            markdown_theme=dimmed_grey_markdown_theme,  # Use dimmed grey theme for thinking
+                                        )
+                                        
+                                        reasoning_console.print(bordered_thinking, end="")
+                                    else:
+                                        # Fallback without agent context
+                                        reasoning_console.print(
+                                            f"[dim]{reasoning_text}[/dim]", end=""
+                                        )
+                                except Exception as e:
+                                    # Fallback to original method if anything fails
+                                    from rich.console import Console
+                                    from qx.cli.theme import custom_theme
+                                    
+                                    reasoning_console = (
+                                        self._console
+                                        if self._console
+                                        else Console(theme=custom_theme)
+                                    )
+                                    reasoning_console.print(
+                                        f"[dim]{reasoning_text}[/dim]", end=""
+                                    )
                             else:
                                 # Update spinner with current thinking message if not displaying
                                 update_spinner_text(reasoning_text)
@@ -313,6 +366,17 @@ class StreamingHandler:
                         ):
                             spinner_stopped = True
                             status.stop()
+
+                        # Add visual separation if transitioning from thinking to content
+                        if content_to_render and showing_thinking_details:
+                            # Add a small separator between thinking and actual response
+                            from rich.console import Console
+                            from qx.cli.theme import custom_theme
+                            transition_console = (
+                                self._console if self._console else Console(theme=custom_theme)
+                            )
+                            transition_console.print()  # Add blank line for separation
+                            showing_thinking_details = False  # Reset flag
 
                         # Continue rendering content even if tool calls are detected
                         # This prevents content loss when responses contain both text and tool calls
@@ -593,6 +657,7 @@ class StreamingHandler:
                     self._console if self._console else Console(theme=custom_theme)
                 )
                 color = get_agent_color(agent_name, agent_color)
+                console.print()  # Add blank line before agent title
                 console.print(Text(agent_name, style="bold"))
                 console.print(Text("─" * len(agent_name), style=color))
 
