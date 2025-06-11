@@ -1,5 +1,6 @@
 name: "Code Reviewer"
 enabled: true
+can_delegate: false
 description: "Specialized code review and analysis agent"
 version: "1.0.0"
 

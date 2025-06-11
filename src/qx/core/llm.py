@@ -53,6 +53,7 @@ class QXLLMAgent:
         enable_streaming: bool = True,
         agent_name: Optional[str] = None,
         agent_color: Optional[str] = None,
+        agent_config: Optional[Dict[str, Any]] = None,
     ):
         self.model_name = model_name
         self.system_prompt = system_prompt
@@ -63,6 +64,7 @@ class QXLLMAgent:
         self.enable_streaming = enable_streaming
         self.agent_name = agent_name
         self.agent_color = agent_color
+        self.can_delegate = agent_config.get('can_delegate', False) if agent_config else False
 
         self._tool_functions: Dict[str, Callable] = {}
         self._openai_tools_schema: List[ChatCompletionToolParam] = []
@@ -573,6 +575,7 @@ def initialize_llm_agent(
             enable_streaming=enable_streaming,
             agent_name=agent_name,
             agent_color=agent_color,
+            agent_config=agent_config.__dict__ if agent_config else None,
         )
         return agent
 
@@ -595,14 +598,15 @@ async def query_llm(
     Queries the LLM agent, with optional team workflow coordination.
     """
     try:
-        # Check if we should use team workflow (only if team mode is enabled)
+        # Check if we should use team workflow (only if team mode is enabled and agent can delegate)
         if config_manager:
             try:
                 from qx.core.team_mode_manager import get_team_mode_manager
                 team_mode_manager = get_team_mode_manager()
                 
-                # Only use team workflow if team mode is explicitly enabled
-                if team_mode_manager.is_team_mode_enabled():
+                # Only use team workflow if team mode is enabled AND agent can delegate
+                if (team_mode_manager.is_team_mode_enabled() and 
+                    getattr(agent, 'can_delegate', False)):
                     from qx.core.langgraph_supervisor import get_langgraph_supervisor
                     supervisor = get_langgraph_supervisor(config_manager, agent)
                     
