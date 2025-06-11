@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from rich.console import Console as RichConsole
 
 from qx.core.approval_handler import ApprovalHandler
+from qx.core.http_client_manager import http_client_manager
 from qx.cli.console import themed_console
 
 logger = logging.getLogger(__name__)
@@ -57,41 +58,41 @@ async def web_fetch_tool(
         return WebFetchPluginOutput(url=url, error=err_msg)
 
     try:
-        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
-            response = await client.get(url)
-            response.raise_for_status()
+        client = await http_client_manager.get_client()
+        response = await client.get(url, timeout=REQUEST_TIMEOUT)
+        response.raise_for_status()
 
-            content = response.text
-            truncated = False
-            if len(content) > MAX_CONTENT_LENGTH:
-                content = content[:MAX_CONTENT_LENGTH]
-                truncated = True
-                themed_console.print("  └─ Note: Content truncated.")
+        content = response.text
+        truncated = False
+        if len(content) > MAX_CONTENT_LENGTH:
+            content = content[:MAX_CONTENT_LENGTH]
+            truncated = True
+            themed_console.print("  └─ Note: Content truncated.")
 
-            final_content = content
-            if output_format == "markdown":
-                try:
-                    from markdownify import markdownify as md  # type: ignore
+        final_content = content
+        if output_format == "markdown":
+            try:
+                from markdownify import markdownify as md  # type: ignore
 
-                    final_content = md(content)
-                except ImportError:
-                    approval_handler.print_outcome(
-                        "Conversion",
-                        "Failed. `markdownify` not installed.",
-                        success=False,
-                    )
-                except Exception as e:
-                    approval_handler.print_outcome(
-                        "Conversion", f"Failed. {e}", success=False
-                    )
+                final_content = md(content)
+            except ImportError:
+                approval_handler.print_outcome(
+                    "Conversion",
+                    "Failed. `markdownify` not installed.",
+                    success=False,
+                )
+            except Exception as e:
+                approval_handler.print_outcome(
+                    "Conversion", f"Failed. {e}", success=False
+                )
 
-            approval_handler.print_outcome("Fetch", "Successfully completed.")
-            return WebFetchPluginOutput(
-                url=url,
-                content=final_content,
-                status_code=response.status_code,
-                truncated=truncated,
-            )
+        approval_handler.print_outcome("Fetch", "Successfully completed.")
+        return WebFetchPluginOutput(
+            url=url,
+            content=final_content,
+            status_code=response.status_code,
+            truncated=truncated,
+        )
 
     except httpx.HTTPStatusError as e:
         err_msg = f"HTTP {e.response.status_code} error for {url}"
