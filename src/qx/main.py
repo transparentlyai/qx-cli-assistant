@@ -149,6 +149,7 @@ async def _async_main(
                     None,
                     code_theme_to_use,
                     plain_text_output=True,
+                    config_manager=config_manager,
                 )
                 if message_history:
                     save_session(message_history)
@@ -192,6 +193,7 @@ async def _async_main(
                                 "list a summary of each iteraction we had so far - just the list, with a title 'So far in this session' and a separator at the end of the list - **ONLY the list,title and separator, no other text**",
                                 current_message_history,
                                 code_theme_to_use,
+                                config_manager=config_manager,
                             )
 
                     else:
@@ -218,6 +220,7 @@ async def _async_main(
                     initial_prompt,
                     current_message_history,
                     code_theme_to_use,
+                    config_manager=config_manager,
                 )
 
             # Run inline interactive mode (only if not in exit-after-response mode)
