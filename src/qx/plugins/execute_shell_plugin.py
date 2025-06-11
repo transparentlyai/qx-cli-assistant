@@ -41,11 +41,18 @@ def _managed_plugin_print(content: str, use_bordered_markdown: bool = False, **k
                 
                 if agent_name:
                     # Wrap content in BorderedMarkdown with agent styling (dimmed)
-                    # Use Rich Text instead of Markdown to support Rich markup
+                    # Use Rich Text and apply the style from kwargs
                     from rich.text import Text
                     
                     color = get_agent_color(agent_name, agent_color)
-                    rich_text = Text.from_markup(content)
+                    
+                    # Apply the style parameter to the content
+                    style = kwargs.get("style", "")
+                    if style:
+                        rich_text = Text(content, style=style)
+                    else:
+                        rich_text = Text.from_markup(content)
+                    
                     bordered_md = BorderedMarkdown(
                         rich_text,
                         border_style=f"dim {color}",
@@ -176,7 +183,7 @@ async def execute_shell_tool(
 
         # Show stdout only if output control allows it
         if stdout and await should_show_stdout():
-            _managed_plugin_print(stdout.strip(), style="dim white", use_bordered_markdown=True)
+            _managed_plugin_print(stdout.strip(), style="dim green", use_bordered_markdown=True)
         # Show stderr only if details mode is active (same as stdout)
         if stderr and await should_show_stdout():  # Use should_show_stdout to respect details mode
             _managed_plugin_print(stderr.strip(), style="dim red", use_bordered_markdown=True)
