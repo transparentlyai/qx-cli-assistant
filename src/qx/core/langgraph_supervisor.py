@@ -67,8 +67,8 @@ class QxAgentWrapper:
             else:
                 user_input = "Please help with the current task."
             
-            # Show progress
-            self.team_member.show_progress(f"Working on: {user_input[:50]}...")
+            # Show agent activation with BorderedMarkdown
+            self._display_agent_activity(user_input)
             
             # Execute the agent
             result = await llm_agent.run(user_input, messages[:-1] if len(messages) > 1 else [])
@@ -88,6 +88,34 @@ class QxAgentWrapper:
                 "messages": [AIMessage(content=error_msg, name=self.name)]
             }
     
+    def _display_agent_activity(self, task_description: str):
+        """Display agent activity using BorderedMarkdown with agent colors."""
+        from qx.cli.quote_bar_component import render_agent_markdown, get_agent_color
+        
+        agent_color = self.team_member.agent_config.get('color')
+        
+        # Truncate long tasks for display
+        display_task = task_description[:100] + "..." if len(task_description) > 100 else task_description
+        
+        markdown_content = f"Working on: {display_task}"
+        
+        # Use console manager for thread-safe output
+        console_manager = self.team_member.console_manager
+        if console_manager and hasattr(console_manager, 'console'):
+            render_agent_markdown(
+                markdown_content,
+                self.name,  # This becomes the title automatically
+                agent_color=agent_color,
+                console=console_manager.console
+            )
+        else:
+            # Fallback to direct rendering
+            render_agent_markdown(
+                markdown_content, 
+                self.name,  # This becomes the title automatically
+                agent_color=agent_color
+            )
+
     # Add stream method for compatibility
     async def astream(self, state: Dict[str, Any]):
         """Stream method for compatibility."""
