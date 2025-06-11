@@ -16,7 +16,7 @@ from prompt_toolkit.shortcuts.prompt import CompleteStyle
 from prompt_toolkit.styles import Style
 from prompt_toolkit.validation import ValidationError, Validator
 
-from qx.cli.commands import _handle_inline_command, _handle_clear_command
+from qx.cli.commands import _handle_clear_command, _handle_inline_command
 from qx.cli.completer import QXCompleter
 from qx.cli.history import QXHistory
 from qx.cli.theme import themed_console
@@ -72,7 +72,7 @@ def get_bottom_toolbar():
         if _planning_mode_active[0]
         else '<style bg="#22c55e" fg="black">IMPLEMENTING</style>'
     )
-    
+
     # Team mode status
     team_mode_manager = get_team_mode_manager()
     team_mode_enabled = team_mode_manager.is_team_mode_enabled()
@@ -121,8 +121,9 @@ async def _handle_llm_interaction(
         elif not agent.enable_streaming and output_content.strip():
             themed_console.print()
             # Use BorderedMarkdown for consistent #050505 background color
-            from qx.cli.quote_bar_component import BorderedMarkdown
             from rich.markdown import Markdown
+
+            from qx.cli.quote_bar_component import BorderedMarkdown
 
             bordered_md = BorderedMarkdown(
                 Markdown(output_content, code_theme="rrt"),
@@ -149,7 +150,7 @@ async def _run_inline_mode(
     qx_completer = QXCompleter()
     _details_active_for_toolbar[0] = await details_manager.is_active()
     _stdout_active_for_toolbar[0] = await output_control_manager.should_show_stdout()
-    
+
     # Load planning mode from configuration
     planning_mode_config = config_manager.get_config_value("QX_PLANNING_MODE", "false")
     _planning_mode_active[0] = planning_mode_config.lower() == "true"
@@ -306,10 +307,12 @@ async def _run_inline_mode(
     def _(event):
         _planning_mode_active[0] = not _planning_mode_active[0]
         mode_text = "Planning" if _planning_mode_active[0] else "Implementing"
-        
+
         # Save the planning mode state to configuration
-        config_manager.set_config_value("QX_PLANNING_MODE", str(_planning_mode_active[0]).lower())
-        
+        config_manager.set_config_value(
+            "QX_PLANNING_MODE", str(_planning_mode_active[0]).lower()
+        )
+
         style = "warning"
         run_in_terminal(
             lambda: themed_console.print(
@@ -320,29 +323,33 @@ async def _run_inline_mode(
 
     @bindings.add("c-w")
     async def _(event):
-        from qx.core.team_mode_manager import get_team_mode_manager
         from qx.core.agent_manager import get_agent_manager
-        
+        from qx.core.team_mode_manager import get_team_mode_manager
+
         team_mode_manager = get_team_mode_manager()
         current_state = team_mode_manager.is_team_mode_enabled()
         new_state = team_mode_manager.toggle_team_mode(project_level=True)
-        
+
         mode_text = "enabled" if new_state else "disabled"
         agent_name = "qx.supervisor" if new_state else "qx"
-        
+
         # Switch agent
         agent_manager = get_agent_manager()
-        switch_success = await agent_manager.switch_llm_agent(agent_name, config_manager.mcp_manager)
-        
-        if switch_success:
-            status_msg = f"✓ [dim green]Team mode:[/] {mode_text} (switched to {agent_name})"
-        else:
-            status_msg = f"✓ [dim green]Team mode:[/] {mode_text} (warning: agent switch failed)"
-        
-        run_in_terminal(
-            lambda: themed_console.print(status_msg, style="warning")
+        switch_success = await agent_manager.switch_llm_agent(
+            agent_name, config_manager.mcp_manager
         )
-        
+
+        if switch_success:
+            status_msg = (
+                f"✓ [dim green]Team mode:[/] {mode_text} (switched to {agent_name})"
+            )
+        else:
+            status_msg = (
+                f"✓ [dim green]Team mode:[/] {mode_text} (warning: agent switch failed)"
+            )
+
+        run_in_terminal(lambda: themed_console.print(status_msg, style="warning"))
+
         # Clear the current prompt line and force restart with new agent color
         event.current_buffer.reset()
         event.app.exit(result="__AGENT_SWITCHED__")
@@ -484,7 +491,7 @@ async def _run_inline_mode(
                 except Exception:
                     pass
                 continue
-                
+
             if result == "__AGENT_SWITCHED__":
                 # Agent was switched, clear the prompt line and continue with new colors
                 try:
@@ -528,11 +535,9 @@ async def _run_inline_mode(
             # Inject mode indicator if active
             final_user_input = user_input
             if _planning_mode_active[0]:
-                final_user_input = user_input + "\n\n---\nThe current mode is PLANNING"
+                final_user_input = user_input + "\n\n---\nPLANNING mode activated"
             else:
-                final_user_input = (
-                    user_input + "\n\n---\nThe current mode is IMPLEMENTING"
-                )
+                final_user_input = user_input + "\n\n---\nIMPLEMENTING mode activated"
 
             current_message_history.append(
                 ChatCompletionUserMessageParam(role="user", content=final_user_input)
@@ -549,6 +554,7 @@ async def _run_inline_mode(
             if active_llm_agent != llm_agent:
                 # Agent has been switched - create fresh history with new system prompt
                 from openai.types.chat import ChatCompletionSystemMessageParam
+
                 from qx.core.llm_components.prompts import load_and_format_system_prompt
 
                 current_agent = await agent_manager.get_current_agent()
