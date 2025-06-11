@@ -187,6 +187,10 @@ class LangGraphSupervisor:
     
     async def should_use_team_workflow(self, user_input: str) -> bool:
         """Determine if the request should use the team workflow."""
+        # Check if current agent can delegate
+        if not getattr(self.main_llm_agent, 'can_delegate', False):
+            return False
+            
         if not self.team_manager.has_team():
             return False
         

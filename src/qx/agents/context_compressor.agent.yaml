@@ -1,5 +1,6 @@
 name: "context_compressor"
 enabled: true
+can_delegate: false
 description: "System agent for compressing and summarizing context information"
 type: "system"
 role: |

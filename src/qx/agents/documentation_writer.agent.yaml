@@ -1,5 +1,6 @@
 name: "documentation_writer"
 enabled: true
+can_delegate: false
 description: "Technical documentation and content creation specialist"
 version: "1.0.0"
 

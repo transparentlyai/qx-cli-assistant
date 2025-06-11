@@ -1,5 +1,6 @@
 name: "data_processor"
 enabled: true
+can_delegate: false
 description: "Data analysis and processing automation agent"
 version: "1.0.0"
 

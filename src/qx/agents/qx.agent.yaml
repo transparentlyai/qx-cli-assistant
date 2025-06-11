@@ -1,5 +1,6 @@
 name: Qx
 enabled: true
+can_delegate: false
 
 description: Main agent
 

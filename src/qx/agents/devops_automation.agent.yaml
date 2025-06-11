@@ -1,5 +1,6 @@
 name: "devops_automation"
 enabled: true
+can_delegate: false
 description: "DevOps automation and infrastructure management agent"
 version: "1.0.0"
 
