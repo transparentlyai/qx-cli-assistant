@@ -49,8 +49,8 @@ class SingleLineNonEmptyValidator(Validator):
 
 def get_bottom_toolbar():
     import qx.core.user_prompts as user_prompts
-    from qx.core.team_mode_manager import get_team_mode_manager
     from qx.core.agent_manager import get_agent_manager
+    from qx.core.team_mode_manager import get_team_mode_manager
 
     approve_all_status = (
         '<style bg="#22c55e" fg="black">ON</style>'
@@ -80,7 +80,7 @@ def get_bottom_toolbar():
     team_status = (
         '<style bg="#3b82f6" fg="black">TEAM</style>'
         if team_mode_enabled
-        else '<style bg="#6b7280" fg="black">SINGLE</style>'
+        else '<style bg="#d75f00" fg="black">SINGLE</style>'
     )
 
     # Delegation capability status
