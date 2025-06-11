@@ -82,7 +82,7 @@ def get_bottom_toolbar():
         else '<style bg="#6b7280" fg="black">SINGLE</style>'
     )
 
-    toolbar_html = f'<style fg="black" bg="white">Mode: {mode_status} | {team_status} | Details: {details_status} | Stdout: {stdout_status} | Approve All: {approve_all_status}</style>'
+    toolbar_html = f'<style fg="black" bg="white">Mode: {mode_status} | {team_status} | Details: {details_status} | StdOE: {stdout_status} | Approve All: {approve_all_status}</style>'
     return HTML(toolbar_html)
 
 
@@ -172,8 +172,9 @@ async def _run_inline_mode(
         register_global_hotkey("ctrl+d", "exit")  # Same as prompt_toolkit
         register_global_hotkey("ctrl+r", "history")  # Same as prompt_toolkit
         register_global_hotkey("ctrl+a", "approve_all")  # Same as prompt_toolkit
-        register_global_hotkey("ctrl+t", "toggle_details")  # Same as prompt_toolkit
-        register_global_hotkey("ctrl+o", "toggle_stdout")  # Re-enabled with fix
+        register_global_hotkey("f5", "approve_all")  # Alternative to Ctrl+A
+        register_global_hotkey("f3", "toggle_details")  # Same as prompt_toolkit
+        register_global_hotkey("f4", "toggle_stdout")  # Re-enabled with fix
         register_global_hotkey("f12", "cancel")  # Additional emergency key
         logger.debug("Global hotkey handlers registered (matching prompt_toolkit)")
     except Exception as e:
@@ -269,7 +270,22 @@ async def _run_inline_mode(
             )
         event.app.invalidate()
 
-    @bindings.add("c-t")
+    @bindings.add("f5")
+    async def _(event):
+        import qx.core.user_prompts as user_prompts
+
+        async with _approve_all_lock:
+            user_prompts._approve_all_active = not user_prompts._approve_all_active
+            status = "activated" if user_prompts._approve_all_active else "deactivated"
+            style = "warning"
+            run_in_terminal(
+                lambda: themed_console.print(
+                    f"✓ [dim green]Approve All mode[/] {status}.", style=style
+                )
+            )
+        event.app.invalidate()
+
+    @bindings.add("f3")
     async def _(event):
         new_status = not await details_manager.is_active()
         await details_manager.set_status(new_status)
@@ -286,7 +302,7 @@ async def _run_inline_mode(
         )
         event.app.invalidate()
 
-    @bindings.add("c-o")
+    @bindings.add("f4")
     async def _(event):
         # Get current status and toggle it
         current_status = await output_control_manager.should_show_stdout()
@@ -298,12 +314,12 @@ async def _run_inline_mode(
         style = "warning"
         run_in_terminal(
             lambda: themed_console.print(
-                f"✓ [dim green]Show Stdout:[/] {status_text}.", style=style
+                f"✓ [dim green]StdOE:[/] {status_text}.", style=style
             )
         )
         event.app.invalidate()
 
-    @bindings.add("c-p")
+    @bindings.add("f1")
     def _(event):
         _planning_mode_active[0] = not _planning_mode_active[0]
         mode_text = "Planning" if _planning_mode_active[0] else "Implementing"
@@ -321,7 +337,7 @@ async def _run_inline_mode(
         )
         event.app.invalidate()
 
-    @bindings.add("c-w")
+    @bindings.add("f2")
     async def _(event):
         from qx.core.agent_manager import get_agent_manager
         from qx.core.team_mode_manager import get_team_mode_manager

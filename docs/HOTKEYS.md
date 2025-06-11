@@ -12,10 +12,10 @@ QX implements a sophisticated global hotkey system that allows users to trigger 
 
 | Hotkey | Action | Description |
 |--------|--------|-------------|
-| **Ctrl+T** | Toggle Details | Show/hide AI reasoning process during responses |
-| **Ctrl+A** | Toggle Approve All | Enable/disable automatic approval for tool operations |
-| **Ctrl+O** | Toggle Stdout | Show/hide command output during tool execution |
-| **Ctrl+P** | Toggle Mode | Switch between PLANNING and IMPLEMENTING modes |
+| **F3** | Toggle Details | Show/hide AI reasoning process during responses |
+| **Ctrl+A / F5** | Toggle Approve All | Enable/disable automatic approval for tool operations |
+| **F4** | Toggle StdOE | Show/hide stdout and stderr during tool execution |
+| **F1** | Toggle Mode | Switch between PLANNING and IMPLEMENTING modes |
 | **Ctrl+R** | History Search | Search command history (available during input only) |
 | **Ctrl+E** | Edit in External Editor | Open current input in text editor (vi by default, configurable via QX_DEFAULT_EDITOR). Supports: vi, vim, nvim, nano, code/vscode |
 | **Ctrl+C** | Cancel Operation | Interrupt current operation |
@@ -45,7 +45,7 @@ QX supports two distinct interaction modes that influence how the AI processes y
 - **Use Cases**: Writing code, running commands, making changes
 - **Visual Indicator**: Green background in footer toolbar
 
-**Mode Toggle**: Press **Ctrl+P** to switch between modes at any time. The current mode is always visible in the bottom toolbar and affects how the AI interprets and responds to your requests.
+**Mode Toggle**: Press **F1** to switch between modes at any time. The current mode is always visible in the bottom toolbar and affects how the AI interprets and responds to your requests.
 
 ## Technical Architecture
 

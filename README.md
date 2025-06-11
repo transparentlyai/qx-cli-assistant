@@ -152,10 +152,10 @@ QX supports global hotkeys that work at any time during operation, including whi
 
 | Hotkey | Action | Description |
 |--------|--------|-------------|
-| **Ctrl+T** | Toggle Details | Show/hide AI reasoning process |
-| **Ctrl+A** | Toggle Approve All | Enable/disable automatic approval for tool operations |
-| **Ctrl+O** | Toggle Stdout | Show/hide command output during tool execution |
-| **Ctrl+P** | Toggle Mode | Switch between PLANNING and IMPLEMENTING modes |
+| **F3** | Toggle Details | Show/hide AI reasoning process |
+| **Ctrl+A / F5** | Toggle Approve All | Enable/disable automatic approval for tool operations |
+| **F4** | Toggle StdOE | Show/hide stdout and stderr during tool execution |
+| **F1** | Toggle Mode | Switch between PLANNING and IMPLEMENTING modes |
 | **Ctrl+R** | History Search | Search command history (available during input) |
 | **Ctrl+E** | External Editor | Edit current input in external text editor |
 | **Ctrl+C** | Cancel Operation | Interrupt current operation |
