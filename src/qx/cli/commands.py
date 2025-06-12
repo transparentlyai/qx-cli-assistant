@@ -381,53 +381,103 @@ async def _handle_inline_command(
         await _handle_team_disable_command(config_manager)
     elif command_name == "/team-mode":
         await _handle_team_mode_command(config_manager)
+    elif command_name == "/team-save":
+        await _handle_team_save_command(command_args, config_manager)
+    elif command_name == "/team-load":
+        await _handle_team_load_command(command_args, config_manager)
+    elif command_name == "/team-create":
+        await _handle_team_create_command(command_args, config_manager)
     elif command_name == "/help":
-        themed_console.print("Available Commands:", style="app.header")
+        themed_console.print("QX - Multi-Agent AI Assistant", style="app.header")
+        
+        # Core Commands
+        themed_console.print("\nCore Commands:", style="app.header")
         themed_console.print(
-            "  /model [<model-name>] - Show or update LLM model configuration",
+            "  /model [<name>]  - Show or update LLM model configuration",
             style="primary",
         )
         themed_console.print(
-            "  /tools      - List active tools with simple descriptions",
+            "  /agents [cmd]    - Manage agents (list|switch|info|reload)",
             style="primary",
         )
         themed_console.print(
-            "  /agents [list|switch|info|reload] - Manage agents",
+            "  /tools           - List active tools with descriptions",
             style="primary",
         )
         themed_console.print(
-            "  /reset      - Reset session and clear message history", style="primary"
+            "  /reset           - Reset session and clear message history", 
+            style="primary"
         )
         themed_console.print(
-            "  /approve-all - Activate 'approve all' mode for tool confirmations",
+            "  /approve-all     - Activate 'approve all' mode for tool confirmations",
             style="primary",
         )
         themed_console.print(
-            "  /print <text> - Print the specified text to the console", style="primary"
+            "  /print <text>    - Print text to the console", 
+            style="primary"
+        )
+        
+        # Team Management
+        themed_console.print("\nTeam Management:", style="app.header")
+        themed_console.print(
+            "  /team-create <name>      - Create a new empty team",
+            style="primary",
         )
         themed_console.print(
-            "  /team-add-member <agent> [count] - Add agent(s) to your team", style="primary"
+            "  /team-add-member <agent> - Add agent(s) to your team",
+            style="primary",
         )
         themed_console.print(
             "  /team-remove-member <agent> - Remove agent from your team",
             style="primary",
         )
         themed_console.print(
-            "  /team-status - Show current team composition", style="primary"
+            "  /team-status             - Show current team composition",
+            style="primary",
         )
         themed_console.print(
-            "  /team-clear - Remove all agents from team", style="primary"
+            "  /team-clear              - Remove all agents from team",
+            style="primary",
         )
         themed_console.print(
-            "  /team-enable - Enable team mode (use supervisor agent)", style="primary"
+            "  /team-save <name>        - Save current team with a name",
+            style="primary",
         )
         themed_console.print(
-            "  /team-disable - Disable team mode (use single agent)", style="primary"
+            "  /team-load <name>        - Load a saved team by name",
+            style="primary",
+        )
+        
+        # Team Mode Control
+        themed_console.print("\nTeam Mode Control:", style="app.header")
+        themed_console.print(
+            "  /team-enable             - Enable team mode (multi-agent coordination)",
+            style="primary",
         )
         themed_console.print(
-            "  /team-mode - Show current team mode status", style="primary"
+            "  /team-disable            - Disable team mode (single agent)",
+            style="primary",
         )
-        themed_console.print("  /help       - Show this help message", style="primary")
+        themed_console.print(
+            "  /team-mode               - Show current team mode status",
+            style="primary",
+        )
+        
+        # Help
+        themed_console.print("\nHelp:", style="app.header")
+        themed_console.print("  /help                    - Show this help message", style="primary")
+        
+        # Team Workflow Examples
+        themed_console.print("\nTeam Workflow Examples:", style="app.header")
+        themed_console.print("  Create and build a team:", style="dim white")
+        themed_console.print("    /team-create frontend-team", style="dim cyan")
+        themed_console.print("    /team-add-member react_developer", style="dim cyan")
+        themed_console.print("    /team-add-member ui_designer 2", style="dim cyan")
+        themed_console.print("    /team-save frontend-specialists", style="dim cyan")
+        themed_console.print("\n  Load and use a saved team:", style="dim white")
+        themed_console.print("    /team-load frontend-specialists", style="dim cyan")
+        themed_console.print("    /team-enable", style="dim cyan")
+        themed_console.print("    # Now qx will coordinate multiple agents", style="dim green")
 
         themed_console.print("\nKey Bindings:", style="app.header")
         themed_console.print(
@@ -579,7 +629,7 @@ async def _handle_inline_command(
     else:
         themed_console.print(f"Unknown command: {command_name}", style="error")
         themed_console.print(
-            "Available commands: /model, /tools, /agents, /reset, /approve-all, /print, /team-add-member, /team-remove-member, /team-status, /team-clear, /team-enable, /team-disable, /team-mode, /help",
+            "Available commands: /model, /tools, /agents, /reset, /approve-all, /print, /team-add-member, /team-remove-member, /team-status, /team-clear, /team-save, /team-load, /team-create, /team-enable, /team-disable, /team-mode, /help",
             style="text.muted",
         )
 
@@ -640,10 +690,16 @@ async def handle_command(
         await _handle_team_disable_command(config_manager)
     elif command_name == "/team-mode":
         await _handle_team_mode_command(config_manager)
+    elif command_name == "/team-save":
+        await _handle_team_save_command(command_args, config_manager)
+    elif command_name == "/team-load":
+        await _handle_team_load_command(command_args, config_manager)
+    elif command_name == "/team-create":
+        await _handle_team_create_command(command_args, config_manager)
     else:
         themed_console.print(f"Unknown command: {command_name}", style="error")
         themed_console.print(
-            "Available commands: /model, /tools, /reset, /print, /team-add-member, /team-remove-member, /team-status, /team-clear, /team-enable, /team-disable, /team-mode",
+            "Available commands: /model, /tools, /reset, /print, /team-add-member, /team-remove-member, /team-status, /team-clear, /team-save, /team-load, /team-create, /team-enable, /team-disable, /team-mode",
             style="text.muted",
         )
     return current_message_history
@@ -729,7 +785,7 @@ async def _handle_team_status_command(config_manager: ConfigManager):
 
     if status["member_count"] == 0:
         themed_console.print(
-            "Your team is empty. Use /team-add-member <agent> [count] to build your team.",
+            "Your team is empty. Use /team-create <name> to start a new team or /team-add-member <agent> [count] to build your current team.",
             style="warning",
         )
         return
@@ -785,7 +841,7 @@ async def _handle_team_enable_command(config_manager: ConfigManager):
             "✓ Team mode enabled - qx will now act as supervisor", style="success"
         )
         themed_console.print(
-            "  Use /team-add-member to build your team", style="dim white"
+            "  Use /team-create or /team-add-member to build your team", style="dim white"
         )
 
         # Switch to supervisor agent
@@ -867,3 +923,53 @@ async def _handle_team_mode_command(config_manager: ConfigManager):
         themed_console.print(
             "  Use /team-enable to activate team coordination", style="dim white"
         )
+
+
+async def _handle_team_save_command(command_args: str, config_manager: ConfigManager):
+    """Handle /team-save command."""
+    if not command_args.strip():
+        themed_console.print("Usage: /team-save <team_name>", style="error")
+        themed_console.print("Examples:", style="dim white")
+        themed_console.print("  /team-save frontend-team", style="dim white")
+        themed_console.print("  /team-save code-review", style="dim white")
+        return
+
+    team_name = command_args.strip()
+    team_manager = get_team_manager(config_manager)
+    team_manager.save_team(team_name)
+
+
+async def _handle_team_load_command(command_args: str, config_manager: ConfigManager):
+    """Handle /team-load command."""
+    if not command_args.strip():
+        themed_console.print("Usage: /team-load <team_name>", style="error")
+        
+        # Show available teams
+        team_manager = get_team_manager(config_manager)
+        saved_teams = team_manager.list_saved_teams()
+        
+        if saved_teams:
+            themed_console.print("Available teams:", style="dim white")
+            for team_name in saved_teams:
+                themed_console.print(f"  - {team_name}", style="dim blue")
+        else:
+            themed_console.print("No saved teams found", style="dim white")
+        return
+
+    team_name = command_args.strip()
+    team_manager = get_team_manager(config_manager)
+    team_manager.load_team(team_name)
+
+
+async def _handle_team_create_command(command_args: str, config_manager: ConfigManager):
+    """Handle /team-create command."""
+    if not command_args.strip():
+        themed_console.print("Usage: /team-create <team_name>", style="error")
+        themed_console.print("Examples:", style="dim white")
+        themed_console.print("  /team-create frontend-team", style="dim white")
+        themed_console.print("  /team-create backend-specialists", style="dim white")
+        return
+
+    team_name = command_args.strip()
+    team_manager = get_team_manager(config_manager)
+    team_manager.create_team(team_name)

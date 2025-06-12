@@ -12,6 +12,7 @@ QX implements a sophisticated global hotkey system that allows users to trigger 
 
 | Hotkey | Action | Description |
 |--------|--------|-------------|
+| **F2** | Toggle Team Mode | Enable/disable multi-agent team coordination |
 | **F3** | Toggle Details | Show/hide AI reasoning process during responses |
 | **Ctrl+A / F5** | Toggle Approve All | Enable/disable automatic approval for tool operations |
 | **F4** | Toggle StdOE | Show/hide stdout and stderr during tool execution |

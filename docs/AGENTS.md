@@ -555,6 +555,132 @@ The `{discovered_agents}` variable provides a simple list of all discovered agen
 - qx.supervisor: Team supervisor and coordinator for multi-agent workflows
 ```
 
+## Team Management
+
+QX supports advanced multi-agent coordination through its team management system. You can create teams of specialized agents that work together on complex tasks, with automatic task decomposition and parallel execution.
+
+### Team Management Commands
+
+#### Creating and Building Teams
+
+```bash
+# Create a new empty team
+/team-create frontend-specialists
+
+# Add agents to your team
+/team-add-member react_developer
+/team-add-member ui_designer 2          # Add 2 instances for parallel work
+/team-add-member code_reviewer
+
+# View current team composition
+/team-status
+
+# Save your team for later use
+/team-save frontend-specialists
+```
+
+#### Loading and Managing Saved Teams
+
+```bash
+# List all saved teams
+/team-load                              # Shows available teams
+
+# Load a specific team
+/team-load frontend-specialists
+
+# Remove agents from team
+/team-remove-member ui_designer
+
+# Clear entire team
+/team-clear
+```
+
+#### Team Mode Control
+
+```bash
+# Enable team mode (multi-agent coordination)
+/team-enable
+
+# Disable team mode (single agent)
+/team-disable
+
+# Check current team mode status
+/team-mode
+```
+
+### How Team Mode Works
+
+When team mode is enabled and you have a team configured:
+
+1. **Task Analysis**: The supervisor agent analyzes your request
+2. **Task Decomposition**: Complex tasks are broken into parallelizable subtasks
+3. **Agent Selection**: Best-suited agents are chosen based on their specializations
+4. **Parallel Execution**: Subtasks run concurrently across agent instances
+5. **Result Synthesis**: Multiple agent outputs are combined into unified responses
+
+### Team Workflow Example
+
+```bash
+# Create and configure a code review team
+/team-create code-review-team
+/team-add-member code_reviewer
+/team-add-member security_analyst
+/team-add-member performance_optimizer
+/team-save code-review-specialists
+
+# Enable team coordination
+/team-enable
+
+# Now when you ask "Review my codebase for issues", QX will:
+# - Analyze the request
+# - Assign code quality to code_reviewer
+# - Assign security analysis to security_analyst  
+# - Assign performance review to performance_optimizer
+# - Coordinate their work and synthesize results
+```
+
+### Team Storage
+
+Teams are stored in:
+- **Project-level**: `.Q/teams.json` (preferred, project-specific)
+- **User-level**: `~/.config/qx/teams.json` (fallback)
+
+The teams.json format stores all teams with their agent configurations and instance counts:
+
+```json
+{
+  "teams": {
+    "frontend-specialists": {
+      "agents": {
+        "react_developer": {"instance_count": 1},
+        "ui_designer": {"instance_count": 2},
+        "code_reviewer": {"instance_count": 1}
+      },
+      "saved_at": 1735776000,
+      "version": "1.1"
+    }
+  },
+  "version": "1.0"
+}
+```
+
+### Agent Specializations
+
+Agents can declare specializations to help the supervisor choose the right agent for each task:
+
+```yaml
+specializations:
+  - "code_review"
+  - "security_analysis" 
+  - "performance_optimization"
+```
+
+Common specializations include:
+- `code_review`, `security`, `performance`
+- `frontend`, `backend`, `database`
+- `documentation`, `testing`, `devops`
+- `data_processing`, `automation`
+
 ## Execution Modes
 
 ### Interactive Mode (Default)

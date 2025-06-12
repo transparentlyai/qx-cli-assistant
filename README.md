@@ -12,6 +12,7 @@ QX is an intelligent command-line interface (CLI) agent designed to assist with 
 ## ✨ Features
 
 - 🤖 **Multi-LLM Support**: Access 100+ LLM providers (OpenAI, Anthropic, Google, Azure, etc.) through LiteLLM
+- 👥 **Multi-Agent Teams**: Create, save, and coordinate teams of specialized AI agents for complex tasks
 - 🔄 **Enterprise Reliability**: Automatic retries, fallbacks, and circuit breakers for robust operation
 - 🛠️ **Tool Integration**: Extensible plugin system for shell commands, file operations, web searches, and more
 - 📁 **Project-Aware**: Automatically understands your project structure and context
