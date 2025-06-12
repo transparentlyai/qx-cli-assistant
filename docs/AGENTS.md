@@ -331,6 +331,10 @@ execution:
     max_tool_calls_per_turn: 10          # QX_AGENT_MAX_TOOL_CALLS
 ```
 
+## Complete Configuration Reference
+
+For the comprehensive list of all available configuration options with detailed explanations, see the [Configuration Schema Reference](#configuration-schema-reference) section below.
+
 ### Environment Variable Configuration
 
 You can customize agent defaults system-wide using environment variables in your `qx.conf` file:
@@ -1071,6 +1075,214 @@ Here's a typical workflow for using project agents:
    ```
 
 7. **Start working** with context-aware assistance!
+
+## Configuration Schema Reference
+
+This section provides a comprehensive guide to all available agent configuration options based on the schema definition in `/src/qx/core/schemas.py`.
+
+### **Core Identity & Behavior**
+
+#### **`name`** (str, required)
+The human-readable display name for the agent that appears in UI elements, logs, and user interactions. This should be descriptive and unique within your agent collection. Examples: "Code Reviewer", "DevOps Specialist", "Data Analyst"
+
+#### **`enabled`** (bool, required)
+Controls whether the agent is available for selection and use. When set to `false`, the agent is discovered but cannot be switched to or executed. Useful for temporarily disabling agents without deleting their configuration files.
+
+#### **`description`** (str, required)
+A concise summary of the agent's purpose and capabilities, displayed in agent lists and help text. Should clearly communicate what the agent specializes in. Examples: "Specialized code review and security analysis agent", "Infrastructure automation and deployment specialist"
+
+#### **`type`** (str, optional - default: "user")
+Determines agent visibility in user interfaces. "user" agents appear in `/agents list` and UI selections, while "system" agents are hidden and used for internal operations like context compression or background processing.
+
+#### **`version`** (str, optional - default: "1.0.0")
+Semantic versioning for the agent configuration. Useful for tracking changes, compatibility, and rolling back configurations. Can be used by management systems to handle agent updates.
+
+#### **`role`** (str, required)
+Defines the agent's personality, expertise domain, and behavioral characteristics. This is the core identity that shapes how the agent responds. Should include domain expertise, communication style, and approach to problem-solving. Example: "You are a meticulous security-focused code reviewer with expertise in OWASP vulnerabilities and best practices."
+
+#### **`instructions`** (str, required)
+Detailed operational guidelines that specify exactly how the agent should behave, what processes to follow, and what outputs to produce. This is the most important configuration for agent behavior. Should include step-by-step workflows, quality standards, and specific methodologies.
+
+#### **`context`** (str, optional)
+Template string that gets prepended to the agent's prompt, containing runtime variables like `{user_context}`, `{project_context}`, `{discovered_tools}`. Used to inject dynamic information about the current environment, available resources, and user-specific context.
+
+#### **`output`** (str, optional)
+Guidelines for how the agent should format and structure its responses. Specifies output style, required sections, formatting preferences, and communication tone. Example: "Provide structured reports with Executive Summary, Detailed Findings, and Actionable Recommendations sections."
+
+### **Tool Access**
+
+#### **`tools`** (List[str], optional - default: [])
+Explicit list of tool names that the agent is permitted to use. If empty, agent has no tools. Tools must match exactly with available plugin/MCP tool names. Examples: `["read_file_tool", "write_file_tool", "execute_shell_tool"]`. Tool filtering provides security and prevents agents from accessing inappropriate functionality.
+
+### **Model Configuration**
+
+#### **`model.name`** (str, required)
+The specific LLM model identifier to use for this agent. Must match available model names from the system's model registry. Examples: "openrouter/anthropic/claude-3.5-sonnet", "openrouter/google/gemini-2.5-pro-preview-06-05". Different models have different capabilities, costs, and response characteristics.
+
+#### **`model.parameters.temperature`** (float, 0.0-2.0 - default: 0.73)
+Controls response randomness and creativity. Lower values (0.1-0.3) produce more deterministic, focused responses ideal for code review or analysis. Higher values (0.7-1.0) encourage creative, varied responses better for brainstorming or content creation. Values above 1.0 can produce highly creative but potentially incoherent responses.
+
+#### **`model.parameters.max_tokens`** (int, >0 - default: 4096)
+Maximum number of tokens the model can generate in a single response. Longer responses cost more and take more time but allow for more comprehensive outputs. Set based on agent's typical response needs: 1024 for brief answers, 4096 for detailed analysis, 8192+ for comprehensive reports.
+
+#### **`model.parameters.top_p`** (float, 0.0-1.0 - default: 1.0)
+Nucleus sampling parameter that controls response diversity by limiting the cumulative probability of token choices. Lower values (0.1-0.5) focus on high-probability tokens for more predictable responses. Higher values (0.8-1.0) allow more diverse token selection for creative responses.
+
+#### **`model.parameters.frequency_penalty`** (float, -2.0-2.0 - default: 0.0)
+Reduces repetition by penalizing tokens based on their frequency in the response. Positive values discourage repetitive text, negative values encourage repetition. Useful for agents that tend to repeat phrases or concepts excessively.
+
+#### **`model.parameters.presence_penalty`** (float, -2.0-2.0 - default: 0.0)
+Encourages topic diversity by penalizing tokens that have already appeared, regardless of frequency. Positive values push the model to explore new topics and concepts, negative values encourage staying on established topics.
+
+#### **`model.parameters.reasoning_budget`** (str - default: "medium")
+For reasoning-capable models (like o1), controls how much computational effort to spend on reasoning before responding. "low" for quick responses, "medium" for balanced analysis, "high" for deep reasoning on complex problems. Affects response time and quality.
+
+### **Execution Control**
+
+#### **`max_execution_time`** (int, >0 - default: 300)
+Maximum time in seconds that the agent can spend processing a single task before timing out. Prevents runaway processes and ensures responsive interactions. Set based on expected task complexity: 60s for simple queries, 300s for analysis tasks, 600s+ for complex operations.
+
+#### **`max_iterations`** (int, >0 - default: 10)
+Maximum number of tool-calling iterations the agent can perform in a single response cycle. Prevents infinite loops in tool usage while allowing complex multi-step operations. Higher values enable more sophisticated workflows but increase execution time and costs.
+
+### **Execution Mode Configuration**
+
+#### **`execution.mode`** (str - default: "interactive")
+Determines how the agent operates: "interactive" for real-time conversation, "autonomous" for background task processing, "hybrid" for switching between modes. Interactive agents respond to user inputs, autonomous agents process queued tasks independently.
+
+#### **`execution.autonomous_config.enabled`** (bool - default: false)
+Enables autonomous operation capabilities, allowing the agent to process tasks from queues, run scheduled operations, and operate without direct user interaction. Required for background processing and automated workflows.
+
+#### **`execution.autonomous_config.max_concurrent_tasks`** (int, 1-10 - default: 1)
+Maximum number of tasks the agent can process simultaneously in autonomous mode. Higher values enable parallel processing but consume more resources. Set based on system capacity and task interdependencies.
+
+#### **`execution.autonomous_config.task_timeout`** (int, >0 - default: 600)
+Timeout for individual autonomous tasks in seconds. Longer than interactive timeout since autonomous tasks may be more complex. Should account for the most complex expected autonomous operations.
+
+#### **`execution.autonomous_config.heartbeat_interval`** (int, >0 - default: 30)
+Frequency in seconds for health check signals in autonomous mode. Shorter intervals provide better monitoring but increase overhead. Critical for detecting and recovering from agent failures in production environments.
+
+#### **`execution.autonomous_config.auto_restart`** (bool - default: false)
+Automatically restart the agent if it crashes or becomes unresponsive in autonomous mode. Essential for production systems but should be used carefully to avoid masking underlying issues that need fixing.
+
+#### **`execution.autonomous_config.poll_interval`** (int, >0 - default: 5)
+How frequently in seconds the agent checks for new tasks in autonomous mode. Shorter intervals provide faster response to new tasks but increase system load. Balance responsiveness needs with resource efficiency.
+
+### **Security & Constraints**
+
+#### **`execution.constraints.max_file_size`** (str - default: "10MB")
+Maximum size of files the agent can read or write, specified with units (KB, MB, GB). Prevents agents from consuming excessive memory or processing huge files that could impact system performance. Set based on agent's legitimate file processing needs.
+
+#### **`execution.constraints.allowed_paths`** (List[str] - default: ["./"])
+File system paths where the agent is permitted to read/write files. Provides security by restricting agent access to appropriate directories. Use specific paths like `["./src", "./docs", "./tests"]` rather than broad access for security.
+
+#### **`execution.constraints.forbidden_paths`** (List[str] - default: ["/etc", "/sys", "/proc"])
+File system paths that are explicitly prohibited, even if they fall within allowed paths. Critical security feature to prevent access to system files, configuration directories, and sensitive locations.
+
+#### **`execution.constraints.approval_required_tools`** (List[str] - default: [])
+Tools that require explicit user approval before execution. Useful for potentially destructive operations like `execute_shell_tool` or `write_file_tool`. Provides an additional safety layer for high-risk operations.
+
+#### **`execution.constraints.max_tool_calls_per_turn`** (int, >0 - default: 10)
+Maximum number of tool calls the agent can make in a single response. Prevents excessive tool usage that could impact performance or costs while allowing reasonable multi-step operations.
+
+### **Console & Output Management**
+
+#### **`execution.console.use_console_manager`** (bool - default: true)
+Enables the console management system for coordinated output handling, especially important in multi-agent environments. Provides better output formatting, prevents conflicts, and enables features like agent identification in output streams.
+
+#### **`execution.console.source_identifier`** (str - default: none)
+Custom identifier displayed in output to distinguish this agent's messages from others. Useful in multi-agent scenarios or when logging. Examples: "CodeReviewer", "DevOpsBot", "DataAnalyst".
+
+#### **`execution.console.enable_rich_output`** (bool - default: true)
+Enables rich text formatting with colors, styles, and advanced layouts. Disable for plain text environments or when rich formatting causes display issues. Rich output significantly improves readability and user experience.
+
+#### **`execution.console.log_interactions`** (bool - default: true)
+Controls whether agent conversations are logged to the system log files. Important for debugging, auditing, and analysis. Disable if logging creates performance issues or privacy concerns.
+
+### **Lifecycle Hooks**
+
+#### **`lifecycle.on_start`** (str - optional)
+Message displayed or command executed when the agent starts. Can be a simple status message like "Starting comprehensive code review analysis..." or a command to execute. Useful for initialization feedback and setup operations.
+
+#### **`lifecycle.on_task_received`** (str - optional)
+Action triggered when the agent receives a new task in autonomous mode. Can log task receipt, perform setup operations, or notify monitoring systems. Important for task tracking and workflow automation.
+
+#### **`lifecycle.on_error`** (str - optional)
+Response to error conditions during agent operation. Can display helpful error messages, suggest troubleshooting steps, or trigger recovery procedures. Examples: "Code review error encountered. Checking for syntax issues and access permissions..."
+
+#### **`lifecycle.on_shutdown`** (str - optional)
+Action performed when the agent is shutting down. Can display completion summaries, clean up resources, or save state. Examples: "Code review session completed. Summary report generated."
+
+### **Metadata & Organization**
+
+#### **`created_at`** (str - optional)
+ISO timestamp of when the agent configuration was created. Useful for tracking agent lifecycle, version management, and organizational purposes. Automatically managed by some systems.
+
+#### **`updated_at`** (str - optional)
+ISO timestamp of the last configuration modification. Important for change tracking, cache invalidation, and determining if agents need reloading. Should be updated whenever configuration changes.
+
+#### **`tags`** (List[str] - default: [])
+Classification labels for organizing and filtering agents. Examples: `["security", "code-review", "automation"]`, `["data", "analysis", "reporting"]`. Useful for agent discovery and management in large agent collections.
+
+#### **`color`** (str - optional)
+Hex color code for agent visual identification in UI elements and console output. Examples: "#ff5722" for orange, "#2196f3" for blue. Helps users quickly identify which agent is active or responding.
+
+### **Special Features**
+
+#### **`can_delegate`** (bool - default: false)
+Enables the agent to delegate tasks to other specialized agents or switch to more appropriate agents based on task requirements. Critical for multi-agent workflows and intelligent task routing.
+
+#### **`max_instances`** (int - optional)
+Maximum number of concurrent instances of this agent that can run simultaneously. Prevents resource exhaustion while allowing reasonable parallelism. Useful for limiting resource-intensive agents or ensuring exclusive access to shared resources.
+
+#### **`specializations`** (List[str] - optional)
+Explicit list of the agent's expertise areas for automatic agent selection and routing. Examples: `["code_review", "security_analysis", "performance_analysis"]`. Used by supervisor agents to choose appropriate specialists for specific tasks.
+
+### **Environment Variable Overrides**
+
+Most configuration options can be overridden using environment variables with the `QX_AGENT_` prefix:
+
+**Model Parameters:**
+- `QX_AGENT_TEMPERATURE`
+- `QX_AGENT_MAX_TOKENS`
+- `QX_AGENT_TOP_P`
+- `QX_AGENT_FREQUENCY_PENALTY`
+- `QX_AGENT_PRESENCE_PENALTY`
+- `QX_AGENT_REASONING_BUDGET`
+
+**Execution Settings:**
+- `QX_AGENT_EXECUTION_MODE`
+- `QX_AGENT_MAX_EXECUTION_TIME`
+- `QX_AGENT_MAX_ITERATIONS`
+- `QX_AGENT_MAX_TOOL_CALLS`
+
+**Autonomous Configuration:**
+- `QX_AGENT_AUTONOMOUS_ENABLED`
+- `QX_AGENT_MAX_CONCURRENT_TASKS`
+- `QX_AGENT_TASK_TIMEOUT`
+- `QX_AGENT_HEARTBEAT_INTERVAL`
+- `QX_AGENT_AUTO_RESTART`
+- `QX_AGENT_POLL_INTERVAL`
+
+**Security Constraints:**
+- `QX_AGENT_MAX_FILE_SIZE`
+- `QX_AGENT_ALLOWED_PATHS`
+- `QX_AGENT_FORBIDDEN_PATHS`
+- `QX_AGENT_APPROVAL_REQUIRED_TOOLS`
+
+**Console Configuration:**
+- `QX_AGENT_USE_CONSOLE_MANAGER`
+- `QX_AGENT_SOURCE_IDENTIFIER`
+- `QX_AGENT_ENABLE_RICH_OUTPUT`
+- `QX_AGENT_LOG_INTERACTIONS`
+
+**Basic Configuration:**
+- `QX_AGENT_VERSION`
+- `QX_AGENT_CONTEXT`
+- `QX_AGENT_OUTPUT`
+- `QX_AGENT_TOOLS`
+
+This comprehensive configuration system provides fine-grained control over every aspect of agent behavior, from basic personality and capabilities to advanced autonomous operation, security constraints, and multi-agent coordination.
 
 ## Getting Help
 
