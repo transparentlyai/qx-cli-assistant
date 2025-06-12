@@ -76,3 +76,5 @@ model:
 
 execution:
   mode: "interactive"
+
+initial_query: "greet and start the agent creation process" 

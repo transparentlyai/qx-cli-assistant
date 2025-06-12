@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 from typing import List, Optional
 
-from openai.types.chat import ChatCompletionMessageParam
+from openai.types.chat import ChatCompletionMessageParam, ChatCompletionSystemMessageParam, ChatCompletionUserMessageParam
 from rich.text import Text
 
 import qx.core.user_prompts
@@ -11,7 +11,7 @@ from qx.cli.theme import themed_console
 from qx.core.agent_manager import get_agent_manager
 from qx.core.config_manager import ConfigManager
 from qx.core.constants import MODELS, QX_VERSION
-from qx.core.llm import QXLLMAgent, initialize_llm_agent
+from qx.core.llm import QXLLMAgent, initialize_llm_agent, query_llm
 from qx.core.session_manager import reset_session
 from qx.core.team_manager import get_team_manager
 from qx.core.team_mode_manager import get_team_mode_manager
@@ -108,7 +108,7 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
 
     if subcommand == "list":
         # Use current working directory for project-specific agent discovery
-        agents_info = await agent_manager.list_agents(cwd=os.getcwd())
+        agents_info = await agent_manager.list_user_agents(cwd=os.getcwd())
         current_agent_name = await agent_manager.get_current_agent_name()
 
         # Categorize agents by their source
@@ -198,6 +198,15 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
         agent_name = parts[1]
 
         try:
+            # Check if agent is a system agent (not available to users)
+            agent_info = agent_manager.get_agent_info(agent_name, cwd=os.getcwd())
+            if agent_info and agent_info.get("type") == "system":
+                themed_console.print(
+                    f"Cannot switch to system agent '{agent_name}'. System agents are not available to users.",
+                    style="error"
+                )
+                return
+
             # Attempt to switch the LLM agent
             success = await agent_manager.switch_llm_agent(
                 agent_name, config_manager.mcp_manager
@@ -212,6 +221,45 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
                         f"You are now talking to {agent_display_name}",
                         style="text.muted",
                     )
+                    
+                    # Process initial_query if defined in agent config
+                    if hasattr(current_agent, 'initial_query') and current_agent.initial_query:
+                        logger.debug(f"Processing initial_query for agent '{agent_name}': {current_agent.initial_query}")
+                        
+                        # Get the active LLM agent instance
+                        active_llm_agent = agent_manager.get_active_llm_agent()
+                        if active_llm_agent:
+                            try:
+                                # Import the system prompt loading function
+                                from qx.core.llm_components.prompts import load_and_format_system_prompt
+                                
+                                # Create fresh message history with system prompt and initial query
+                                system_prompt = load_and_format_system_prompt(current_agent)
+                                initial_message_history = [
+                                    ChatCompletionSystemMessageParam(
+                                        role="system", content=system_prompt
+                                    ),
+                                    ChatCompletionUserMessageParam(
+                                        role="user", content=current_agent.initial_query
+                                    ),
+                                ]
+                                
+                                # Send the initial query to the LLM (this will display the response)
+                                await query_llm(
+                                    active_llm_agent,
+                                    current_agent.initial_query,
+                                    message_history=initial_message_history,
+                                    console=themed_console,
+                                    add_user_message_to_history=False,  # Already added above
+                                    config_manager=config_manager,
+                                )
+                                
+                            except Exception as e:
+                                logger.error(f"Error processing initial_query for agent '{agent_name}': {e}")
+                                themed_console.print(
+                                    f"Warning: Failed to process initial query for agent '{agent_name}': {e}",
+                                    style="warning"
+                                )
             else:
                 themed_console.print(
                     f"Failed to switch to agent '{agent_name}'", style="error"
@@ -273,26 +321,37 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
             themed_console.print("No current agent loaded", style="warning")
 
     elif subcommand == "reload":
-        reload_agent_name: Optional[str] = (
-            parts[1] if len(parts) > 1 else await agent_manager.get_current_agent_name()
-        )
-        if not reload_agent_name:
-            themed_console.print(
-                "No agent specified and no current agent to reload", style="error"
-            )
-            return
-
-        result = await agent_manager.reload_agent(reload_agent_name)
-        if result.success:
-            themed_console.print(
-                f"Reloaded agent '{reload_agent_name}' from {result.source_path}",
-                style="info",
-            )
+        if len(parts) > 1:
+            # Reload specific agent
+            reload_agent_name = parts[1]
+            result = await agent_manager.reload_agent(reload_agent_name)
+            if result.success:
+                themed_console.print(
+                    f"Reloaded agent '{reload_agent_name}' from {result.source_path}",
+                    style="info",
+                )
+            else:
+                themed_console.print(
+                    f"Failed to reload agent '{reload_agent_name}': {result.error}",
+                    style="error",
+                )
         else:
-            themed_console.print(
-                f"Failed to reload agent '{reload_agent_name}': {result.error}",
-                style="error",
-            )
+            # Reload all agents
+            results = await agent_manager.reload_all_agents(cwd=os.getcwd())
+            success_count = sum(1 for success in results.values() if success)
+            failed_agents = [name for name, success in results.items() if not success]
+            
+            if failed_agents:
+                themed_console.print(
+                    f"Reloaded {success_count}/{len(results)} agents successfully. "
+                    f"Failed agents: {', '.join(failed_agents)}",
+                    style="warning"
+                )
+            else:
+                themed_console.print(
+                    f"Successfully reloaded all {success_count} agents from disk",
+                    style="info"
+                )
 
     elif subcommand == "refresh":
         # Refresh agent discovery to pick up new project agents
@@ -397,7 +456,7 @@ async def _handle_inline_command(
             style="primary",
         )
         themed_console.print(
-            "  /agents [cmd]    - Manage agents (list|switch|info|reload)",
+            "  /agents [cmd]    - Manage agents (list|switch|info|reload|refresh)",
             style="primary",
         )
         themed_console.print(
@@ -478,6 +537,20 @@ async def _handle_inline_command(
         themed_console.print("    /team-load frontend-specialists", style="dim cyan")
         themed_console.print("    /team-enable", style="dim cyan")
         themed_console.print("    # Now qx will coordinate multiple agents", style="dim green")
+
+        # Agent Management Details
+        themed_console.print("\nAgent Management Commands:", style="app.header")
+        themed_console.print("  /agents list             - List all available agents", style="primary")
+        themed_console.print("  /agents switch <name>    - Switch to a different agent", style="primary")
+        themed_console.print("  /agents info             - Show current agent details", style="primary")
+        themed_console.print("  /agents reload           - Reload ALL agents from disk", style="primary")
+        themed_console.print("  /agents reload <name>    - Reload specific agent from disk", style="primary")
+        themed_console.print("  /agents refresh          - Refresh agent discovery", style="primary")
+        
+        themed_console.print("\n  Agent Configuration Features:", style="dim white")
+        themed_console.print("    • initial_query: Automatic greeting when switching agents", style="dim cyan")
+        themed_console.print("    • Cache invalidation: /agents reload picks up YAML changes", style="dim cyan")
+        themed_console.print("    • Project-specific: Place agents in .Q/agents/ directory", style="dim cyan")
 
         themed_console.print("\nKey Bindings:", style="app.header")
         themed_console.print(
@@ -733,7 +806,7 @@ async def _handle_add_agent_command(command_args: str, config_manager: ConfigMan
 
     # Check if agent exists
     agent_manager = get_agent_manager()
-    available_agents = await agent_manager.list_agents(cwd=os.getcwd())
+    available_agents = await agent_manager.list_user_agents(cwd=os.getcwd())
     agent_names = [agent["name"] for agent in available_agents]
 
     if agent_name not in agent_names:

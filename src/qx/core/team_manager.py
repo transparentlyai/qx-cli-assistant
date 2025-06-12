@@ -319,6 +319,16 @@ class TeamManager:
         """Add an agent to the team with specified instance count."""
         # Get the agent configuration first to check max_instances
         agent_manager = get_agent_manager()
+        
+        # Check if agent is a system agent (not available to users)
+        agent_info = agent_manager.get_agent_info(agent_name)
+        if agent_info and agent_info.get("type") == "system":
+            themed_console.print(
+                f"Cannot add system agent '{agent_name}' to team. System agents are not available to users.",
+                style="error"
+            )
+            return False
+        
         agent_config = agent_manager.get_agent_config(agent_name)
         
         if not agent_config:

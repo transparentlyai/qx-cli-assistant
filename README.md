@@ -196,6 +196,36 @@ export QX_DEFAULT_EDITOR=nvim
 4. The updated text appears in the QX input buffer
 5. Press Enter to submit or continue editing
 
+### 🤖 Agent Management
+
+QX supports multiple specialized agents that can be switched between dynamically:
+
+```bash
+# List all available agents
+/agents list
+
+# Switch to a different agent  
+/agents switch code_helper
+
+# Get information about current agent
+/agents info
+
+# Reload agent configurations from disk
+/agents reload                # Reload ALL agents
+/agents reload specific_agent # Reload specific agent
+
+# Refresh agent discovery
+/agents refresh
+```
+
+#### Agent Features
+- **Automatic Greetings**: Agents with `initial_query` configuration automatically greet you when switched to
+- **Cache Management**: Use `/agents reload` to pick up YAML file changes without restarting QX
+- **Project-Specific**: Place custom agents in `.Q/agents/` directory for project-specific functionality
+- **Specialized Tools**: Each agent can have different tool access and capabilities
+
+For detailed agent creation and configuration, see the [Agents Documentation](docs/AGENTS.md).
+
 ### 🛡️ Approval System
 
 QX includes a comprehensive approval system for tool operations:

@@ -36,7 +36,7 @@ class QXCompleter(Completer):
             {"name": "list", "description": "List all available agents"},
             {"name": "switch", "description": "Switch to a different agent"},
             {"name": "info", "description": "Show current agent information"},
-            {"name": "reload", "description": "Reload agent configuration"},
+            {"name": "reload", "description": "Reload agent configuration (all agents if no name specified)"},
             {
                 "name": "refresh",
                 "description": "Refresh agent discovery (find new project agents)",
@@ -82,10 +82,16 @@ class QXCompleter(Completer):
                                 # Try to read basic metadata
                                 description = "Available agent"
                                 mode = "interactive"
+                                agent_type = "user"
                                 try:
                                     with open(agent_file, "r") as f:
                                         agent_data = yaml.safe_load(f)
                                         if agent_data:
+                                            # Skip system agents (not available to users)
+                                            agent_type = agent_data.get("type", "user")
+                                            if agent_type == "system":
+                                                continue
+
                                             description = agent_data.get(
                                                 "description", description
                                             )
