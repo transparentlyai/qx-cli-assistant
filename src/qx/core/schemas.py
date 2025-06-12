@@ -297,3 +297,6 @@ class AgentConfig(BaseModel):
     
     # UI configuration
     color: Optional[str] = Field(default=None, description="Agent display color (hex format)")
+    
+    # Initial interaction
+    initial_query: Optional[str] = Field(default=None, description="Initial question sent to the model when switching to this agent (not shown to console)")

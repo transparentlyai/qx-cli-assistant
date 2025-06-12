@@ -70,12 +70,16 @@ To see which agent is currently active:
 
 ### Reloading Agents
 
-To reload an agent's configuration from disk:
+To reload agent configurations from disk:
 ```
-/agents reload [agent_name]
+/agents reload                # Reload ALL agents from disk
+/agents reload [agent_name]   # Reload specific agent from disk
 ```
 
-If no agent name is provided, the current agent will be reloaded.
+- **Without agent name**: Clears the entire agent cache and reloads all agent configurations from disk. This picks up any changes made to YAML files after QX was started.
+- **With agent name**: Reloads only the specified agent's configuration from disk.
+
+This is useful when you've modified agent YAML files and want QX to pick up the changes without restarting.
 
 ### Refreshing Agent Discovery
 
@@ -212,6 +216,7 @@ description: "Coding assistant for development tasks"
 role: You are a coding assistant.
 instructions: Help write and debug code.
 tools: [read_file_tool, write_file_tool, execute_shell_tool]
+initial_query: "Hi! I'm ready to help with your coding tasks. What are you working on today?"
 ```
 
 **Documentation Bot:**
@@ -223,6 +228,7 @@ description: "Documentation writer and maintainer"
 role: You are a documentation writer.
 instructions: Create clear, helpful documentation.
 tools: [read_file_tool, write_file_tool, web_fetch_tool]
+initial_query: "Hello! I'm here to help with documentation. What would you like me to write or update?"
 ```
 
 **Data Analyst:**
@@ -1234,6 +1240,9 @@ Template string that gets prepended to the agent's prompt, containing runtime va
 
 #### **`output`** (str, optional)
 Guidelines for how the agent should format and structure its responses. Specifies output style, required sections, formatting preferences, and communication tone. Example: "Provide structured reports with Executive Summary, Detailed Findings, and Actionable Recommendations sections."
+
+#### **`initial_query`** (str, optional)
+An automatic greeting or initialization message that gets sent to the agent immediately when switching to it using `/agents switch <name>`. The initial query itself is not displayed to the user - only the agent's response is shown. This creates a welcoming, context-aware experience when switching agents. Example: "Hello! I'm ready to help with code reviews. What would you like me to analyze?" or "Hi! I'm here to assist with DevOps tasks. What infrastructure challenge can I help you solve today?"
 
 ### **Tool Access**
 

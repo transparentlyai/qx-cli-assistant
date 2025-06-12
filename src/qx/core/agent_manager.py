@@ -323,6 +323,27 @@ class AgentManager:
 
         return agents_info
 
+    async def list_user_agents(self, cwd: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List only user-facing agents (excludes system agents) with their information."""
+        # Always use current working directory if not provided for project agent discovery
+        if cwd is None:
+            cwd = os.getcwd()
+        agent_names = self._agent_loader.discover_user_agents(cwd=cwd)
+        agents_info = []
+
+        for name in agent_names:
+            info = self.get_agent_info(name, cwd=cwd)
+            if info:
+                # Add status information
+                info["is_current"] = (
+                    self._current_agent_session
+                    and self._current_agent_session.agent_name == name
+                )
+                info["is_autonomous"] = name in self._autonomous_agents
+                agents_info.append(info)
+
+        return agents_info
+
     async def reload_agent(
         self,
         agent_name: Optional[str] = None,
@@ -367,6 +388,63 @@ class AgentManager:
                 )
 
             return result
+
+    async def reload_all_agents(self, cwd: Optional[str] = None) -> Dict[str, bool]:
+        """
+        Reload all agent configurations from disk by clearing the entire cache.
+        
+        Args:
+            cwd: Current working directory for path resolution
+            
+        Returns:
+            Dictionary mapping agent names to success status
+        """
+        async with self._lock:
+            try:
+                # Clear all cached agents
+                self._agent_loader.clear_cache()
+                
+                # Also refresh agent discovery to pick up new/removed agents
+                discovered_agents = self._agent_loader.refresh_discovery(cwd=cwd)
+                
+                # Test load all discovered agents to verify they're valid
+                results = {}
+                for agent_name in discovered_agents:
+                    try:
+                        result = self._agent_loader.load_agent(agent_name, cwd=cwd)
+                        results[agent_name] = result.success
+                        if not result.success:
+                            logger.warning(f"Agent '{agent_name}' failed to reload: {result.error}")
+                    except Exception as e:
+                        logger.error(f"Error testing reload of agent '{agent_name}': {e}")
+                        results[agent_name] = False
+                
+                self._console_print(
+                    f"Reloaded {len(results)} agents from disk", 
+                    style="green"
+                )
+                
+                # If current agent was reloaded, update the session
+                if (self._current_agent_session and 
+                    self._current_agent_session.agent_name in results and
+                    results[self._current_agent_session.agent_name]):
+                    
+                    # Reload current agent config
+                    current_result = self._agent_loader.load_agent(
+                        self._current_agent_session.agent_name, 
+                        context=self._current_agent_session.context,
+                        cwd=cwd
+                    )
+                    if current_result.success:
+                        self._current_agent_session.agent_config = current_result.agent
+                
+                return results
+                
+            except Exception as e:
+                error_msg = f"Failed to reload all agents: {e}"
+                logger.error(error_msg, exc_info=True)
+                self._console_print(error_msg, style="red")
+                return {}
 
     async def start_autonomous_agent(
         self,

@@ -28,3 +28,5 @@ model:
 
 max_execution_time: 60
 max_iterations: 3
+
+initial_query: "Hello! I'm ready to help compress and summarize context information. What would you like me to work on?"
