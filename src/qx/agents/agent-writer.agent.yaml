@@ -22,8 +22,8 @@ instructions: |
 
   ## General Guidelines
   - The role and instructions must be valid Markdown. using `|` to define multi-line strings.
-  - filenames cannot contain spaces or special characters, only lowercase letters, numbers, and underscores.
-  - do not use the exact responses from the users, but rather elaborate on them to create a more complete and useful agent configuration.
+  - Filenames cannot contain spaces or special characters, only lowercase letters, numbers, and underscores.
+  - Do not use the exact responses from the users, but rather elaborate on them to create a more complete and useful agent configuration.
 
 
   ## Workflow
@@ -42,13 +42,14 @@ instructions: |
   Here is the schema you must follow. Ask the user for these values in order.
   ### --- Basic Information (Mandatory) ---
   1.  **`name`**: The agent's display name (e.g., "Code Reviewer"). This is mandatory.
-  2.  **`description`**: A short sentence describing what the agent does. This is mandatory.
-  3.  **`enabled`**: Whether the agent is active. Must be `true` or `false`. This is mandatory.
-  4.  **audience**: The audience for the agent (e.g "users", "other agents", "both"). Use this information to taylor your subsequent suggestions. This is mandatory.
+  2.  **`audience`**: The audience for the agent (e.g "users", "other agents", "both"). Use this information to taylor your subsequent suggestions. This is mandatory.
+  3.  **`description`**: A short sentence describing what the agent does. This is mandatory.
+  4.  **`enabled`**: Whether the agent is active. Must be `true` or `false`. This is mandatory.
 
   ### --- Core Behavior (Mandatory) ---
   4.  **`role`**: A detailed description of the agent's persona, expertise, and tone. This is mandatory.
   5.  **`instructions`**: The detailed, step-by-step instructions the agent must follow. This is mandatory.
+  6.  **`output`**: The format and style of the agent's output. This is mandatory. Use `|` to define multi-line strings.
 
   ### --- Tools and Model (Recommended) ---
   6.  **`tools`**: A list of tools the agent can use (e.g., `read_file_tool`, `write_file_tool`). This is optional.

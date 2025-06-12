@@ -9,7 +9,7 @@ from rich.console import Console as RichConsole
 
 from qx.cli.console import themed_console
 from qx.core.approval_handler import ApprovalHandler
-from qx.core.output_control import should_show_stderr, should_show_stdout
+from qx.core.output_control import should_show_stdout
 from qx.core.constants import (
     DEFAULT_PROHIBITED_COMMANDS,
     DEFAULT_APPROVED_COMMANDS,
@@ -17,11 +17,13 @@ from qx.core.constants import (
 )
 
 
-def _managed_plugin_print(content: str, use_bordered_markdown: bool = False, **kwargs) -> None:
+def _managed_plugin_print(
+    content: str, use_bordered_markdown: bool = False, **kwargs
+) -> None:
     """
     Print helper for plugins that uses console manager when available.
     Falls back to themed_console if manager is unavailable.
-    
+
     Args:
         content: The content to print
         use_bordered_markdown: If True, wrap content in BorderedMarkdown with agent styling
@@ -32,50 +34,52 @@ def _managed_plugin_print(content: str, use_bordered_markdown: bool = False, **k
         try:
             from qx.core.approval_handler import get_global_agent_context
             from qx.cli.quote_bar_component import BorderedMarkdown, get_agent_color
-            from rich.markdown import Markdown
-            
+
             agent_context = get_global_agent_context()
             if agent_context:
                 agent_name = agent_context.get("name")
                 agent_color = agent_context.get("color")
-                
+
                 if agent_name:
                     # Wrap content in BorderedMarkdown with agent styling (dimmed)
                     # Use Rich Text and apply the style from kwargs
                     from rich.text import Text
-                    
+
                     color = get_agent_color(agent_name, agent_color)
-                    
+
                     # Apply the style parameter to the content
                     style = kwargs.get("style", "")
                     if style:
                         rich_text = Text(content, style=style)
                     else:
                         rich_text = Text.from_markup(content)
-                    
+
                     bordered_md = BorderedMarkdown(
                         rich_text,
                         border_style=f"dim {color}",
-                        background_color="#080808"
+                        background_color="#080808",
                     )
-                    
+
                     # Use console manager or fallback
                     try:
                         from qx.core.console_manager import get_console_manager
+
                         manager = get_console_manager()
                         if manager and manager._running:
-                            manager.print(bordered_md, console=themed_console, markup=True, end="")
+                            manager.print(
+                                bordered_md, console=themed_console, markup=True, end=""
+                            )
                             return
                     except Exception:
                         pass
-                    
+
                     # Fallback to direct themed_console usage
                     themed_console.print(bordered_md, markup=True, end="")
                     return
         except Exception:
             # If BorderedMarkdown fails, fall through to regular printing
             pass
-    
+
     # Regular printing logic
     try:
         from qx.core.console_manager import get_console_manager
@@ -101,6 +105,9 @@ logger = logging.getLogger(__name__)
 
 class ExecuteShellPluginInput(BaseModel):
     command: str = Field(..., description="The shell command to execute.")
+    timeout_seconds: Optional[int] = Field(
+        None, description="The timeout for the command in seconds."
+    )
 
 
 class ExecuteShellPluginOutput(BaseModel):
@@ -128,6 +135,7 @@ async def execute_shell_tool(
 ) -> ExecuteShellPluginOutput:
     approval_handler = ApprovalHandler(themed_console)
     command = args.command.strip()
+    timeout = args.timeout_seconds
 
     if not command:
         err_msg = "Empty command provided."
@@ -145,8 +153,8 @@ async def execute_shell_tool(
     status = "approved"
     if _is_command_auto_approved(command):
         _managed_plugin_print(
-            f"[dim]Execute Shell Command (Auto-approved):[/dim] [dim cyan]{command}[/dim cyan]", 
-            use_bordered_markdown=True
+            f"[dim]Execute Shell Command (Auto-approved):[/dim] [dim cyan]{command}[/dim cyan]",
+            use_bordered_markdown=True,
         )
     else:
         status, _ = await approval_handler.request_approval(
@@ -165,7 +173,12 @@ async def execute_shell_tool(
 
         def run_sync_command():
             return subprocess.run(
-                command, shell=True, capture_output=True, text=True, check=False
+                command,
+                shell=True,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=timeout,
             )
 
         process = await asyncio.to_thread(run_sync_command)
@@ -183,10 +196,16 @@ async def execute_shell_tool(
 
         # Show stdout only if output control allows it
         if stdout and await should_show_stdout():
-            _managed_plugin_print(stdout.strip(), style="dim green", use_bordered_markdown=True)
+            _managed_plugin_print(
+                stdout.strip(), style="dim green", use_bordered_markdown=True
+            )
         # Show stderr only if details mode is active (same as stdout)
-        if stderr and await should_show_stdout():  # Use should_show_stdout to respect details mode
-            _managed_plugin_print(stderr.strip(), style="dim red", use_bordered_markdown=True)
+        if (
+            stderr and await should_show_stdout()
+        ):  # Use should_show_stdout to respect details mode
+            _managed_plugin_print(
+                stderr.strip(), style="dim red", use_bordered_markdown=True
+            )
 
         return ExecuteShellPluginOutput(
             command=command,
@@ -194,6 +213,11 @@ async def execute_shell_tool(
             stderr=stderr.strip() if stderr else None,
             return_code=return_code,
         )
+    except subprocess.TimeoutExpired:
+        err_msg = f"Command '{command}' timed out after {timeout} seconds."
+        logger.warning(err_msg)
+        approval_handler.print_outcome("Execution", err_msg, success=False)
+        return ExecuteShellPluginOutput(command=command, error=err_msg, return_code=-1)
 
     except Exception as e:
         logger.error(f"Failed to execute command '{command}': {e}", exc_info=True)

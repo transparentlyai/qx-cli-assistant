@@ -24,6 +24,9 @@ class QXCompleter(Completer):
             "/team-remove-member",
             "/team-status",
             "/team-clear",
+            "/team-save",
+            "/team-load",
+            "/team-create",
             "/team-enable",
             "/team-disable",
             "/team-mode",
@@ -247,6 +250,46 @@ class QXCompleter(Completer):
                         )
             return
 
+        if text.startswith("/team-load "):
+            # Complete with saved team names
+            try:
+                from qx.core.config_manager import ConfigManager
+                from qx.core.team_manager import get_team_manager
+                config_manager = ConfigManager(None)
+                team_manager = get_team_manager(config_manager)
+                saved_teams = team_manager.list_saved_teams()
+                for team_name in saved_teams:
+                    if team_name.startswith(word_before_cursor):
+                        yield Completion(
+                            team_name,
+                            start_position=-len(word_before_cursor),
+                            display=team_name,
+                            display_meta="Load saved team",
+                        )
+            except Exception:
+                pass  # No completion available if team manager not accessible
+            return
+
+        if text.startswith("/team-save "):
+            # Complete with existing team names for overwrite
+            try:
+                from qx.core.config_manager import ConfigManager
+                from qx.core.team_manager import get_team_manager
+                config_manager = ConfigManager(None)
+                team_manager = get_team_manager(config_manager)
+                saved_teams = team_manager.list_saved_teams()
+                for team_name in saved_teams:
+                    if team_name.startswith(word_before_cursor):
+                        yield Completion(
+                            team_name,
+                            start_position=-len(word_before_cursor),
+                            display=team_name,
+                            display_meta="Overwrite existing team",
+                        )
+            except Exception:
+                pass  # No completion available if team manager not accessible
+            return
+
         # Get the current text and cursor position
         cursor_position = document.cursor_position
 
@@ -271,6 +314,9 @@ class QXCompleter(Completer):
                 "/team-remove-member": "Remove an agent from your team",
                 "/team-status": "Show current team composition",
                 "/team-clear": "Remove all agents from team",
+                "/team-save": "Save current team with a name",
+                "/team-load": "Load a saved team by name",
+                "/team-create": "Create a new empty team",
                 "/team-enable": "Enable team mode (use supervisor agent)",
                 "/team-disable": "Disable team mode (use single agent)",
                 "/team-mode": "Show current team mode status",

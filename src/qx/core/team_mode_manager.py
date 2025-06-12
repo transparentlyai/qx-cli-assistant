@@ -21,7 +21,7 @@ class TeamModeManager:
         
     def _get_project_config_path(self) -> Path:
         """Get the project-specific team mode config path."""
-        project_path = Path.cwd() / ".qx" / "team-config.json"
+        project_path = Path.cwd() / ".Q" / "team-config.json"
         project_path.parent.mkdir(parents=True, exist_ok=True)
         return project_path
         
@@ -63,7 +63,7 @@ class TeamModeManager:
         Check if team mode is enabled.
         
         Priority order:
-        1. Project-specific setting (.qx/team-config.json)
+        1. Project-specific setting (.Q/team-config.json)
         2. User-level setting (~/.config/qx/team-config.json)  
         3. Default: False
         """
@@ -130,7 +130,7 @@ class TeamModeManager:
         """Get description of where the current team mode setting comes from."""
         project_state = self._load_config_from_file(self._get_project_config_path())
         if project_state is not None:
-            return "project (.qx/team-config.json)"
+            return "project (.Q/team-config.json)"
             
         user_state = self._load_config_from_file(self._get_user_config_path())
         if user_state is not None:
