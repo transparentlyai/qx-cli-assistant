@@ -76,6 +76,10 @@ async def _async_main(
             from qx.core.team_mode_manager import get_team_mode_manager
             team_mode_manager = get_team_mode_manager()
             
+            # Reset team manager to ensure teams are loaded from persistent storage
+            from qx.core.team_manager import reset_team_manager
+            reset_team_manager()
+            
             # Determine default agent based on team mode state
             if team_mode_manager.is_team_mode_enabled():
                 default_agent_name = os.environ.get("QX_DEFAULT_AGENT", "qx.supervisor")

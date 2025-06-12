@@ -135,12 +135,17 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
             themed_console.print("\n📁 Project Agents (.Q/agents/):", style="bold blue")
             for agent in project_agents:
                 name = agent["name"]
+                description = agent.get("description", "No description available")
+                # Truncate long descriptions for clean display
+                if len(description) > 80:
+                    description = description[:77] + "..."
                 mode = agent.get("execution_mode", "unknown")
                 status = " [CURRENT]" if agent.get("is_current") else ""
 
                 text = Text()
                 text.append(f"  📁 {name}: ", style="blue")
-                text.append(f"{mode}{status}", style="dim white")
+                text.append(f"{description}", style="white")
+                text.append(f" ({mode}{status})", style="dim white")
                 themed_console.print(text)
 
         # Show built-in agents
@@ -148,12 +153,17 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
             themed_console.print("\n🛠️  Built-in Agents:", style="bold green")
             for agent in development_agents:
                 name = agent["name"]
+                description = agent.get("description", "No description available")
+                # Truncate long descriptions for clean display
+                if len(description) > 80:
+                    description = description[:77] + "..."
                 mode = agent.get("execution_mode", "unknown")
                 status = " [CURRENT]" if agent.get("is_current") else ""
 
                 text = Text()
                 text.append(f"  - {name}: ", style="primary")
-                text.append(f"{mode}{status}", style="dim white")
+                text.append(f"{description}", style="white")
+                text.append(f" ({mode}{status})", style="dim white")
                 themed_console.print(text)
 
         # Show user agents
@@ -163,12 +173,17 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
             )
             for agent in user_agents:
                 name = agent["name"]
+                description = agent.get("description", "No description available")
+                # Truncate long descriptions for clean display
+                if len(description) > 80:
+                    description = description[:77] + "..."
                 mode = agent.get("execution_mode", "unknown")
                 status = " [CURRENT]" if agent.get("is_current") else ""
 
                 text = Text()
                 text.append(f"  - {name}: ", style="primary")
-                text.append(f"{mode}{status}", style="dim white")
+                text.append(f"{description}", style="white")
+                text.append(f" ({mode}{status})", style="dim white")
                 themed_console.print(text)
 
         # Show system agents
@@ -178,12 +193,17 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
             )
             for agent in system_agents:
                 name = agent["name"]
+                description = agent.get("description", "No description available")
+                # Truncate long descriptions for clean display
+                if len(description) > 80:
+                    description = description[:77] + "..."
                 mode = agent.get("execution_mode", "unknown")
                 status = " [CURRENT]" if agent.get("is_current") else ""
 
                 text = Text()
                 text.append(f"  - {name}: ", style="primary")
-                text.append(f"{mode}{status}", style="dim white")
+                text.append(f"{description}", style="white")
+                text.append(f" ({mode}{status})", style="dim white")
                 themed_console.print(text)
 
         # If no agents found
@@ -821,7 +841,7 @@ async def _handle_add_agent_command(command_args: str, config_manager: ConfigMan
     for agent in available_agents:
         if agent["name"] == agent_name:
             # Load the full agent config to check max_instances
-            result = await agent_manager.load_agent(agent_name)
+            result = await agent_manager.load_agent(agent_name, cwd=os.getcwd())
             if result.success and result.agent:
                 agent_config = result.agent
                 break

@@ -305,6 +305,11 @@ MODELS = (
         "description": "Preview 05-20 (OPENROUTER)",
         "accepts": ("thinking"),
     },
+    {
+        "name": "gemini-2.0-flash",
+        "model": "openrouter/google/gemini-2.0-flash-001",
+        "description": "Prod Version 001 (OPENROUTER)",
+    },
 )
 
 RANDOM_AGENT_COLORS = [

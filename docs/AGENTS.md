@@ -565,6 +565,8 @@ The `{discovered_agents}` variable provides a simple list of all discovered agen
 
 QX supports advanced multi-agent coordination through its team management system. You can create teams of specialized agents that work together on complex tasks, with automatic task decomposition and parallel execution.
 
+> **⚠️ IMPORTANT**: When building teams, ensure that team members have **non-overlapping skills, roles, and responsibilities**. If multiple agents have similar capabilities or overlapping specializations, the supervisor may not know which agent to delegate tasks to, leading to inefficient task routing or delegation conflicts. Each team member should have a clearly defined, unique role and distinct set of capabilities.
+
 ### Team Management Commands
 
 #### Creating and Building Teams
@@ -623,6 +625,42 @@ When team mode is enabled and you have a team configured:
 3. **Agent Selection**: Best-suited agents are chosen based on their specializations
 4. **Parallel Execution**: Subtasks run concurrently across agent instances
 5. **Result Synthesis**: Multiple agent outputs are combined into unified responses
+
+### Team Composition Best Practices
+
+To ensure effective team coordination, follow these guidelines:
+
+#### ✅ Good Team Composition
+- **Distinct roles**: Each agent has a unique, well-defined responsibility
+- **Complementary skills**: Agents cover different aspects of the same domain
+- **Clear specializations**: No ambiguity about which agent handles what
+
+Example - Web Development Team:
+```
+frontend_developer     → React/UI components
+backend_developer      → API/server logic  
+database_specialist    → Schema/queries
+devops_engineer       → Deployment/infrastructure
+```
+
+#### ❌ Poor Team Composition
+- **Overlapping roles**: Multiple agents with similar capabilities
+- **Vague specializations**: Agents with broad, conflicting scopes
+- **Redundant skills**: Multiple agents for the same task type
+
+Example - Problematic Team:
+```
+code_reviewer_1       → "Reviews code quality"
+code_reviewer_2       → "Reviews code and security"  
+quality_assurance     → "Ensures code quality"
+# ↑ Supervisor can't decide who should review code!
+```
+
+#### 🎯 Specialization Guidelines
+- Use specific, non-overlapping specializations in your agent configurations
+- Define clear boundaries between agent responsibilities  
+- Avoid generic roles like "developer" or "analyst" - be specific
+- Consider the entire workflow when designing team roles
 
 ### Team Workflow Example
 
