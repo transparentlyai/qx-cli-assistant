@@ -11,8 +11,28 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
-from langgraph.graph import MessagesState, StateGraph, Send
+from langgraph.graph import MessagesState, StateGraph
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.store.memory import InMemoryStore
+
+# Handle Send import - may not be available in all LangGraph versions
+try:
+    from langgraph.graph import Send
+except ImportError:
+    # Fallback for older versions or different import path
+    try:
+        from langgraph.types import Send
+    except ImportError:
+        # Create a simple Send fallback if not available
+        from dataclasses import dataclass
+        from typing import Any
+        
+        @dataclass
+        class Send:
+            node: str
+            arg: Any
 from langgraph_supervisor import create_supervisor
+from langgraph.prebuilt import create_react_agent
 
 from qx.core.team_manager import get_team_manager, TeamManager, TeamMember
 from qx.core.config_manager import ConfigManager
@@ -43,6 +63,8 @@ class TaskState(MessagesState):
     # Workflow control
     can_parallelize: bool = False
     requires_synthesis: bool = False
+    task_completed: bool = False
+    execution_count: int = 0
 
 
 class QxAgentWrapper:
@@ -93,8 +115,19 @@ class QxAgentWrapper:
             # Show agent activation with BorderedMarkdown
             self._display_agent_activity(user_input)
             
-            # Execute the agent
-            result = await llm_agent.run(user_input, messages[:-1] if len(messages) > 1 else [])
+            # Execute the agent with proper console context
+            # Use the same execution pattern as the main agent in llm.py
+            from qx.core.llm import query_llm
+            from qx.cli.theme import themed_console
+            
+            # Execute using the same infrastructure as main agent
+            result = await query_llm(
+                llm_agent,
+                user_input,
+                message_history=messages[:-1] if len(messages) > 1 else [],
+                console=themed_console,
+                config_manager=self.config_manager
+            )
             response = result.output if hasattr(result, 'output') else str(result)
             
             # Send result message
@@ -226,6 +259,8 @@ class LangGraphSupervisor:
         LangGraph node that decomposes user input into parallelizable subtasks.
         """
         try:
+            logger.debug("Entering decompose_task_node")
+            themed_console.print("🔄 Decomposing task...", style="dim yellow")
             # Extract user input from messages
             user_input = ""
             if state.get("messages"):
@@ -253,7 +288,38 @@ class LangGraphSupervisor:
                     'specializations': specializations
                 }
             
-            decomposition_prompt = f"""
+            # Use Task Decomposer system agent
+            try:
+                from qx.core.agent_loader import AgentLoader
+                from qx.core.llm_utils import initialize_agent_with_mcp
+                import os
+                
+                agent_loader = AgentLoader()
+                decomposer_config = agent_loader.get_agent_config("Task Decomposer", cwd=os.getcwd())
+                
+                if decomposer_config:
+                    # Create the task decomposer agent
+                    decomposer_agent = await initialize_agent_with_mcp(
+                        self.config_manager.mcp_manager,
+                        decomposer_config
+                    )
+                    
+                    # Format the context for the decomposer
+                    formatted_prompt = decomposer_config.context.format(
+                        user_input=user_input,
+                        agent_capabilities=json.dumps(agent_capabilities, indent=2)
+                    )
+                    
+                    # Use the decomposer agent to analyze the task
+                    result = await decomposer_agent.run(formatted_prompt)
+                    response_text = result.output if hasattr(result, 'output') else str(result)
+                else:
+                    raise Exception("Task Decomposer system agent not found")
+                    
+            except Exception as e:
+                logger.warning(f"Could not use Task Decomposer system agent: {e}")
+                # Fallback to main agent with inline prompt
+                decomposition_prompt = f"""
 Analyze this user request and break it down into independent subtasks that can be assigned to specialized agents.
 
 User Request: {user_input}
@@ -289,10 +355,8 @@ Guidelines:
 - If the task is simple, set can_parallelize to false and create only one subtask
 - Match subtask types to available agent capabilities
 """
-
-            # Use the main LLM agent to analyze and decompose the task
-            result = await self.main_llm_agent.run(decomposition_prompt)
-            response_text = result.output if hasattr(result, 'output') else str(result)
+                result = await self.main_llm_agent.run(decomposition_prompt)
+                response_text = result.output if hasattr(result, 'output') else str(result)
             
             # Extract JSON from the response
             import re
@@ -431,6 +495,8 @@ Guidelines:
         LangGraph node that executes subtasks for a specific agent instance.
         """
         try:
+            logger.debug(f"Entering agent_execution_node for {agent_name}")
+            themed_console.print(f"🤖 Executing with {agent_name}...", style="dim cyan")
             team_members = self.team_manager.get_team_members()
             
             # Create unique identifier for this agent instance
@@ -674,7 +740,9 @@ Create a well-structured response that feels like a single, cohesive analysis ra
         # Set finish point
         workflow.set_finish_point("synthesize")
         
-        return workflow.compile()
+        # Add memory saver for state persistence
+        memory = MemorySaver()
+        return workflow.compile(checkpointer=memory)
     
     async def process_with_team(self, user_input: str) -> str:
         """Process a user request using the new LangGraph-based parallel team workflow."""
@@ -689,7 +757,39 @@ Create a well-structured response that feels like a single, cohesive analysis ra
                 style="dim cyan"
             )
             
-            # Build the workflow graph
+            # Try the proper supervisor pattern first
+            try:
+                return await self.process_with_proper_supervisor(user_input)
+            except Exception as e:
+                logger.warning(f"Proper supervisor failed, using fallback: {e}")
+                themed_console.print(f"⚠️ Supervisor pattern failed, using direct delegation...", style="yellow")
+            
+            # FALLBACK: Use simplified direct delegation
+            suitable_agents = self.team_manager.select_best_agents_for_task(user_input)
+            if suitable_agents:
+                best_agent_name = suitable_agents[0]
+                themed_console.print(f"🎯 Delegating to {best_agent_name}...", style="dim green")
+                
+                team_member = team_members[best_agent_name]
+                wrapper = self._create_agent_wrapper(best_agent_name, team_member)
+                
+                # Create state for direct execution
+                state = {"messages": [HumanMessage(content=user_input)]}
+                
+                # Add timeout to prevent hanging
+                try:
+                    result = await asyncio.wait_for(wrapper.invoke(state), timeout=300.0)  # 5 minutes
+                except asyncio.TimeoutError:
+                    themed_console.print("⚠️ Agent execution timed out, falling back to supervisor", style="yellow")
+                    result = await self.main_llm_agent.run(user_input)
+                    return result.output if hasattr(result, 'output') else str(result)
+                
+                if result and "messages" in result and result["messages"]:
+                    return result["messages"][-1].content
+                else:
+                    return "Task completed successfully"
+            
+            # Fallback: Build the workflow graph (original complex approach)
             workflow = self._build_workflow_graph()
             
             # Create initial state
@@ -704,11 +804,16 @@ Create a well-structured response that feels like a single, cohesive analysis ra
                 "current_agent": "",
                 "instance_id": "",
                 "can_parallelize": False,
-                "requires_synthesis": False
+                "requires_synthesis": False,
+                "task_completed": False,
+                "execution_count": 0
             }
             
-            # Execute the workflow
-            final_state = await workflow.ainvoke(initial_state)
+            # Execute the workflow with state persistence
+            import uuid
+            thread_id = str(uuid.uuid4())
+            config = {"configurable": {"thread_id": thread_id}}
+            final_state = await workflow.ainvoke(initial_state, config=config)
             
             # Extract the final response
             if final_state.get("messages"):
@@ -728,6 +833,469 @@ Create a well-structured response that feels like a single, cohesive analysis ra
         except Exception as e:
             logger.error(f"Error in LangGraph team workflow: {e}", exc_info=True)
             themed_console.print(f"⚠️ Team workflow error, falling back to main agent...", style="warning")
+    
+    async def process_with_proper_supervisor(self, user_input: str) -> str:
+        """Process using the proper langgraph-supervisor library approach."""
+        try:
+            team_members = self.team_manager.get_team_members()
+            if not team_members:
+                result = await self.main_llm_agent.run(user_input)
+                return result.output if hasattr(result, 'output') else str(result)
+            
+            themed_console.print(f"🎯 Using proper supervisor pattern...", style="dim green")
+            
+            # Create react agents for each team member
+            logger.debug(f"Creating react agents for {len(team_members)} team members")
+            react_agents = []
+            for agent_name, team_member in team_members.items():
+                logger.debug(f"Creating react agent for {agent_name}")
+                try:
+                    # Convert QX agent to LangGraph react agent
+                    from qx.core.llm_utils import initialize_agent_with_mcp
+                    llm_agent = await initialize_agent_with_mcp(
+                        self.config_manager.mcp_manager, 
+                        team_member.agent_config
+                    )
+                    
+                    # Create a LangChain-compatible LLM wrapper for the agent
+                    def create_langchain_llm_wrapper(qx_agent):
+                        """Create a minimal LangChain-compatible LLM wrapper"""
+                        from langchain_core.language_models.base import BaseLanguageModel
+                        from langchain_core.messages import AIMessage
+                        
+                        from langchain_core.runnables import Runnable
+                        
+                        class QXLLMWrapper(Runnable):
+                            def __init__(self, qx_agent):
+                                self.qx_agent = qx_agent
+                            
+                            def invoke(self, input, config=None, **kwargs):
+                                if isinstance(input, str):
+                                    content = input
+                                elif hasattr(input, 'content'):
+                                    content = input.content
+                                elif isinstance(input, list) and len(input) > 0:
+                                    # Handle list of messages
+                                    last_msg = input[-1]
+                                    content = getattr(last_msg, 'content', str(last_msg))
+                                else:
+                                    content = str(input)
+                                
+                                import asyncio
+                                result = asyncio.run(self.qx_agent.run(content))
+                                response_text = result.output if hasattr(result, 'output') else str(result)
+                                return AIMessage(content=response_text)
+                            
+                            def bind_tools(self, tools, **kwargs):
+                                # Store tools for later use
+                                logger.debug(f"Agent {self.qx_agent.agent_name} binding {len(tools)} tools: {[getattr(t, 'name', 'unknown') for t in tools]}")
+                                self._bound_tools = tools
+                                return self
+                            
+                            @property
+                            def _llm_type(self):
+                                return "qx_llm_wrapper"
+                        
+                        return QXLLMWrapper(qx_agent)
+                    
+                    langchain_llm = create_langchain_llm_wrapper(llm_agent)
+                    
+                    # Convert QX tools to LangChain tools
+                    tools = []
+                    if hasattr(llm_agent, '_openai_tools_schema') and llm_agent._openai_tools_schema:
+                        # Convert QX tools to basic LangChain tools
+                        from langchain_core.tools import tool
+                        
+                        @tool
+                        def write_file(file_path: str, content: str) -> str:
+                            """Write content to a file."""
+                            try:
+                                import os
+                                os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                                with open(file_path, 'w') as f:
+                                    f.write(content)
+                                return f"Successfully wrote content to {file_path}"
+                            except Exception as e:
+                                return f"Error writing file: {e}"
+                        
+                        @tool
+                        def read_file(file_path: str) -> str:
+                            """Read content from a file."""
+                            try:
+                                with open(file_path, 'r') as f:
+                                    return f.read()
+                            except Exception as e:
+                                return f"Error reading file: {e}"
+                        
+                        tools = [write_file, read_file]
+                    
+                    # Create react agent with better prompt
+                    agent_prompt = f"""You are {agent_name}, a {team_member.agent_config.description}
+
+Role: {team_member.agent_config.role}
+
+Instructions: {team_member.agent_config.instructions}
+
+Always use the available tools when needed to complete tasks effectively."""
+                    
+                    react_agent = create_react_agent(
+                        model=langchain_llm,
+                        tools=tools,
+                        name=agent_name,
+                        prompt=agent_prompt
+                    )
+                    react_agents.append(react_agent)
+                    themed_console.print(f"✓ Created react agent: {agent_name}", style="dim green")
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to create react agent for {agent_name}: {e}")
+            
+            if not react_agents:
+                # Fallback to main agent
+                result = await self.main_llm_agent.run(user_input)
+                return result.output if hasattr(result, 'output') else str(result)
+            
+            # Use Team Supervisor system agent configuration
+            try:
+                agent_loader = AgentLoader()
+                supervisor_config = agent_loader.get_agent_config("Team Supervisor", cwd=os.getcwd())
+                
+                if supervisor_config:
+                    # Create agent list for the context
+                    agent_list = chr(10).join([
+                        f"- {agent.name}: {team_members[agent.name].agent_config.description}" 
+                        for agent in react_agents
+                    ])
+                    
+                    # Create delegation tools list
+                    delegation_tools = [f"delegate_to_{agent.name}" for agent in react_agents]
+                    delegation_tools_str = chr(10).join([f"- {tool}" for tool in delegation_tools])
+                    
+                    # Format the context for the supervisor
+                    supervisor_prompt = supervisor_config.context.format(
+                        agent_list=agent_list,
+                        delegation_tools=delegation_tools_str
+                    )
+                    
+                    # Also use the role and instructions
+                    supervisor_prompt = f"{supervisor_config.role}\n\n{supervisor_config.instructions}\n\n{supervisor_prompt}"
+                else:
+                    raise Exception("Team Supervisor system agent not found")
+                    
+            except Exception as e:
+                logger.warning(f"Could not use Team Supervisor system agent: {e}")
+                # Fallback to inline prompt
+                supervisor_prompt = f"""You are a team supervisor managing {len(react_agents)} specialized agents.
+
+Available agents:
+{chr(10).join([f"- {agent.name}: {team_members[agent.name].agent_config.description}" for agent in react_agents])}
+
+Your job is to:
+1. Analyze the user's request
+2. Use the appropriate handoff tool to delegate to the best specialist agent
+3. Ensure the task is completed successfully
+
+CRITICAL: You MUST call the delegation tools instead of describing what you would do. 
+When you receive requests, immediately call the appropriate delegate_to_[agent_name] tool.
+Do NOT write explanations or descriptions - just call the tool directly."""
+            
+            # Create LangChain wrapper for main supervisor LLM
+            def create_langchain_llm_wrapper(qx_agent):
+                """Create a minimal LangChain-compatible LLM wrapper"""
+                from langchain_core.language_models.base import BaseLanguageModel
+                from langchain_core.messages import AIMessage
+                
+                from langchain_core.runnables import Runnable
+                
+                class QXLLMWrapper(Runnable):
+                    def __init__(self, qx_agent):
+                        self.qx_agent = qx_agent
+                    
+                    def invoke(self, input, config=None, **kwargs):
+                        if isinstance(input, str):
+                            content = input
+                        elif hasattr(input, 'content'):
+                            content = input.content
+                        elif isinstance(input, list) and len(input) > 0:
+                            # Handle list of messages
+                            last_msg = input[-1]
+                            content = getattr(last_msg, 'content', str(last_msg))
+                        else:
+                            content = str(input)
+                        
+                        logger.debug(f"Supervisor invoke called with: {content[:100]}")
+                        
+                        # Check if we have tools bound and should use them
+                        if hasattr(self, '_bound_tools') and self._bound_tools:
+                            # For supervisor with handoff tools, we need to decide whether to delegate
+                            # Based on the content, determine if we should call a handoff tool
+                            should_delegate = self._should_delegate(content)
+                            if should_delegate:
+                                # Call the handoff tool
+                                logger.debug(f"Delegating with handoff tool")
+                                return self._call_handoff_tool(content)
+                        
+                        logger.debug(f"No delegation, using QX agent directly")
+                        import asyncio
+                        result = asyncio.run(self.qx_agent.run(content))
+                        response_text = result.output if hasattr(result, 'output') else str(result)
+                        return AIMessage(content=response_text)
+                    
+                    def _should_delegate(self, content):
+                        # Check if we have any delegation tools available
+                        if hasattr(self, '_bound_tools') and self._bound_tools:
+                            delegation_tools = [t for t in self._bound_tools if getattr(t, 'name', '').startswith('delegate_to')]
+                            return len(delegation_tools) > 0
+                        return False
+                    
+                    def _call_handoff_tool(self, content):
+                        # Call the appropriate handoff tool based on available agents
+                        from langchain_core.messages import AIMessage, ToolCall
+                        import uuid
+                        
+                        # Find the best tool to call based on available bound tools
+                        if hasattr(self, '_bound_tools') and self._bound_tools:
+                            delegation_tools = [t for t in self._bound_tools if getattr(t, 'name', '').startswith('delegate_to')]
+                            if delegation_tools:
+                                # For now, use the first available delegation tool
+                                # TODO: In the future, we could add logic to select the best agent based on task content
+                                selected_tool = delegation_tools[0]
+                                tool_name = selected_tool.name
+                                tool_call_id = str(uuid.uuid4())
+                                tool_call = ToolCall(
+                                    name=tool_name,
+                                    args={"task_description": content},
+                                    id=tool_call_id
+                                )
+                                
+                                agent_name = tool_name.replace('delegate_to_', '').replace('delegate_to', '')
+                                logger.debug(f"Supervisor calling handoff tool: {tool_call.name}")
+                                return AIMessage(
+                                    content=f"Delegating to {agent_name} agent",
+                                    tool_calls=[tool_call]
+                                )
+                        
+                        # Fallback if no tools available
+                        return AIMessage(content="No delegation tools available")
+                    
+                    def bind_tools(self, tools, **kwargs):
+                        # Store tools for later use AND dynamically add them to the QX agent
+                        logger.debug(f"Supervisor model binding {len(tools)} tools: {[getattr(t, 'name', 'unknown') for t in tools]}")
+                        self._bound_tools = tools
+                        
+                        # Dynamically add handoff tools to the QX agent's tool system
+                        for tool in tools:
+                            tool_name = getattr(tool, 'name', 'unknown')
+                            if tool_name.startswith('delegate_to'):
+                                logger.debug(f"Adding handoff tool {tool_name} to QX agent")
+                                self._add_handoff_tool_to_qx_agent(tool)
+                        
+                        return self
+                    
+                    def _add_handoff_tool_to_qx_agent(self, langchain_tool):
+                        """Add a LangChain handoff tool to the QX agent's tool system"""
+                        tool_name = langchain_tool.name
+                        
+                        # Create an async function that will be called by QX agent
+                        async def handoff_function(task_description=None, **kwargs):
+                            logger.debug(f"QX agent calling handoff tool {tool_name}")
+                            
+                            # Extract the agent name from the tool name (delegate_to_agent_name -> agent_name)
+                            agent_name = tool_name.replace('delegate_to', '').replace('delegate_to_', '')
+                            
+                            # Get task description from various possible sources
+                            if not task_description:
+                                # Check if it's in the args object
+                                args_obj = kwargs.get('args')
+                                if args_obj and hasattr(args_obj, 'task_description'):
+                                    task_description = args_obj.task_description
+                                else:
+                                    task_description = kwargs.get('task_description', kwargs.get('input', 'No task description provided'))
+                            
+                            logger.info(f"Delegating to {agent_name} with task: {task_description[:100]}...")
+                            
+                            # Find the target agent and execute the task
+                            try:
+                                # Get the parent supervisor reference
+                                parent_supervisor = getattr(self.qx_agent, '_parent_supervisor', None)
+                                if not parent_supervisor:
+                                    return f"Successfully initiated delegation to {agent_name}: {task_description[:100]}..."
+                                
+                                team_members = parent_supervisor.team_manager.get_team_members()
+                                if agent_name in team_members:
+                                    target_member = team_members[agent_name]
+                                    
+                                    # Get agent color early for use throughout
+                                    agent_color = getattr(target_member.agent_config, 'color', None)
+                                    
+                                    # Create the target agent with proper console manager integration
+                                    from qx.core.llm_utils import initialize_agent_with_mcp
+                                    target_agent = await initialize_agent_with_mcp(
+                                        parent_supervisor.config_manager.mcp_manager,
+                                        target_member.agent_config
+                                    )
+                                    
+                                    # Ensure the target agent has console manager access for approval requests
+                                    # Use the same console manager as the main agent for consistency
+                                    if hasattr(parent_supervisor, 'main_llm_agent') and hasattr(parent_supervisor.main_llm_agent, 'console'):
+                                        target_agent.console = parent_supervisor.main_llm_agent.console
+                                    
+                                    # Set up agent context for approval handlers to show proper BorderedMarkdown
+                                    from qx.core.approval_handler import set_global_agent_context
+                                    set_global_agent_context(agent_name, agent_color)
+                                    
+                                    # Display delegation using BorderedMarkdown
+                                    from qx.cli.quote_bar_component import render_agent_markdown
+                                    render_agent_markdown(
+                                        f"**Delegated Task:** {task_description[:200]}...",
+                                        agent_name,
+                                        agent_color=agent_color,
+                                        console=target_agent.console if hasattr(target_agent, 'console') else None
+                                    )
+                                    
+                                    # Execute the task with the target agent using proper console context
+                                    from qx.core.llm import query_llm
+                                    result = await query_llm(
+                                        target_agent,
+                                        task_description,
+                                        message_history=[],
+                                        console=target_agent.console if hasattr(target_agent, 'console') else None,
+                                        config_manager=parent_supervisor.config_manager
+                                    )
+                                    response = result.output if hasattr(result, 'output') else str(result)
+                                    
+                                    # Display completion using BorderedMarkdown
+                                    render_agent_markdown(
+                                        f"**Task Completed:** {response[:150]}...",
+                                        agent_name,
+                                        agent_color=agent_color,
+                                        console=target_agent.console if hasattr(target_agent, 'console') else None
+                                    )
+                                    
+                                    return f"Task completed by {agent_name}: {response[:200]}..."
+                                else:
+                                    return f"Agent {agent_name} not found in team"
+                            except Exception as e:
+                                logger.error(f"Error executing delegated task: {e}")
+                                return f"Error delegating to {agent_name}: {str(e)}"
+                        
+                        # Add to QX agent's tool functions
+                        self.qx_agent._tool_functions[tool_name] = handoff_function
+                        
+                        # Create a Pydantic model for the tool input
+                        from pydantic import BaseModel, Field
+                        
+                        class HandoffInput(BaseModel):
+                            task_description: str = Field(description="Detailed description of the task to delegate")
+                        
+                        # Add to tool input models
+                        self.qx_agent._tool_input_models[tool_name] = HandoffInput
+                        
+                        # Create schema for the tool
+                        tool_schema = {
+                            "name": tool_name,
+                            "description": f"Delegate task to {tool_name.replace('delegate_to', '').replace('delegate_to_', '')} agent",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "task_description": {
+                                        "type": "string",
+                                        "description": "Detailed description of the task to delegate"
+                                    }
+                                },
+                                "required": ["task_description"]
+                            }
+                        }
+                        
+                        # Add to QX agent's tool schema
+                        try:
+                            from openai.types.chat import ChatCompletionToolParam
+                            from openai.types.shared_params.function_definition import FunctionDefinition
+                            
+                            self.qx_agent._openai_tools_schema.append(
+                                ChatCompletionToolParam(
+                                    type="function",
+                                    function=FunctionDefinition(**tool_schema)
+                                )
+                            )
+                            logger.debug(f"Successfully added {tool_name} to QX agent tool system")
+                        except Exception as e:
+                            logger.warning(f"Error adding tool schema for {tool_name}: {e}")
+                    
+                    @property
+                    def _llm_type(self):
+                        return "qx_llm_wrapper"
+                
+                return QXLLMWrapper(qx_agent)
+            
+            supervisor_llm = create_langchain_llm_wrapper(self.main_llm_agent)
+            
+            # Set parent supervisor reference for handoff tools
+            self.main_llm_agent._parent_supervisor = self
+            
+            # Use create_supervisor with automatic handoff tool creation
+            supervisor = create_supervisor(
+                react_agents,
+                model=supervisor_llm,
+                prompt=supervisor_prompt,
+                handoff_tool_prefix="delegate_to",  # This creates tools like delegate_to_[agent_name]
+                output_mode="last_message"  # Only include final response
+            )
+            
+            # Debug: Supervisor successfully created
+            logger.debug(f"Supervisor created with nodes: {list(supervisor.nodes.keys()) if hasattr(supervisor, 'nodes') else 'unknown'}")
+            
+            # Debug: Print supervisor info
+            logger.info(f"Created supervisor with {len(react_agents)} agents")
+            logger.info(f"Agent names: {[agent.name for agent in react_agents]}")
+            logger.info(f"Supervisor model: {type(self.main_llm_agent.llm)}")
+            
+            # Check if model supports tool calling
+            has_bind_tools = hasattr(self.main_llm_agent.llm, 'bind_tools')
+            has_with_structured_output = hasattr(self.main_llm_agent.llm, 'with_structured_output')
+            logger.info(f"Model supports bind_tools: {has_bind_tools}")
+            logger.info(f"Model supports with_structured_output: {has_with_structured_output}")
+            
+            if not has_bind_tools:
+                themed_console.print(f"⚠️ Model {type(self.main_llm_agent.llm)} may not support tool calling", style="yellow")
+            
+            # Compile with proper memory configuration (matching official docs)
+            checkpointer = InMemorySaver()
+            store = InMemoryStore()
+            app = supervisor.compile(
+                checkpointer=checkpointer,
+                store=store
+            )
+            
+            # Execute with proper message format
+            import uuid
+            thread_id = str(uuid.uuid4())
+            config = {"configurable": {"thread_id": thread_id}}
+            
+            logger.debug(f"Invoking supervisor with user_input: {user_input[:100]}...")
+            
+            result = await app.ainvoke({
+                "messages": [
+                    {"role": "user", "content": user_input}
+                ]
+            }, config=config)
+            
+            logger.debug(f"Supervisor result type: {type(result)}")
+            
+            if result and "messages" in result and result["messages"]:
+                last_message = result["messages"][-1]
+                if hasattr(last_message, 'content'):
+                    return last_message.content
+                elif isinstance(last_message, dict):
+                    return last_message.get('content', 'Task completed successfully')
+                else:
+                    return str(last_message)
+            else:
+                return "Task completed successfully"
+                
+        except Exception as e:
+            logger.error(f"Error in proper supervisor workflow: {e}", exc_info=True)
+            # Fallback to main agent
             result = await self.main_llm_agent.run(user_input)
             return result.output if hasattr(result, 'output') else str(result)
 

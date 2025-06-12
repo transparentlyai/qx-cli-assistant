@@ -8,6 +8,7 @@ through LangGraph workflows.
 import asyncio
 import json
 import logging
+import os
 from typing import Any, Dict, List, Optional, Set
 from pathlib import Path
 
@@ -65,6 +66,16 @@ class TeamMember:
             for word in task_lower.split():
                 if word in desc_words:
                     score += 0.1
+        
+        # Give software engineering agents a base score for code/file tasks
+        code_keywords = ['create', 'write', 'build', 'develop', 'implement', 'file', 'code', 'script', 'html', 'python', 'javascript']
+        software_capabilities = ['frontend', 'backend', 'file_management', 'automation', 'testing']
+        
+        task_has_code_keywords = any(keyword in task_lower for keyword in code_keywords)
+        agent_has_software_capabilities = any(cap in self.capabilities for cap in software_capabilities)
+        
+        if task_has_code_keywords and agent_has_software_capabilities:
+            score = max(score, 0.5)  # Give at least 0.5 score for software engineering tasks
         
         return min(score, 1.0)
 
@@ -206,7 +217,7 @@ class TeamManager:
     def _load_agent_member(self, agent_manager, agent_name: str, instance_count: int):
         """Helper method to load a single agent member."""
         try:
-            agent_config = agent_manager.get_agent_config(agent_name)
+            agent_config = agent_manager.get_agent_config(agent_name, cwd=os.getcwd())
             if agent_config:
                 capabilities = self._infer_capabilities(agent_config)
                 team_member = TeamMember(agent_name, agent_config, capabilities)
@@ -329,7 +340,7 @@ class TeamManager:
             )
             return False
         
-        agent_config = agent_manager.get_agent_config(agent_name)
+        agent_config = agent_manager.get_agent_config(agent_name, cwd=os.getcwd())
         
         if not agent_config:
             themed_console.print(f"Agent '{agent_name}' not found", style="error")
@@ -676,6 +687,12 @@ class TeamManager:
         except Exception as e:
             logger.warning(f"Failed to rebuild supervisor workflow: {e}")
 
+    def reload_from_storage(self):
+        """Reload team from persistent storage, useful when team files change."""
+        self._team_members.clear()
+        self._load_team_from_storage()
+        logger.info("Team reloaded from storage")
+
 
 # Global team manager instance
 _team_manager: Optional[TeamManager] = None
@@ -687,3 +704,9 @@ def get_team_manager(config_manager: ConfigManager) -> TeamManager:
     if _team_manager is None:
         _team_manager = TeamManager(config_manager)
     return _team_manager
+
+
+def reset_team_manager():
+    """Reset the global team manager instance, forcing it to reload from storage."""
+    global _team_manager
+    _team_manager = None
