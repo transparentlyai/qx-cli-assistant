@@ -1,7 +1,4 @@
 name: Qx Supervisor
-enabled: true
-can_delegate: true
-max_instances: 1
 description: Team supervisor and coordinator for multi-agent workflows
 specializations: ["task_coordination", "delegation", "synthesis", "project_management", "team_leadership"]
 role: |
@@ -183,6 +180,10 @@ tools: [
   execute_shell_tool,
   todo_manager_tool
 ]
+
+enabled: true
+can_delegate: true
+max_instances: 1
 
 model:
   name: openrouter/google/gemini-2.5-pro-preview-06-05
