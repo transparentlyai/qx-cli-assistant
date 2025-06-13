@@ -23,7 +23,7 @@ MINIMAL_CONFIG_EXAMPLE = """
 # Place this in one of the following locations:
 # 1. /etc/qx/qx.conf (lowest priority)
 # 2. ~/.config/qx/qx.conf (user-level)
-# 3. <project-directory>/.Q/qx.conf (highest priority)
+# 3. <project-directory>/.Q/config/qx.conf (highest priority)
 
 # Model Configuration (LiteLLM format)
 QX_MODEL_NAME=openrouter/anthropic/claude-3.5-sonnet
@@ -46,7 +46,7 @@ CONFIG_LOCATIONS = """
 Possible configuration file locations (in order of priority, lowest to highest):
 1. /etc/qx/qx.conf
 2. {user_config_path}
-3. <project-directory>/.Q/qx.conf
+3. <project-directory>/.Q/config/qx.conf
 """.format(user_config_path=QX_CONFIG_DIR / "qx.conf")
 
 
@@ -74,12 +74,12 @@ class ConfigManager:
     def get_writable_config_path(self) -> Path:
         """
         Determines the appropriate config file path to write to.
-        If inside a project with an existing .Q/qx.conf, uses that.
+        If inside a project with an existing .Q/config/qx.conf, uses that.
         Otherwise, falls back to the user-level config file.
         """
         project_root = _find_project_root(str(Path.cwd()))
         if project_root:
-            project_config_path = project_root / ".Q" / "qx.conf"
+            project_config_path = project_root / ".Q" / "config" / "qx.conf"
             if project_config_path.is_file():
                 return project_config_path
 
@@ -178,7 +178,7 @@ class ConfigManager:
         cwd = Path.cwd()
         project_root = _find_project_root(str(cwd))
         if project_root:
-            project_config_path = project_root / ".Q" / "qx.conf"
+            project_config_path = project_root / ".Q" / "config" / "qx.conf"
             self._check_project_config_safety(project_config_path)
             self._load_dotenv_if_exists(project_config_path, override=True)
 
@@ -322,7 +322,7 @@ class ConfigManager:
 
     def _check_project_config_safety(self, project_config_path: Path):
         """
-        Safety check to ensure .Q/qx.conf does not contain any API keys.
+        Safety check to ensure .Q/config/qx.conf does not contain any API keys.
         Exits the application if any variables containing 'KEY' are found.
         """
         if not project_config_path.is_file():
@@ -343,10 +343,10 @@ class ConfigManager:
                             from qx.cli.theme import themed_console
 
                             themed_console.print(
-                                f"[error]SECURITY ERROR: API key detected in .Q/qx.conf[/]\n"
+                                f"[error]SECURITY ERROR: API key detected in .Q/config/qx.conf[/]\n"
                                 f"File: {project_config_path}\n"
                                 f"Line {line_num}: {var_name}\n\n"
-                                f"[error]API keys should NEVER be stored in .Q/qx.conf as this file[/]\n"
+                                f"[error]API keys should NEVER be stored in .Q/config/qx.conf as this file[/]\n"
                                 f"[error]may be committed to version control.[/]\n\n"
                                 f"Please move API keys to:\n"
                                 f"- ~/.config/qx/qx.conf (user-level config)\n"
