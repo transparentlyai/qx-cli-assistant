@@ -31,7 +31,7 @@ Get your API key from your chosen provider (detailed instructions below)
 
 ### 3. Configure QX
 
-Add to your configuration file (`~/.config/qx/qx.conf` or project `.Q/qx.conf`):
+Add to your configuration file (`~/.config/qx/qx.conf` or project `.Q/config/qx.conf`):
 
 ```bash
 # Basic configuration

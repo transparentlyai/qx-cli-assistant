@@ -17,7 +17,7 @@ QX_SESSIONS_DIR = Path(".Q") / "sessions"
 # MCP Server Configuration Paths
 SYSTEM_MCP_SERVERS_PATH = Path("/etc/qx/mcp_servers.json")
 USER_MCP_SERVERS_PATH = QX_CONFIG_DIR / "mcp_servers.json"
-PROJECT_MCP_SERVERS_PATH = Path(".Q/mcp_servers.json")
+PROJECT_MCP_SERVERS_PATH = Path(".Q/config/mcp_servers.json")
 
 
 def _find_project_root(cwd_str: str) -> Path | None:

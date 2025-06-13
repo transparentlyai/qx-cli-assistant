@@ -686,7 +686,7 @@ quality_assurance     → "Ensures code quality"
 ### Team Storage
 
 Teams are stored in:
-- **Project-level**: `.Q/teams.json` (preferred, project-specific)
+- **Project-level**: `.Q/config/teams.json` (preferred, project-specific)
 - **User-level**: `~/.config/qx/teams.json` (fallback)
 
 The teams.json format stores all teams with their agent configurations and instance counts:

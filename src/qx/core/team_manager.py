@@ -125,7 +125,7 @@ class TeamManager:
     def _get_team_storage_path(self) -> Path:
         """Get the path where team composition is stored."""
         # Store in the current project directory if possible, otherwise user config
-        project_path = Path.cwd() / ".Q" / "team.json"
+        project_path = Path.cwd() / ".Q" / "config" / "team.json"
         user_path = Path.home() / ".config" / "qx" / "team.json"
         
         # Create directories if they don't exist
@@ -138,7 +138,7 @@ class TeamManager:
     def _get_teams_storage_path(self) -> Path:
         """Get the path where all saved teams are stored."""
         # Store in the current project directory if possible, otherwise user config
-        project_path = Path.cwd() / ".Q" / "teams.json"
+        project_path = Path.cwd() / ".Q" / "config" / "teams.json"
         user_path = Path.home() / ".config" / "qx" / "teams.json"
         
         # Create directories if they don't exist
@@ -563,9 +563,10 @@ class TeamManager:
             
             # Also check for old format team files for migration
             project_dir = Path.cwd() / ".Q"
+            project_config_dir = Path.cwd() / ".Q" / "config"
             user_dir = Path.home() / ".config" / "qx"
             
-            for directory in [project_dir, user_dir]:
+            for directory in [project_dir, project_config_dir, user_dir]:
                 if directory.exists():
                     for file_path in directory.glob("team-*.json"):
                         team_name = file_path.stem.replace("team-", "")
@@ -620,10 +621,13 @@ class TeamManager:
         """Load team from old format file and migrate to new format."""
         # Check both project and user directories for old format files
         project_file = Path.cwd() / ".Q" / f"team-{team_name}.json"
+        project_config_file = Path.cwd() / ".Q" / "config" / f"team-{team_name}.json"
         user_file = Path.home() / ".config" / "qx" / f"team-{team_name}.json"
         
         old_team_file = None
-        if project_file.exists():
+        if project_config_file.exists():
+            old_team_file = project_config_file
+        elif project_file.exists():
             old_team_file = project_file
         elif user_file.exists():
             old_team_file = user_file

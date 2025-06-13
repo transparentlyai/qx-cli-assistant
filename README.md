@@ -49,7 +49,7 @@ QX uses a **hierarchical configuration system** that loads settings from multipl
 
 1. **📁 System-wide**: `/etc/qx/qx.conf` - Global defaults for all users
 2. **👤 User-level**: `~/.config/qx/qx.conf` - Personal user settings
-3. **🚀 Project-level**: `<project-directory>/.Q/qx.conf` - **Highest priority**, project-specific overrides
+3. **🚀 Project-level**: `<project-directory>/.Q/config/qx.conf` - **Highest priority**, project-specific overrides
 
 #### How It Works
 
@@ -75,7 +75,7 @@ QX_MODEL_NAME=openrouter/anthropic/claude-3.5-sonnet  # Overrides system default
 QX_ENABLE_STREAMING=true
 ```
 
-**Project-level** (`myproject/.Q/qx.conf`) - Project-specific needs:
+**Project-level** (`myproject/.Q/config/qx.conf`) - Project-specific needs:
 ```bash
 # Project-specific overrides for this codebase
 QX_MODEL_NAME=openrouter/openai/gpt-4o  # High-performance model for this project
@@ -107,7 +107,7 @@ QX_MODEL_REASONING_EFFORT=medium  # For reasoning models (none, low, medium, hig
 QX automatically discovers and loads configurations in this order:
 1. **System defaults** (`/etc/qx/qx.conf`) - Baseline configuration
 2. **User preferences** (`~/.config/qx/qx.conf`) - Personal overrides  
-3. **Project settings** (`<project>/.Q/qx.conf`) - Project-specific overrides
+3. **Project settings** (`<project>/.Q/config/qx.conf`) - Project-specific overrides
 4. **Environment variables** - Runtime overrides (highest priority)
 
 #### Environment Variable Overrides
@@ -350,7 +350,7 @@ QX supports MCP servers for extended functionality:
 - **Brave Search**: Web search capabilities
 - **Custom MCP Servers**: Add your own MCP integrations
 
-Configuration in `.Q/mcp_servers.json`:
+Configuration in `.Q/config/mcp_servers.json`:
 ```json
 {
   "brave-search": {

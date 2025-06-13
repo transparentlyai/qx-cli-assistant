@@ -147,6 +147,13 @@ async def _ask_basic_confirmation(
     choices_display_str = "/".join(choices_str_list)
     full_prompt = f"{prompt_message_text} ({choices_display_str}): "
 
+    # Create mapping of all valid inputs to their canonical choice keys
+    choice_mapping = {}
+    for choice_tuple in choices:
+        canonical_key = choice_tuple[0].lower()
+        for variant in choice_tuple:
+            choice_mapping[variant.lower()] = canonical_key
+
     # Suspend global hotkeys during approval prompt
     hotkeys_suspended = _suspend_global_hotkeys()
 
@@ -156,16 +163,18 @@ async def _ask_basic_confirmation(
                 old_handler = _disable_ctrl_c()
                 try:
                     user_input = await asyncio.to_thread(
-                        Prompt.ask,
-                        full_prompt,
-                        choices=choices_str_list,
-                        show_choices=False,
-                        console=console,
+                        input,
+                        full_prompt
                     )
                 finally:
                     _restore_ctrl_c(old_handler)
                 if user_input:
-                    return user_input.lower()
+                    user_input_lower = user_input.strip().lower()
+                    if user_input_lower in choice_mapping:
+                        return choice_mapping[user_input_lower]
+                    else:
+                        console.print(f"[dim red]Invalid choice '{user_input}'. Please choose from: {choices_display_str}[/dim red]")
+                        continue
             except Exception as e:
                 try:
                     _restore_ctrl_c(old_handler)
@@ -214,18 +223,26 @@ async def _request_confirmation_textual(
         if user_selected_key is None:
             console.print("[info]Operation cancelled.[/info]")
             return ("cancelled", None)
-        if user_selected_key == "y":
+        
+        # Normalize input to handle variations (Y, y, Yes, yes, etc.)
+        user_input_lower = user_selected_key.lower().strip()
+        
+        # Check for "yes" variations
+        if user_input_lower in ["y", "yes"]:
             return ("approved", current_value_for_modification)
-        elif user_selected_key == "n":
+        # Check for "no" variations  
+        elif user_input_lower in ["n", "no"]:
             console.print("[info]Operation denied by user.[/info]")
             return ("denied", None)
-        elif user_selected_key == "a":
+        # Check for "approve all" variations
+        elif user_input_lower in ["a", "approve all", "all"]:
             global _approve_all_active
             async with _approve_all_lock:
                 _approve_all_active = True
             _managed_print(console, "[info]'Approve All' activated for this session.[/info]")
             return ("session_approved", current_value_for_modification)
-        elif user_selected_key == "c":
+        # Check for "cancel" variations
+        elif user_input_lower in ["c", "cancel"]:
             console.print("[info]Operation cancelled by user.[/info]")
             return ("cancelled", None)
         else:
@@ -377,17 +394,18 @@ async def get_user_choice_from_options_async(
                 old_handler = _disable_ctrl_c()
                 try:
                     user_input = await asyncio.to_thread(
-                        Prompt.ask,
-                        prompt_text_with_options,
-                        choices=processed_valid_choices,
-                        default=processed_default_choice,
-                        show_choices=False,
-                        console=console,
+                        input,
+                        prompt_text_with_options
                     )
                 finally:
                     _restore_ctrl_c(old_handler)
                 if user_input:
-                    return user_input.lower()
+                    user_input_lower = user_input.strip().lower()
+                    if user_input_lower in processed_valid_choices:
+                        return user_input_lower
+                    else:
+                        console.print(f"[dim red]Invalid choice '{user_input}'. Please choose from: {', '.join(valid_choices)}[/dim red]")
+                        continue
                 else:
                     console.print("[dim red]Please select an option.[/dim red]")
                     continue
@@ -396,7 +414,7 @@ async def get_user_choice_from_options_async(
                     _restore_ctrl_c(old_handler)
                 except Exception:
                     pass
-                logger.error(f"Error during Rich prompt: {e}", exc_info=True)
+                logger.error(f"Error during prompt: {e}", exc_info=True)
                 console.print("[dim red]Error with prompt, please try again.[/dim red]")
                 continue
     finally:
