@@ -299,6 +299,8 @@ class UnifiedLangGraphWorkflow:
     
     async def _director_node(self, state: QXWorkflowState) -> QXWorkflowState:
         """Main qx-director node that handles human interaction and task coordination."""
+        from langgraph.errors import GraphInterrupt
+        
         execution_id = state.get("execution_id", "unknown")
         node_start_time = time.time()
         
@@ -449,7 +451,6 @@ class UnifiedLangGraphWorkflow:
                         )
                         
                         # Use LangGraph interrupt to pause and wait for user feedback
-                        from langgraph.errors import GraphInterrupt
                         try:
                             user_feedback = interrupt({
                                 "type": "satisfaction_check",
@@ -560,6 +561,10 @@ class UnifiedLangGraphWorkflow:
                 
                 return updated_state
                 
+            except GraphInterrupt:
+                # This is expected - GraphInterrupt is used for workflow pausing
+                logger.debug("⏸️ Director node paused for interrupt")
+                raise
             except Exception as e:
                 logger.error(f"❌ Error in director_node: {e}", exc_info=True)
                 error_state = {
