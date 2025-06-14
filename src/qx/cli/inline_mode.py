@@ -455,6 +455,39 @@ async def _run_inline_mode(
     signal.signal(signal.SIGWINCH, handle_resize)
 
     try:
+        # Check if we should start team mode workflow immediately
+        from qx.core.team_mode_manager import get_team_mode_manager
+        team_mode_manager = get_team_mode_manager()
+        
+        if team_mode_manager.is_team_mode_enabled():
+            # In team mode, start the workflow immediately with empty input
+            # The director will handle all interactions through interrupts
+            logger.info("🎯 Team mode active - starting unified workflow")
+            
+            # Get the director agent
+            from qx.core.agent_manager import get_agent_manager
+            agent_manager = get_agent_manager()
+            director_agent = agent_manager.get_active_llm_agent()
+            
+            if director_agent and hasattr(director_agent, 'agent_name') and director_agent.agent_name == 'qx-director':
+                try:
+                    # Start the workflow with empty input - director will ask for input inside
+                    await _handle_llm_interaction(
+                        director_agent,
+                        "",  # Empty input triggers director to ask for input
+                        current_message_history,
+                        "rrt",
+                        add_user_message_to_history=False,
+                        config_manager=config_manager,
+                    )
+                    # Workflow handles everything including exit, so we're done
+                    return
+                except Exception as e:
+                    logger.error(f"Team mode workflow error: {e}", exc_info=True)
+                    themed_console.print("Team mode workflow error. Falling back to normal mode.", style="error")
+            else:
+                logger.warning("Team mode enabled but qx-director not active")
+        
         while True:
             if not is_multiline_mode[0]:
                 is_multiline_mode[0] = False

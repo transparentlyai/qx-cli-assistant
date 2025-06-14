@@ -468,10 +468,16 @@ class UnifiedLangGraphWorkflow:
                             current_messages.append(HumanMessage(content=user_feedback))
                             updated_state["messages"] = current_messages
                             
-                            if "satisfied" in user_feedback.lower() or "done" in user_feedback.lower() or "thanks" in user_feedback.lower():
+                            # Check for exit commands
+                            if any(exit_word in user_feedback.lower() for exit_word in ["exit", "quit", "bye", "goodbye"]):
                                 updated_state["workflow_stage"] = "complete"
+                                logger.info("👋 User requested exit")
+                            elif "satisfied" in user_feedback.lower() or "done" in user_feedback.lower() or "thanks" in user_feedback.lower():
+                                # User is satisfied, ask what else they need
+                                updated_state["workflow_stage"] = "new_request"
+                                updated_state["user_input"] = ""  # Clear input to trigger new request
                             else:
-                                # User wants more work
+                                # User wants more work on current task
                                 updated_state["user_input"] = user_feedback
                                 updated_state["workflow_stage"] = "routing"
                                 
@@ -493,15 +499,38 @@ class UnifiedLangGraphWorkflow:
                             current_messages.append(HumanMessage(content=user_feedback))
                             updated_state["messages"] = current_messages
                         
-                        if "satisfied" in user_feedback.lower() or "done" in user_feedback.lower() or "thanks" in user_feedback.lower():
+                        # Check for exit commands
+                        if any(exit_word in user_feedback.lower() for exit_word in ["exit", "quit", "bye", "goodbye"]):
                             updated_state["workflow_stage"] = "complete"
+                            logger.info("👋 User requested exit")
+                        elif "satisfied" in user_feedback.lower() or "done" in user_feedback.lower() or "thanks" in user_feedback.lower():
+                            # User is satisfied, ask what else they need
+                            updated_state["workflow_stage"] = "new_request"
+                            updated_state["user_input"] = ""  # Clear input to trigger new request
                         else:
-                            # User wants more work
+                            # User wants more work on current task
                             updated_state["user_input"] = user_feedback
                             updated_state["workflow_stage"] = "routing"
                     else:
                         # No feedback yet, stay in awaiting state
                         logger.debug("Still awaiting user satisfaction feedback")
+                
+                elif stage == "new_request":
+                    # User was satisfied with previous task, ask what else they need
+                    # Clear user_input to trigger the input prompt
+                    updated_state["user_input"] = ""
+                    updated_state["workflow_stage"] = "director"
+                    
+                    # Show a friendly prompt for the next request
+                    from qx.cli.quote_bar_component import render_agent_markdown
+                    render_agent_markdown(
+                        "**What else can I help you with?**",
+                        "qx-director",
+                        agent_color="#ff5f00"
+                    )
+                    
+                    # Let the director stage handle getting new input
+                    logger.info("🔄 Ready for new request after satisfaction")
                 
                 elif stage == "direct_response":
                     # Director handles the task directly
