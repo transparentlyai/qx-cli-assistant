@@ -20,13 +20,8 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.store.memory import InMemoryStore
 
 # Import langgraph-supervisor components
-try:
-    from langgraph_supervisor import create_supervisor, create_react_agent
-except ImportError:
-    # Fallback if library not installed
-    logging.warning("langgraph-supervisor not installed, using manual implementation")
-    create_supervisor = None
-    create_react_agent = None
+from langgraph_supervisor import create_supervisor, create_react_agent
+from langgraph.types import interrupt
 
 from qx.core.team_manager import get_team_manager, TeamManager, TeamMember
 from qx.core.config_manager import ConfigManager
@@ -35,6 +30,8 @@ from qx.core.workflow_context import workflow_execution_context, get_workflow_co
 from qx.core.interrupt_bridge import get_interrupt_bridge
 from qx.core.langgraph_tool_adapter import get_tool_adapter
 from qx.core.langgraph_model_adapter import create_langchain_model
+from qx.core.langgraph_interrupt_adapter import get_interrupt_adapter
+from qx.core.llm import initialize_llm_agent
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +71,6 @@ class UnifiedWorkflowV2:
         tools = tool_adapter.load_tools_for_agent(agent_name)
         
         # Create liteLLM wrapper for this agent
-        from qx.core.llm import initialize_llm_agent
         llm_agent = await initialize_llm_agent(
             agent_name=agent_name,
             config_manager=self.config_manager
@@ -88,23 +84,13 @@ class UnifiedWorkflowV2:
         langchain_model = create_langchain_model(llm_agent)
             
         # Create the agent using langgraph-supervisor
-        if create_react_agent:
-            agent = create_react_agent(
-                model=langchain_model,
-                tools=tools,
-                name=agent_name,
-                prompt=agent_prompt
-            )
-            logger.info(f"✅ Created agent '{agent_name}' using langgraph-supervisor")
-        else:
-            # Fallback to manual creation
-            logger.warning(f"Creating agent '{agent_name}' manually (library not available)")
-            agent = {
-                "name": agent_name,
-                "model": langchain_model,
-                "tools": tools,
-                "prompt": agent_prompt
-            }
+        agent = create_react_agent(
+            model=langchain_model,
+            tools=tools,
+            name=agent_name,
+            prompt=agent_prompt
+        )
+        logger.info(f"✅ Created agent '{agent_name}' using langgraph-supervisor")
             
         return agent
     
@@ -130,7 +116,7 @@ class UnifiedWorkflowV2:
                 logger.error("No agents could be created")
                 return False
                 
-            logger.info(f"Created {len(agents)} agents: {[a.get('name', 'unknown') for a in agents]}")
+            logger.info(f"Created {len(agents)} agents from team configuration")
             
             # Create supervisor prompt that handles routing
             supervisor_prompt = """
@@ -146,25 +132,33 @@ class UnifiedWorkflowV2:
             When an agent completes a task, check if the user is satisfied before continuing.
             """
             
+            # Get the first agent's model for supervisor
+            # We need to get the langchain model from the first team member
+            first_agent_name = list(team_members.keys())[0]
+            first_llm_agent = await initialize_llm_agent(
+                agent_name="supervisor",
+                config_manager=self.config_manager
+            )
+            supervisor_model = create_langchain_model(first_llm_agent) if first_llm_agent else None
+            
+            if not supervisor_model:
+                logger.error("Failed to create supervisor model")
+                return False
+            
             # Create the supervisor workflow
-            if create_supervisor:
-                workflow = create_supervisor(
-                    agents,
-                    model=agents[0]["model"],  # Use first agent's model for supervisor
-                    prompt=supervisor_prompt,
-                    output_mode="last_message"  # Only return the last message
-                )
-                
-                # Compile with checkpointer for conversation memory
-                self.workflow_app = workflow.compile(
-                    checkpointer=self.checkpointer,
-                    store=self.store
-                )
-                logger.info("✅ Workflow compiled successfully with langgraph-supervisor")
-            else:
-                # Fallback implementation
-                logger.warning("Using fallback workflow implementation")
-                self.workflow_app = None
+            workflow = create_supervisor(
+                agents,
+                model=supervisor_model,
+                prompt=supervisor_prompt,
+                output_mode="last_message"  # Only return the last message
+            )
+            
+            # Compile with checkpointer for conversation memory
+            self.workflow_app = workflow.compile(
+                checkpointer=self.checkpointer,
+                store=self.store
+            )
+            logger.info("✅ Workflow compiled successfully with langgraph-supervisor")
                 
             return True
             
