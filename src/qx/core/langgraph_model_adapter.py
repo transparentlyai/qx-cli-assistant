@@ -13,6 +13,7 @@ from langchain_core.outputs import ChatResult, ChatGeneration
 from langchain_core.callbacks import CallbackManagerForLLMRun
 
 from qx.core.llm import QXLLMAgent
+from qx.cli.quote_bar_component import render_agent_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,12 @@ class QXLiteLLMAdapter(BaseChatModel):
             
             # Extract response
             response_text = result.output if hasattr(result, 'output') else str(result)
+            
+            # Display the response using QX's BorderedMarkdown
+            # Note: The QX agent already displays its output, so we might not need this
+            # Keeping it commented for now to avoid duplicate output
+            # agent_color = getattr(self.qx_agent, 'agent_color', None)
+            # render_agent_markdown(response_text, self.agent_name, agent_color=agent_color)
             
             # Create LangChain response
             generation = ChatGeneration(

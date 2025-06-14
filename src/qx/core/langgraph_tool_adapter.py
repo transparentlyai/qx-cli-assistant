@@ -97,7 +97,7 @@ class QXToolAdapter:
         agent_tool_mapping = {
             "full_stack_swe": [
                 "write_file", "read_file", "execute_shell", 
-                "search_code", "list_files"
+                "worktree_manager", "web_fetch"
             ],
             "qx-director": [],  # Director typically doesn't need tools
             # Add more agent-tool mappings as needed
@@ -129,12 +129,33 @@ class QXToolAdapter:
         Returns:
             Tuple of (tool_function, argument_schema)
         """
-        # TODO: Integrate with actual QX tool plugin system
-        # This is a placeholder that should connect to the real tool registry
-        
-        # For now, return None to indicate tool not found
-        logger.debug(f"Tool '{tool_name}' lookup (placeholder)")
-        return None, None
+        try:
+            # Import the specific plugin module
+            if tool_name == "write_file":
+                from qx.plugins.write_file_plugin import write_file_tool, WriteFilePluginInput
+                return write_file_tool, WriteFilePluginInput
+            elif tool_name == "read_file":
+                from qx.plugins.read_file_plugin import read_file_tool, ReadFilePluginInput
+                return read_file_tool, ReadFilePluginInput
+            elif tool_name == "execute_shell":
+                from qx.plugins.execute_shell_plugin import execute_shell_tool, ExecuteShellPluginInput
+                return execute_shell_tool, ExecuteShellPluginInput
+            elif tool_name == "web_fetch":
+                from qx.plugins.web_fetch_plugin import web_fetch_tool, WebFetchPluginInput
+                return web_fetch_tool, WebFetchPluginInput
+            elif tool_name == "worktree_manager":
+                from qx.plugins.worktree_manager_plugin import worktree_manager_tool, WorktreeManagerPluginInput
+                return worktree_manager_tool, WorktreeManagerPluginInput
+            elif tool_name == "current_time":
+                from qx.plugins.current_time_plugin import current_time_tool, CurrentTimePluginInput
+                return current_time_tool, CurrentTimePluginInput
+            else:
+                logger.warning(f"Tool '{tool_name}' not found in plugin registry")
+                return None, None
+                
+        except ImportError as e:
+            logger.error(f"Failed to import tool '{tool_name}': {e}")
+            return None, None
 
 
 # Singleton instance
