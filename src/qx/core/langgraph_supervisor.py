@@ -144,12 +144,27 @@ class UnifiedWorkflow:
             agent_names = [agent.name for agent in specialist_agents if hasattr(agent, 'name')]
             logger.info(f"Available agents for delegation: {', '.join(agent_names)}")
             
+            # Build team context with available agents
+            team_context = "## Available Specialist Agents:\n\n"
+            for agent in specialist_agents:
+                if hasattr(agent, 'name'):
+                    agent_name = agent.name
+                    # Get agent description from team member config
+                    for tm_name, tm in team_members.items():
+                        if tm_name == agent_name:
+                            desc = getattr(tm.agent_config, 'description', 'Specialist agent')
+                            team_context += f"- **transfer_to_{agent_name}**: {desc}\n"
+                            break
+            
             # Get supervisor prompt from qx-director's configuration
             director_role = getattr(director_config, 'role', '') or ''
             director_instructions = getattr(director_config, 'instructions', '') or ''
             
+            # Replace {team_members} placeholder with actual team context
+            director_instructions = director_instructions.replace('{team_members}', team_context)
+            
             # Use director's role and instructions as supervisor prompt
-            supervisor_prompt = f"{director_role}\n\n{director_instructions}"
+            supervisor_prompt = f"{director_role}\n\n{director_instructions}\n\n{team_context}"
             
             logger.info("Using qx-director configuration for supervisor")
             
