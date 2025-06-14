@@ -579,13 +579,9 @@ class UnifiedLangGraphWorkflow:
                             result = await director_agent.run(user_input, message_history=message_history)
                             response = result.output if hasattr(result, 'output') else str(result)
                         
-                        # Display director response with QX styling
-                        from qx.cli.quote_bar_component import render_agent_markdown
-                        render_agent_markdown(
-                            f"**Task Complete**\n\n{response}",
-                            "qx-director",
-                            agent_color="#ff5f00"
-                        )
+                        # Director already displayed its response through QX's system
+                        # No need to display again here
+                        logger.debug(f"📝 Director completed direct response")
                         
                         updated_state["agent_results"] = {"qx-director": response}
                         updated_state["workflow_stage"] = "complete"
