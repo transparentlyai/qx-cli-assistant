@@ -359,8 +359,23 @@ class UnifiedLangGraphWorkflow:
                     user_input = state.get("user_input", "")
                     team_members = self.team_manager.get_team_members()
                     
+                    # First, check if this is a simple task the director should handle
+                    simple_task_keywords = [
+                        "hello", "hi", "hey", "thanks", "thank you", "goodbye", "bye",
+                        "how are you", "what can you do", "help", "who are you",
+                        "what is", "explain", "tell me about", "clarify", "summarize"
+                    ]
+                    
+                    is_simple_task = any(keyword in user_input.lower() for keyword in simple_task_keywords)
+                    is_question = user_input.strip().endswith("?")
+                    is_short = len(user_input.split()) < 10
+                    
+                    # Director handles: greetings, simple questions, general queries, short requests
+                    if is_simple_task or (is_question and is_short):
+                        logger.info(f"🎯 Director handling simple task directly: {user_input[:50]}...")
+                        updated_state["workflow_stage"] = "direct_response"
                     # Check if we have any specialists (team size >= 2 means director + at least 1 specialist)
-                    if len(team_members) >= 2:
+                    elif len(team_members) >= 2:
                         # Use advanced routing optimizer
                         task_analysis = await self.routing_optimizer.analyze_task(user_input)
                         routing_decision = await self.routing_optimizer.optimize_routing(
@@ -369,7 +384,10 @@ class UnifiedLangGraphWorkflow:
                             exclude_agents={"qx-director"}
                         )
                         
-                        if routing_decision.selected_agents and routing_decision.confidence_score > 0.1:
+                        # Only route if it's a complex task with good specialist match
+                        if (routing_decision.selected_agents and 
+                            routing_decision.confidence_score > 0.3 and
+                            task_analysis.complexity.value in ["moderate", "complex", "expert"]):
                             selected_agent = routing_decision.selected_agents[0]  # Use primary agent
                             updated_state["selected_agent"] = selected_agent
                             updated_state["task_description"] = user_input
@@ -396,8 +414,9 @@ class UnifiedLangGraphWorkflow:
                                 agent_color="#ff5f00"
                             )
                         else:
-                            # Handle directly if no suitable specialist found or low confidence
-                            logger.info(f"🎯 No suitable specialist found or low confidence ({routing_decision.confidence_score:.2f}), handling directly")
+                            # Handle directly if no suitable specialist found, low confidence, or simple task
+                            reason = "simple task" if task_analysis.complexity.value == "simple" else f"low confidence ({routing_decision.confidence_score:.2f})"
+                            logger.info(f"🎯 Director handling directly - {reason}")
                             updated_state["workflow_stage"] = "direct_response"
                     else:
                         # No specialists available, handle directly
