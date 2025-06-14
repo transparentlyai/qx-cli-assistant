@@ -128,28 +128,30 @@ class UnifiedWorkflow:
                 
             logger.info(f"Created {len(agents)} agents from team configuration")
             
-            # Create supervisor prompt that handles routing
-            supervisor_prompt = """
-            You are a team coordinator managing multiple specialized agents.
+            # Find the qx-director to use as supervisor
+            director_agent = None
+            director_config = None
             
-            Routing guidelines:
-            - For greetings, simple questions, or general conversation: Handle directly
-            - For programming tasks: Route to agents with coding capabilities
-            - For research or analysis: Route to agents with research capabilities
-            - For complex tasks: Break down and route to appropriate specialists
+            for agent_name, team_member in team_members.items():
+                if agent_name.lower() == "qx-director":
+                    director_config = team_member.agent_config
+                    # Find the director in our created agents
+                    for agent in agents:
+                        if hasattr(agent, 'name') and agent.name.lower() == "qx-director":
+                            director_agent = agent
+                            break
+                    break
             
-            Always maintain conversation context and ensure smooth handoffs between agents.
-            When an agent completes a task, check if the user is satisfied before continuing.
-            """
+            if not director_config:
+                logger.error("qx-director not found in team configuration")
+                return False
+                
+            # Get supervisor prompt from qx-director's configuration
+            director_role = getattr(director_config, 'role', '') or ''
+            director_instructions = getattr(director_config, 'instructions', '') or ''
+            supervisor_prompt = f"{director_role}\n\n{director_instructions}"
             
-            # Get the first agent's model for supervisor
-            # We need to get the langchain model from the first team member
-            first_agent_name = list(team_members.keys())[0]
-            first_team_member = team_members[first_agent_name]
-            
-            # Create a supervisor agent config
-            supervisor_config = first_team_member.agent_config
-            supervisor_config.name = "supervisor"
+            logger.info("Using qx-director configuration for supervisor")
             
             # Get MCP manager from config manager
             mcp_manager = getattr(self.config_manager, 'mcp_manager', None)
@@ -159,11 +161,12 @@ class UnifiedWorkflow:
                 task_group = getattr(self.config_manager, 'task_group', None)
                 mcp_manager = MCPManager(console, task_group)
             
-            first_llm_agent = await initialize_agent_with_mcp(
+            # Create supervisor model using qx-director configuration
+            supervisor_llm_agent = await initialize_agent_with_mcp(
                 mcp_manager=mcp_manager,
-                agent_config=supervisor_config
+                agent_config=director_config
             )
-            supervisor_model = create_langchain_model(first_llm_agent) if first_llm_agent else None
+            supervisor_model = create_langchain_model(supervisor_llm_agent) if supervisor_llm_agent else None
             
             if not supervisor_model:
                 logger.error("Failed to create supervisor model")
@@ -334,16 +337,14 @@ class UnifiedWorkflow:
                 thread_id = str(uuid.uuid4())
 
 
-# Singleton instance management
-_unified_workflow_instance: Optional[UnifiedWorkflow] = None
+# Note: No singleton management - each team mode session gets a fresh instance
+# This ensures clean state without persisted conversations
 
 
 def get_unified_workflow(config_manager: ConfigManager) -> UnifiedWorkflow:
-    """Get or create the unified workflow instance."""
-    global _unified_workflow_instance
+    """Create a new unified workflow instance.
     
-    if _unified_workflow_instance is None:
-        _unified_workflow_instance = UnifiedWorkflow(config_manager)
-        logger.info("Created new UnifiedWorkflow instance")
-    
-    return _unified_workflow_instance
+    Each call creates a fresh instance to ensure clean state.
+    """
+    logger.info("Creating new UnifiedWorkflow instance")
+    return UnifiedWorkflow(config_manager)
