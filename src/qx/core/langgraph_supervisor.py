@@ -243,28 +243,95 @@ class UnifiedWorkflow:
         """Start the workflow in continuous mode for team interaction."""
         logger.info("🎯 Starting continuous workflow mode")
         
-        # Initialize with empty input to let supervisor ask for input
+        # Initialize thread for conversation
         thread_id = str(uuid.uuid4())
+        
+        # Import necessary components for proper QX integration
+        from prompt_toolkit import PromptSession
+        from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+        from prompt_toolkit.shortcuts.prompt import CompleteStyle
+        from prompt_toolkit.styles import Style
+        from prompt_toolkit.formatted_text import HTML
+        from qx.cli.history import QXHistory
+        from qx.cli.completer import QXCompleter
+        from qx.core.paths import QX_HISTORY_FILE
+        from qx.cli.quote_bar_component import render_agent_markdown
+        
+        # Initialize QX components
+        qx_history = QXHistory(QX_HISTORY_FILE)
+        qx_completer = QXCompleter()
+        
+        # Create prompt style matching qx-director color
+        prompt_style = Style.from_dict({
+            "prompt": "#ff5f00",  # qx-director color
+        })
+        
+        # Create prompt session with QX's standard configuration
+        session = PromptSession(
+            history=qx_history,
+            auto_suggest=AutoSuggestFromHistory(),
+            enable_history_search=False,
+            completer=qx_completer,
+            complete_style=CompleteStyle.COLUMN,
+            mouse_support=False,
+            style=prompt_style
+        )
         
         while True:
             try:
-                # Process with current thread
-                response = await self.process_input("", thread_id)
+                # Display prompt from the director
+                render_agent_markdown(
+                    "**What would you like me to help you with?**",
+                    "qx-director",
+                    agent_color="#ff5f00"
+                )
                 
-                # Check for exit conditions
-                if "goodbye" in response.lower() or "exit" in response.lower():
-                    logger.info("👋 User requested exit")
-                    break
+                # Get user input using prompt_toolkit session
+                prompt_text = HTML('<style fg="#ff5f00">Qx Director</style> &gt; ')
+                user_input = await session.prompt_async(prompt_text)
+                
+                if not user_input or not user_input.strip():
+                    continue
                     
-                # Continue with same thread for context
-                await asyncio.sleep(0.1)  # Small delay for system stability
+                # Save to history
+                qx_history.append_string(user_input)
+                
+                # Check for exit commands
+                if user_input.lower().strip() in ["exit", "quit", "goodbye", "bye"]:
+                    logger.info("👋 User requested exit")
+                    render_agent_markdown(
+                        "Goodbye! 👋",
+                        "qx-director",
+                        agent_color="#ff5f00"
+                    )
+                    break
+                
+                # Process user input through the workflow
+                response = await self.process_input(user_input, thread_id)
+                
+                # Response is already displayed by the agents
+                # Just continue the loop for next input
                 
             except KeyboardInterrupt:
                 logger.info("⏹️ Workflow interrupted by user")
+                render_agent_markdown(
+                    "Workflow interrupted. Goodbye! 👋",
+                    "qx-director",
+                    agent_color="#ff5f00"
+                )
+                break
+            except EOFError:
+                logger.info("👋 User requested exit (Ctrl+D)")
                 break
             except Exception as e:
                 logger.error(f"❌ Error in continuous workflow: {e}", exc_info=True)
-                break
+                render_agent_markdown(
+                    f"**Error:** {str(e)}\n\nPlease try again.",
+                    "qx-director",
+                    agent_color="#ff5f00"
+                )
+                # Continue with a new thread after error
+                thread_id = str(uuid.uuid4())
 
 
 # Singleton instance management
