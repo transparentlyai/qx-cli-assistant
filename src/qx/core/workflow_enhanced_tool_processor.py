@@ -318,7 +318,7 @@ class WorkflowEnhancedToolProcessor:
                 )
                 messages.append(final_system_msg)
             
-            return await self._run(messages, user_input, recursion_depth + 1)
+            return await self._run(user_input, messages, recursion_depth + 1)
             
         except Exception as e:
             logger.error(f"Error in enhanced tool processor continuation: {e}", exc_info=True)
