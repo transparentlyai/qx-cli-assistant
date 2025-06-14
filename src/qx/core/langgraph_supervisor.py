@@ -434,6 +434,9 @@ class UnifiedLangGraphWorkflow:
                         elif not isinstance(latest_result, str):
                             latest_result = str(latest_result)
                         
+                        # Update stage to prevent re-routing to same specialist
+                        updated_state["workflow_stage"] = "awaiting_satisfaction"
+                        
                         # Ask user if they're satisfied or need more work
                         logger.info("⏸️ INTERRUPT: Checking user satisfaction")
                         
@@ -469,6 +472,22 @@ class UnifiedLangGraphWorkflow:
                         except GraphInterrupt:
                             # This is expected - propagate to pause the workflow
                             raise
+                
+                elif stage == "awaiting_satisfaction":
+                    # We're waiting for user satisfaction feedback
+                    # This should only be reached after interrupt resume
+                    # The interrupt handler should have set human_response
+                    user_feedback = state.get("human_response", "")
+                    if user_feedback:
+                        if "satisfied" in user_feedback.lower() or "done" in user_feedback.lower() or "thanks" in user_feedback.lower():
+                            updated_state["workflow_stage"] = "complete"
+                        else:
+                            # User wants more work
+                            updated_state["user_input"] = user_feedback
+                            updated_state["workflow_stage"] = "routing"
+                    else:
+                        # No feedback yet, stay in awaiting state
+                        logger.debug("Still awaiting user satisfaction feedback")
                 
                 elif stage == "direct_response":
                     # Director handles the task directly
@@ -702,6 +721,10 @@ class UnifiedLangGraphWorkflow:
         elif workflow_stage == "specialist_execution" and selected_agent:
             logger.info(f"➡️ Routing to specialist: {selected_agent}")
             return selected_agent
+        elif workflow_stage == "awaiting_satisfaction":
+            # Stay in director to handle satisfaction response
+            logger.debug("⏸️ Awaiting satisfaction feedback, staying in director")
+            return "qx-director"
         elif len(state.get("agent_results", {})) > 1:
             logger.info("🔗 Multiple results, routing to synthesis")
             return "synthesis"
