@@ -1,6 +1,25 @@
 """
 LangGraph supervisor system for qx multi-agent workflows.
 
+This module implements a two-layer agent architecture:
+
+1. USER LAYER:
+   - qx-director: User-facing coordinator agent (outside team graph)
+   - Can be manually selected with `qx -a qx-director` or `/agents switch qx-director`
+   - Provides strategic planning, architecture, and high-level coordination
+   - Acts as the main agent when explicitly chosen by user
+
+2. SYSTEM LAYER (Team Graph):
+   - task_delegator.system.agent: Internal delegation engine (inside team graph)
+   - Used automatically by LangGraph supervisor for task routing
+   - Pure delegation without explanation or planning
+   - Routes tasks to specialist agents (full_stack_swe, data_analyst, etc.)
+
+ARCHITECTURAL FLOW:
+User Request → qx-director (if selected) → Task Delegator → Specialist Agents
+            OR
+User Request → Task Delegator (if team mode enabled) → Specialist Agents
+
 This module integrates LangGraph with qx's existing agent system, using the
 official langgraph-supervisor library for team coordination.
 """
@@ -68,7 +87,13 @@ class TaskState(MessagesState):
 
 
 class QxAgentWrapper:
-    """Wrapper to make qx agents compatible with langgraph-supervisor."""
+    """
+    Wrapper to make qx agents compatible with langgraph-supervisor.
+    
+    This adapter allows QX's native agents to work within the LangGraph team graph
+    system by providing the interface expected by langgraph-supervisor while
+    preserving QX's console management, tool integration, and agent behavior.
+    """
     
     def __init__(self, agent_name: str, team_member: TeamMember, config_manager: ConfigManager):
         self.name = agent_name
@@ -180,7 +205,18 @@ class QxAgentWrapper:
 
 
 class LangGraphSupervisor:
-    """Main supervisor class that orchestrates team workflows using langgraph-supervisor."""
+    """
+    Main supervisor class that orchestrates team workflows using langgraph-supervisor.
+    
+    This class implements the SYSTEM LAYER of the two-layer architecture:
+    - Manages the LangGraph team graph with specialist agents
+    - Uses task_delegator.system.agent for internal task routing
+    - Handles parallel execution and result synthesis
+    - Provides fallback mechanisms when team coordination fails
+    
+    Note: This is NOT the user-facing qx-director agent, but rather the internal
+    team coordination system that works behind the scenes.
+    """
     
     def __init__(self, config_manager: ConfigManager, main_llm_agent: QXLLMAgent):
         self.config_manager = config_manager
@@ -188,6 +224,60 @@ class LangGraphSupervisor:
         self.team_manager = get_team_manager(config_manager)
         self.supervisor_graph = None
         
+        # Configuration options with backward-compatible defaults
+        self.supervisor_timeout = 300.0  # 5 minutes timeout (preserves current behavior)
+        self.debug_mode = False  # Enhanced debug logging disabled by default
+        self.output_mode = "last_message"  # Preserves current default
+        self.add_handoff_messages = True  # Preserves current setting
+        self.memory_type = "in_memory"  # Current default behavior
+        self.supervisor_name = "qx_task_delegator"  # Current setting
+        
+        # Load configuration overrides if available (fully backward compatible)
+        self._load_configuration_overrides()
+        
+    def _load_configuration_overrides(self):
+        """
+        Load configuration overrides from environment or config files.
+        Fully backward compatible - only overrides if explicitly set.
+        """
+        try:
+            # Load from environment variables (safe defaults)
+            import os
+            
+            # Timeout configuration
+            env_timeout = os.environ.get('QX_SUPERVISOR_TIMEOUT')
+            if env_timeout:
+                try:
+                    self.supervisor_timeout = float(env_timeout)
+                    logger.debug(f"Using supervisor timeout from environment: {self.supervisor_timeout}s")
+                except ValueError:
+                    logger.warning(f"Invalid supervisor timeout value: {env_timeout}, using default")
+            
+            # Debug mode configuration
+            env_debug = os.environ.get('QX_SUPERVISOR_DEBUG_MODE', '').lower()
+            if env_debug in ('true', '1', 'yes', 'on'):
+                self.debug_mode = True
+                logger.debug("Enhanced debug mode enabled via environment variable")
+            
+            # Output mode configuration
+            env_output_mode = os.environ.get('QX_SUPERVISOR_OUTPUT_MODE')
+            if env_output_mode in ('last_message', 'full_history'):
+                self.output_mode = env_output_mode
+                logger.debug(f"Using output mode from environment: {self.output_mode}")
+            
+            # Memory type configuration
+            env_memory_type = os.environ.get('QX_SUPERVISOR_MEMORY_TYPE')
+            if env_memory_type in ('in_memory', 'persistent'):
+                self.memory_type = env_memory_type
+                logger.debug(f"Using memory type from environment: {self.memory_type}")
+                
+        except Exception as e:
+            logger.debug(f"Error loading configuration overrides (using defaults): {e}")
+            logger.debug(f"Configuration error details - timeout: {self.supervisor_timeout}, "
+                        f"debug_mode: {self.debug_mode}, output_mode: {self.output_mode}")
+            logger.debug("All configuration errors are non-fatal - using safe defaults")
+            # Continue with defaults - no impact on functionality
+    
     def _create_agent_wrapper(self, agent_name: str, team_member: TeamMember) -> QxAgentWrapper:
         """Create a wrapper for a qx agent."""
         return QxAgentWrapper(agent_name, team_member, self.config_manager)
@@ -744,7 +834,7 @@ Create a well-structured response that feels like a single, cohesive analysis ra
         memory = MemorySaver()
         return workflow.compile(checkpointer=memory)
     
-    async def process_with_team(self, user_input: str) -> str:
+    async def process_with_team(self, user_input: str, message_history: Optional[List] = None) -> str:
         """Process a user request using the new LangGraph-based parallel team workflow."""
         try:
             team_members = self.team_manager.get_team_members()
@@ -759,7 +849,7 @@ Create a well-structured response that feels like a single, cohesive analysis ra
             
             # Try the proper supervisor pattern first
             try:
-                return await self.process_with_proper_supervisor(user_input)
+                return await self.process_with_proper_supervisor(user_input, message_history)
             except Exception as e:
                 logger.warning(f"Proper supervisor failed, using fallback: {e}")
                 themed_console.print(f"⚠️ Supervisor pattern failed, using direct delegation...", style="yellow")
@@ -834,8 +924,18 @@ Create a well-structured response that feels like a single, cohesive analysis ra
             logger.error(f"Error in LangGraph team workflow: {e}", exc_info=True)
             themed_console.print(f"⚠️ Team workflow error, falling back to main agent...", style="warning")
     
-    async def process_with_proper_supervisor(self, user_input: str) -> str:
-        """Process using the proper langgraph-supervisor library approach."""
+    async def process_with_proper_supervisor(self, user_input: str, message_history: Optional[List] = None) -> str:
+        """
+        Process using the proper langgraph-supervisor library approach.
+        
+        This method implements the SYSTEM LAYER delegation:
+        1. Creates LangChain-compatible react agents from QX team members
+        2. Uses task_delegator.system.agent as the internal delegation engine
+        3. Creates handoff tools (delegate_to_[agent_name]) for routing
+        4. Executes tasks through the LangGraph supervisor pattern
+        
+        This is the internal team coordination system, not user-facing coordination.
+        """
         try:
             team_members = self.team_manager.get_team_members()
             if not team_members:
@@ -895,6 +995,24 @@ Create a well-structured response that feels like a single, cohesive analysis ra
                             @property
                             def _llm_type(self):
                                 return "qx_llm_wrapper"
+                            
+                            @property
+                            def _identifying_params(self):
+                                """Return identifying parameters for the model."""
+                                return {
+                                    "model_name": getattr(self.qx_agent, 'model_name', 'qx_agent'),
+                                    "agent_name": getattr(self.qx_agent, 'agent_name', 'unknown'),
+                                    "wrapper_type": "qx_llm_wrapper"
+                                }
+                            
+                            async def ainvoke(self, input, config=None, **kwargs):
+                                """Async version of invoke for LangChain compatibility."""
+                                return self.invoke(input, config, **kwargs)
+                            
+                            async def astream(self, input, config=None, **kwargs):
+                                """Async streaming version for LangChain compatibility."""
+                                result = await self.ainvoke(input, config, **kwargs)
+                                yield result
                         
                         return QXLLMWrapper(qx_agent)
                     
@@ -948,17 +1066,44 @@ Always use the available tools when needed to complete tasks effectively."""
                     themed_console.print(f"✓ Created react agent: {agent_name}", style="dim green")
                     
                 except Exception as e:
+                    # Enhanced error context for agent creation failures
+                    agent_context = {
+                        "agent_name": agent_name,
+                        "agent_description": getattr(team_member.agent_config, 'description', 'unknown'),
+                        "model_name": getattr(team_member.agent_config, 'model', {}).get('name', 'unknown'),
+                        "enabled": getattr(team_member.agent_config, 'enabled', 'unknown'),
+                        "tools_available": len(tools) if 'tools' in locals() else 0
+                    }
+                    
                     logger.warning(f"Failed to create react agent for {agent_name}: {e}")
+                    logger.debug(f"Agent creation context: {agent_context}")
+                    
+                    # Provide specific troubleshooting guidance
+                    if "mcp" in str(e).lower():
+                        logger.warning(f"MCP initialization issue for {agent_name} - check MCP manager configuration")
+                    elif "model" in str(e).lower():
+                        logger.warning(f"Model configuration issue for {agent_name} - check agent YAML model settings")
+                    elif "tool" in str(e).lower():
+                        logger.warning(f"Tool integration issue for {agent_name} - check agent tool configuration")
+                    else:
+                        logger.warning(f"General agent creation issue for {agent_name} - check agent YAML configuration")
             
             if not react_agents:
+                # Enhanced fallback handling with better context
+                logger.warning(f"No react agents could be created from {len(team_members)} team members")
+                logger.warning("Falling back to main agent - check agent configurations and error messages above")
+                themed_console.print("⚠️ No team agents available, using main agent instead...", style="warning")
+                
                 # Fallback to main agent
                 result = await self.main_llm_agent.run(user_input)
                 return result.output if hasattr(result, 'output') else str(result)
             
-            # Use Team Supervisor system agent configuration
+            # Use Task Delegator system agent configuration
+            # This is the SYSTEM LAYER agent that handles internal task routing
+            # within the LangGraph team graph (not the user-facing qx-director)
             try:
                 agent_loader = AgentLoader()
-                supervisor_config = agent_loader.get_agent_config("Team Supervisor", cwd=os.getcwd())
+                supervisor_config = agent_loader.get_agent_config("Task Delegator", cwd=os.getcwd())
                 
                 if supervisor_config:
                     # Create agent list for the context
@@ -980,10 +1125,10 @@ Always use the available tools when needed to complete tasks effectively."""
                     # Also use the role and instructions
                     supervisor_prompt = f"{supervisor_config.role}\n\n{supervisor_config.instructions}\n\n{supervisor_prompt}"
                 else:
-                    raise Exception("Team Supervisor system agent not found")
+                    raise Exception("Task Delegator system agent not found")
                     
             except Exception as e:
-                logger.warning(f"Could not use Team Supervisor system agent: {e}")
+                logger.warning(f"Could not use Task Delegator system agent: {e}")
                 # Fallback to inline prompt
                 supervisor_prompt = f"""You are a team supervisor managing {len(react_agents)} specialized agents.
 
@@ -1223,6 +1368,24 @@ Do NOT write explanations or descriptions - just call the tool directly."""
                             logger.warning(f"Error adding tool schema for {tool_name}: {e}")
                     
                     @property
+                    def _identifying_params(self):
+                        """Return identifying parameters for the model."""
+                        return {
+                            "model_name": getattr(self.qx_agent, 'model_name', 'qx_supervisor'),
+                            "agent_name": getattr(self.qx_agent, 'agent_name', 'supervisor'),
+                            "wrapper_type": "qx_llm_wrapper"
+                        }
+                    
+                    async def ainvoke(self, input, config=None, **kwargs):
+                        """Async version of invoke for LangChain compatibility."""
+                        return self.invoke(input, config, **kwargs)
+                    
+                    async def astream(self, input, config=None, **kwargs):
+                        """Async streaming version for LangChain compatibility."""
+                        result = await self.ainvoke(input, config, **kwargs)
+                        yield result
+                    
+                    @property
                     def _llm_type(self):
                         return "qx_llm_wrapper"
                 
@@ -1233,17 +1396,31 @@ Do NOT write explanations or descriptions - just call the tool directly."""
             # Set parent supervisor reference for handoff tools
             self.main_llm_agent._parent_supervisor = self
             
+            # Enhanced logging: Starting supervisor creation
+            logger.info(f"Creating LangGraph supervisor with {len(react_agents)} react agents")
+            logger.debug(f"Supervisor configuration - handoff_tool_prefix: 'delegate_to', output_mode: '{self.output_mode}'")
+            logger.debug(f"Supervisor name: '{self.supervisor_name}', add_handoff_messages: {self.add_handoff_messages}")
+            logger.debug(f"Supervisor prompt length: {len(supervisor_prompt)} characters")
+            if self.debug_mode:
+                logger.debug(f"Enhanced debug mode is ENABLED (timeout: {self.supervisor_timeout}s)")
+            else:
+                logger.debug(f"Debug mode is disabled (timeout: {self.supervisor_timeout}s)")
+            
             # Use create_supervisor with automatic handoff tool creation
             supervisor = create_supervisor(
                 react_agents,
                 model=supervisor_llm,
                 prompt=supervisor_prompt,
                 handoff_tool_prefix="delegate_to",  # This creates tools like delegate_to_[agent_name]
-                output_mode="last_message"  # Only include final response
+                output_mode=self.output_mode,  # Configurable output mode
+                supervisor_name=self.supervisor_name,  # Configurable supervisor name
+                add_handoff_messages=self.add_handoff_messages  # Configurable handoff messages
             )
             
-            # Debug: Supervisor successfully created
+            # Enhanced logging: Supervisor successfully created
+            logger.info(f"✓ LangGraph supervisor created successfully with name: {self.supervisor_name}")
             logger.debug(f"Supervisor created with nodes: {list(supervisor.nodes.keys()) if hasattr(supervisor, 'nodes') else 'unknown'}")
+            logger.debug(f"Supervisor graph type: {type(supervisor)}")
             
             # Debug: Print supervisor info
             logger.info(f"Created supervisor with {len(react_agents)} agents")
@@ -1259,6 +1436,9 @@ Do NOT write explanations or descriptions - just call the tool directly."""
             if not has_bind_tools:
                 themed_console.print(f"⚠️ Model {type(self.main_llm_agent.llm)} may not support tool calling", style="yellow")
             
+            # Enhanced logging: Memory configuration
+            logger.debug("Configuring supervisor memory with InMemorySaver and InMemoryStore")
+            
             # Compile with proper memory configuration (matching official docs)
             checkpointer = InMemorySaver()
             store = InMemoryStore()
@@ -1267,34 +1447,113 @@ Do NOT write explanations or descriptions - just call the tool directly."""
                 store=store
             )
             
-            # Execute with proper message format
+            logger.info("✓ Supervisor compiled successfully with memory configuration")
+            
+            # Enhanced logging: Execution setup
             import uuid
             thread_id = str(uuid.uuid4())
             config = {"configurable": {"thread_id": thread_id}}
             
+            logger.info(f"Starting supervisor execution with thread_id: {thread_id}")
             logger.debug(f"Invoking supervisor with user_input: {user_input[:100]}...")
+            logger.debug(f"Execution config: {config}")
+            logger.debug(f"Using timeout: {self.supervisor_timeout}s")
             
-            result = await app.ainvoke({
-                "messages": [
-                    {"role": "user", "content": user_input}
-                ]
-            }, config=config)
+            # Use configurable timeout for supervisor execution
+            # Format messages with conversation history for proper context
+            formatted_messages = []
             
+            if message_history:
+                # Convert message history to the format expected by LangGraph
+                for msg in message_history:
+                    if hasattr(msg, 'role') and hasattr(msg, 'content'):
+                        # Pydantic message object
+                        formatted_messages.append({
+                            "role": msg.role,
+                            "content": msg.content
+                        })
+                    elif isinstance(msg, dict) and "role" in msg and "content" in msg:
+                        # Dict message
+                        formatted_messages.append({
+                            "role": msg["role"],
+                            "content": msg["content"]
+                        })
+                
+                # Add current user input if not already included
+                if not formatted_messages or formatted_messages[-1].get("content") != user_input:
+                    formatted_messages.append({"role": "user", "content": user_input})
+            else:
+                # No history, just current input
+                formatted_messages = [{"role": "user", "content": user_input}]
+            
+            logger.debug(f"Sending {len(formatted_messages)} messages to supervisor (including conversation history)")
+            
+            result = await asyncio.wait_for(
+                app.ainvoke({
+                    "messages": formatted_messages
+                }, config=config),
+                timeout=self.supervisor_timeout
+            )
+            
+            # Enhanced logging: Result processing
+            logger.info("✓ Supervisor execution completed successfully")
             logger.debug(f"Supervisor result type: {type(result)}")
+            logger.debug(f"Result keys: {list(result.keys()) if isinstance(result, dict) else 'not a dict'}")
             
             if result and "messages" in result and result["messages"]:
+                logger.debug(f"Found {len(result['messages'])} messages in result")
                 last_message = result["messages"][-1]
+                logger.debug(f"Last message type: {type(last_message)}")
+                
                 if hasattr(last_message, 'content'):
-                    return last_message.content
+                    response = last_message.content
+                    logger.info(f"✓ Retrieved response content ({len(response)} characters)")
+                    return response
                 elif isinstance(last_message, dict):
-                    return last_message.get('content', 'Task completed successfully')
+                    response = last_message.get('content', 'Task completed successfully')
+                    logger.info(f"✓ Retrieved response from dict content ({len(response)} characters)")
+                    return response
                 else:
-                    return str(last_message)
+                    response = str(last_message)
+                    logger.info(f"✓ Retrieved response as string ({len(response)} characters)")
+                    return response
             else:
+                logger.warning("No messages found in supervisor result, returning default response")
                 return "Task completed successfully"
                 
+        except asyncio.TimeoutError as e:
+            # Enhanced timeout error handling
+            logger.error(f"Supervisor execution timed out after {self.supervisor_timeout}s for user input: {user_input[:100]}...")
+            logger.error(f"Consider increasing QX_SUPERVISOR_TIMEOUT environment variable (current: {self.supervisor_timeout}s)")
+            themed_console.print(f"⚠️ Team workflow timed out after {self.supervisor_timeout}s, falling back to main agent...", style="warning")
+            
+            # Fallback to main agent with timeout context
+            result = await self.main_llm_agent.run(user_input)
+            return result.output if hasattr(result, 'output') else str(result)
+            
         except Exception as e:
+            # Enhanced general error handling with better context
+            error_context = {
+                "supervisor_name": self.supervisor_name,
+                "output_mode": self.output_mode,
+                "debug_mode": self.debug_mode,
+                "timeout": self.supervisor_timeout,
+                "input_length": len(user_input),
+                "team_size": len(self.team_manager.get_team_members())
+            }
+            
             logger.error(f"Error in proper supervisor workflow: {e}", exc_info=True)
+            logger.error(f"Supervisor context: {error_context}")
+            logger.error(f"User input (first 200 chars): {user_input[:200]}...")
+            
+            # Provide helpful troubleshooting information
+            if "tool" in str(e).lower():
+                logger.error("Possible tool-related error - check agent tool configurations and handoff tools")
+            elif "model" in str(e).lower():
+                logger.error("Possible model-related error - check QX model configuration and LangChain compatibility")
+            elif "message" in str(e).lower():
+                logger.error("Possible message handling error - check input format and message processing")
+            
             # Fallback to main agent
             result = await self.main_llm_agent.run(user_input)
             return result.output if hasattr(result, 'output') else str(result)

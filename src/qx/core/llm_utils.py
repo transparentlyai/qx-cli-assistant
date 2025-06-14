@@ -35,7 +35,7 @@ async def initialize_agent_with_mcp(
         current_agent_name = getattr(agent_config, "name", "")
         
         # Determine agent mode based on agent name
-        if current_agent_name == "qx.supervisor":
+        if current_agent_name == "qx-director":
             agent_mode = "supervisor"
         elif current_agent_name == "qx":
             agent_mode = "single"

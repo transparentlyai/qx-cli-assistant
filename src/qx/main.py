@@ -82,7 +82,7 @@ async def _async_main(
             
             # Determine default agent based on team mode state
             if team_mode_manager.is_team_mode_enabled():
-                default_agent_name = os.environ.get("QX_DEFAULT_AGENT", "qx.supervisor")
+                default_agent_name = os.environ.get("QX_DEFAULT_AGENT", "qx-director")
             else:
                 default_agent_name = os.environ.get("QX_DEFAULT_AGENT", "qx")
             try:

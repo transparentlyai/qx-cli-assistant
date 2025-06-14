@@ -624,8 +624,8 @@ async def query_llm(
                     
                     # Check if team workflow should be used
                     if await supervisor.should_use_team_workflow(user_input):
-                        # Process with team workflow
-                        team_response = await supervisor.process_with_team(user_input)
+                        # Process with team workflow (pass message history for conversation context)
+                        team_response = await supervisor.process_with_team(user_input, message_history)
                         
                         # Create a QXRunResult structure for consistency
                         final_messages = list(message_history) if message_history else []
