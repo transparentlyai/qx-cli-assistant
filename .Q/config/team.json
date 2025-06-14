@@ -1,5 +1,8 @@
 {
   "agents": {
+    "qx-director": {
+      "instance_count": 1
+    },
     "full_stack_swe": {
       "instance_count": 1
     }

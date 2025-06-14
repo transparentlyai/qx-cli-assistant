@@ -25,6 +25,7 @@ from qx.core.llm_components.messages import MessageCache
 from qx.core.llm_components.streaming import StreamingHandler
 from qx.core.llm_components.tools import ToolProcessor
 from qx.core.llm_components.fallbacks import FallbackHandler, LiteLLMCaller
+from qx.core.workflow_debug_logger import get_debug_logger
 
 
 class ConsoleProtocol(Protocol):
@@ -69,7 +70,7 @@ class QXLLMAgent:
         self._tool_functions: Dict[str, Callable] = {}
         self._openai_tools_schema: List[ChatCompletionToolParam] = []
         self._tool_input_models: Dict[str, Type[BaseModel]] = {}
-        self._message_cache = MessageCache()  # Use new MessageCache class
+        # Removed MessageCache - using unified LangGraph checkpoint system
 
         for func, schema, input_model_class in tools:
             self._tool_functions[func.__name__] = func
@@ -121,7 +122,9 @@ class QXLLMAgent:
 
             set_global_agent_context(self.agent_name, self.agent_color)
 
-        self._tool_processor = ToolProcessor(
+        # Use enhanced tool processor for workflow integration
+        from qx.core.workflow_enhanced_tool_processor import WorkflowEnhancedToolProcessor
+        self._tool_processor = WorkflowEnhancedToolProcessor(
             self._tool_functions, self._tool_input_models, self.console, self.run
         )
         self._fallback_handler = FallbackHandler(
@@ -136,6 +139,13 @@ class QXLLMAgent:
 
         logger.info(f"QXLLMAgent initialized with model: {self.model_name}")
         logger.info(f"Registered {len(self._tool_functions)} tool functions.")
+        
+        # Log agent context for debugging
+        if self.agent_name:
+            debug_logger = get_debug_logger()
+            debug_logger.log_agent_context(self.agent_name, self.agent_color, len(self._tool_functions))
+            if agent_config:
+                debug_logger.log_agent_config(self.agent_name, agent_config)
 
     async def _handle_timeout_fallback(self, messages, user_input, recursion_depth):
         """Delegate to fallback handler."""
@@ -159,10 +169,19 @@ class QXLLMAgent:
         self, messages: List[ChatCompletionMessageParam]
     ) -> List[Dict[str, Any]]:
         """
-        Efficiently serialize messages to avoid repeated model_dump() calls.
-        Delegates to MessageCache for implementation.
+        Efficiently serialize messages for LLM API calls.
+        Simplified version since unified workflow handles message persistence.
         """
-        return self._message_cache.serialize_messages_efficiently(messages)
+        serialized = []
+        for msg in messages:
+            if hasattr(msg, 'model_dump'):
+                serialized.append(msg.model_dump())
+            elif isinstance(msg, dict):
+                serialized.append(msg)
+            else:
+                # Fallback for other message types
+                serialized.append({"role": "user", "content": str(msg)})
+        return serialized
 
     async def run(
         self,
@@ -388,9 +407,9 @@ class QXLLMAgent:
             return None
 
     async def cleanup(self):
-        """Clean up resources and message cache."""
-        # Clear message cache to free memory
-        self._message_cache.clear()
+        """Clean up resources."""
+        # Simplified cleanup since unified workflow handles message persistence
+        logger.debug(f"🧹 Cleaning up QXLLMAgent: {getattr(self, 'agent_name', 'unknown')}")
 
 
 class QXRunResult:
@@ -610,22 +629,33 @@ async def query_llm(
     Queries the LLM agent, with optional team workflow coordination.
     """
     try:
-        # Check if we should use team workflow (only if team mode is enabled and agent can delegate)
+        logger.info(f"🎯 query_llm called with config_manager: {config_manager is not None}")
+        # Check if we should use unified workflow (only if team mode is enabled)
         if config_manager:
+            logger.info("🔧 Config manager available, checking for unified workflow")
             try:
                 from qx.core.team_mode_manager import get_team_mode_manager
                 team_mode_manager = get_team_mode_manager()
                 
-                # Only use team workflow if team mode is enabled AND agent can delegate
-                if (team_mode_manager.is_team_mode_enabled() and 
-                    getattr(agent, 'can_delegate', False)):
-                    from qx.core.langgraph_supervisor import get_langgraph_supervisor
-                    supervisor = get_langgraph_supervisor(config_manager, agent)
+                team_mode_enabled = team_mode_manager.is_team_mode_enabled()
+                logger.info(f"🏗️ Team mode enabled: {team_mode_enabled}")
+                
+                # Use unified workflow when team mode is enabled
+                if team_mode_enabled:
+                    logger.info("🏁 Team mode is enabled, checking unified workflow")
+                    from qx.core.langgraph_supervisor import get_unified_workflow
+                    workflow = get_unified_workflow(config_manager)
                     
-                    # Check if team workflow should be used
-                    if await supervisor.should_use_team_workflow(user_input):
-                        # Process with team workflow (pass message history for conversation context)
-                        team_response = await supervisor.process_with_team(user_input, message_history)
+                    logger.info("🔄 Checking if unified workflow should be used")
+                    
+                    # Check if unified workflow should be used
+                    should_use_result = await workflow.should_use_unified_workflow(user_input)
+                    logger.info(f"🔍 Should use unified workflow result: {should_use_result}")
+                    if should_use_result:
+                        logger.info("🚀 Using unified LangGraph workflow")
+                        
+                        # Process with unified workflow (pass message history for conversation context)
+                        workflow_response = await workflow.process_with_unified_workflow(user_input, message_history)
                         
                         # Create a QXRunResult structure for consistency
                         final_messages = list(message_history) if message_history else []
@@ -635,16 +665,49 @@ async def query_llm(
                                 "content": user_input
                             })
                         
-                        # Add team response
+                        # Add workflow response
                         final_messages.append({
                             "role": "assistant", 
-                            "content": team_response
+                            "content": workflow_response
                         })
                         
-                        return QXRunResult(team_response, final_messages)
+                        logger.info(f"✅ Unified workflow completed, response length: {len(workflow_response)} chars")
+                        return QXRunResult(workflow_response, final_messages)
+                    else:
+                        logger.info("🔄 Unified workflow not applicable, using main agent")
                     
             except Exception as e:
-                logger.warning(f"Team workflow error, falling back to main agent: {e}")
+                logger.error(f"❌ Unified workflow error, falling back to main agent: {e}", exc_info=True)
+        
+        # Check if this is qx-director in team mode (should never run directly)
+        if config_manager and hasattr(agent, 'agent_name') and agent.agent_name == 'qx-director':
+            try:
+                from qx.core.team_mode_manager import get_team_mode_manager
+                team_mode_manager = get_team_mode_manager()
+                if team_mode_manager.is_team_mode_enabled():
+                    logger.warning("⚠️ qx-director should use workflow in team mode, not run directly")
+                    # Force workflow usage for qx-director in team mode
+                    from qx.core.langgraph_supervisor import get_unified_workflow
+                    workflow = get_unified_workflow(config_manager)
+                    workflow_response = await workflow.process_with_unified_workflow(user_input, message_history)
+                    
+                    # Create a QXRunResult structure for consistency
+                    final_messages = list(message_history) if message_history else []
+                    if add_user_message_to_history:
+                        final_messages.append({
+                            "role": "user",
+                            "content": user_input
+                        })
+                    
+                    # Add workflow response
+                    final_messages.append({
+                        "role": "assistant", 
+                        "content": workflow_response
+                    })
+                    
+                    return QXRunResult(workflow_response, final_messages)
+            except Exception as e:
+                logger.error(f"❌ Failed to force workflow for qx-director: {e}", exc_info=True)
         
         # Default: use main agent
         result = await agent.run(
