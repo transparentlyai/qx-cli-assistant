@@ -148,16 +148,8 @@ class UnifiedWorkflow:
             director_role = getattr(director_config, 'role', '') or ''
             director_instructions = getattr(director_config, 'instructions', '') or ''
             
-            # Add explicit delegation instructions to the supervisor prompt
-            supervisor_prompt = f"""{director_role}
-
-{director_instructions}
-
-IMPORTANT: When the user requests coding tasks:
-- You MUST delegate to the appropriate specialist agent (e.g., full_stack_swe for coding)
-- Do NOT attempt to write code yourself
-- Use the provided tools to hand off tasks to specialist agents
-"""
+            # Use director's role and instructions as supervisor prompt
+            supervisor_prompt = f"{director_role}\n\n{director_instructions}"
             
             logger.info("Using qx-director configuration for supervisor")
             
