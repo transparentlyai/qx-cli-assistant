@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from rich.console import Console as RichConsole
 
 from qx.cli.console import themed_console
-from qx.core.workflow_approval import create_workflow_aware_approval_handler
+from qx.core.approval_handler import ApprovalHandler
 from qx.core.output_control import should_show_stdout
 from qx.core.constants import (
     DEFAULT_PROHIBITED_COMMANDS,
@@ -133,7 +133,7 @@ def _is_command_auto_approved(command: str) -> bool:
 async def execute_shell_tool(
     console: RichConsole, args: ExecuteShellPluginInput
 ) -> ExecuteShellPluginOutput:
-    approval_handler = await create_workflow_aware_approval_handler(themed_console)
+    approval_handler = ApprovalHandler(themed_console, use_console_manager=True)
     command = args.command.strip()
     timeout = args.timeout_seconds
 

@@ -7,7 +7,7 @@ from typing import Optional, List
 from pydantic import BaseModel, Field
 from rich.console import Console as RichConsole
 
-from qx.core.workflow_approval import create_workflow_aware_approval_handler
+from qx.core.approval_handler import ApprovalHandler
 from qx.cli.console import themed_console
 
 logger = logging.getLogger(__name__)
@@ -80,7 +80,7 @@ async def worktree_manager_tool(
     This tool allows you to list, create, and remove Git worktrees.
     It requires user approval for creating and removing worktrees.
     """
-    approval_handler = await create_workflow_aware_approval_handler(themed_console)
+    approval_handler = ApprovalHandler(themed_console, use_console_manager=True)
     
     if args.action == "list":
         command = "git worktree list --porcelain"
