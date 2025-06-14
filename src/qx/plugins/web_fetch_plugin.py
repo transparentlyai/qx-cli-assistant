@@ -5,7 +5,7 @@ import httpx
 from pydantic import BaseModel, Field
 from rich.console import Console as RichConsole
 
-from qx.core.workflow_approval import create_workflow_aware_approval_handler
+from qx.core.approval_handler import ApprovalHandler
 from qx.core.http_client_manager import http_client_manager
 from qx.cli.console import themed_console
 
@@ -31,7 +31,7 @@ class WebFetchPluginOutput(BaseModel):
 async def web_fetch_tool(
     console: RichConsole, args: WebFetchPluginInput
 ) -> WebFetchPluginOutput:
-    approval_handler = await create_workflow_aware_approval_handler(themed_console)
+    approval_handler = ApprovalHandler(themed_console, use_console_manager=True)
     url = args.url.strip()
     output_format = args.format.lower()
 

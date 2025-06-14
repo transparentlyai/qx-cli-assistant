@@ -8,7 +8,7 @@ from rich.style import Style
 from rich.text import Text
 from rich.theme import Theme
 
-from qx.core.workflow_debug_logger import get_debug_logger
+# Debug logger removed with old workflow
 
 
 # Simple function to convert markdown text to left-aligned format

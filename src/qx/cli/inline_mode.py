@@ -456,16 +456,20 @@ async def _run_inline_mode(
 
     try:
         # Check if we should start team mode workflow immediately
-        from qx.core.workflow_manager import get_workflow_manager
-        workflow_manager = get_workflow_manager(config_manager)
+        from qx.core.team_mode_manager import get_team_mode_manager
+        team_mode_manager = get_team_mode_manager()
         
-        if workflow_manager.should_use_workflow():
+        if team_mode_manager.is_team_mode_enabled():
             # In team mode, start the workflow immediately
             logger.info("🎯 Team mode active - starting unified workflow")
             
             try:
-                # Start the workflow with empty input - supervisor will handle everything
-                await workflow_manager.process_in_team_mode("")
+                # Use unified workflow
+                from qx.core.langgraph_supervisor import get_unified_workflow
+                workflow = get_unified_workflow(config_manager)
+                
+                # Start continuous workflow mode
+                await workflow.start_continuous_workflow()
                 # Workflow handles everything including exit, so we're done
                 return
             except Exception as e:

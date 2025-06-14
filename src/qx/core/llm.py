@@ -25,7 +25,7 @@ from qx.core.llm_components.messages import MessageCache
 from qx.core.llm_components.streaming import StreamingHandler
 from qx.core.llm_components.tools import ToolProcessor
 from qx.core.llm_components.fallbacks import FallbackHandler, LiteLLMCaller
-from qx.core.workflow_debug_logger import get_debug_logger
+# Debug logger removed with old workflow
 
 
 class ConsoleProtocol(Protocol):
@@ -122,9 +122,8 @@ class QXLLMAgent:
 
             set_global_agent_context(self.agent_name, self.agent_color)
 
-        # Use enhanced tool processor for workflow integration
-        from qx.core.workflow_enhanced_tool_processor import WorkflowEnhancedToolProcessor
-        self._tool_processor = WorkflowEnhancedToolProcessor(
+        # Use standard tool processor
+        self._tool_processor = ToolProcessor(
             self._tool_functions, self._tool_input_models, self.console, self.run
         )
         self._fallback_handler = FallbackHandler(
