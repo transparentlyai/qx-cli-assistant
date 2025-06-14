@@ -205,9 +205,7 @@ def render_agent_markdown(
         markdown_text = "\n".join(str(item) for item in markdown_text)
     elif not isinstance(markdown_text, str):
         markdown_text = str(markdown_text)
-    # Log console rendering with debug logger
-    debug_logger = get_debug_logger()
-    debug_logger.log_console_render(agent_name, agent_color, len(markdown_text))
+    # Debug logging removed with old workflow
     
     color = get_agent_color(agent_name, agent_color)
 
