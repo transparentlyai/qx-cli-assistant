@@ -20,7 +20,8 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.store.memory import InMemoryStore
 
 # Import langgraph-supervisor components
-from langgraph_supervisor import create_supervisor, create_react_agent
+from langgraph_supervisor import create_supervisor
+from langgraph.prebuilt import create_react_agent
 from langgraph.types import interrupt
 
 from qx.core.team_manager import get_team_manager, TeamManager, TeamMember
@@ -31,7 +32,8 @@ from qx.core.interrupt_bridge import get_interrupt_bridge
 from qx.core.langgraph_tool_adapter import get_tool_adapter
 from qx.core.langgraph_model_adapter import create_langchain_model
 from qx.core.langgraph_interrupt_adapter import get_interrupt_adapter
-from qx.core.llm import initialize_llm_agent
+from qx.core.llm_utils import initialize_agent_with_mcp
+from qx.core.mcp_manager import MCPManager
 
 logger = logging.getLogger(__name__)
 
@@ -71,9 +73,17 @@ class UnifiedWorkflowV2:
         tools = tool_adapter.load_tools_for_agent(agent_name)
         
         # Create liteLLM wrapper for this agent
-        llm_agent = await initialize_llm_agent(
-            agent_name=agent_name,
-            config_manager=self.config_manager
+        # Get MCP manager from config manager
+        mcp_manager = getattr(self.config_manager, 'mcp_manager', None)
+        if not mcp_manager:
+            # Create a minimal MCP manager if needed
+            console = getattr(self.config_manager, 'console', self.console_manager.console)
+            task_group = getattr(self.config_manager, 'task_group', None)
+            mcp_manager = MCPManager(console, task_group)
+        
+        llm_agent = await initialize_agent_with_mcp(
+            mcp_manager=mcp_manager,
+            agent_config=agent_config
         )
         
         if not llm_agent:
@@ -135,9 +145,23 @@ class UnifiedWorkflowV2:
             # Get the first agent's model for supervisor
             # We need to get the langchain model from the first team member
             first_agent_name = list(team_members.keys())[0]
-            first_llm_agent = await initialize_llm_agent(
-                agent_name="supervisor",
-                config_manager=self.config_manager
+            first_team_member = team_members[first_agent_name]
+            
+            # Create a supervisor agent config
+            supervisor_config = first_team_member.agent_config
+            supervisor_config.name = "supervisor"
+            
+            # Get MCP manager from config manager
+            mcp_manager = getattr(self.config_manager, 'mcp_manager', None)
+            if not mcp_manager:
+                # Create a minimal MCP manager if needed
+                console = getattr(self.config_manager, 'console', self.console_manager.console)
+                task_group = getattr(self.config_manager, 'task_group', None)
+                mcp_manager = MCPManager(console, task_group)
+            
+            first_llm_agent = await initialize_agent_with_mcp(
+                mcp_manager=mcp_manager,
+                agent_config=supervisor_config
             )
             supervisor_model = create_langchain_model(first_llm_agent) if first_llm_agent else None
             
