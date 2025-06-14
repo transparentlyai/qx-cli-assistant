@@ -580,65 +580,11 @@ async def _run_inline_mode(
                 logger.warning("No active LLM agent found in agent manager, using original agent")
                 active_llm_agent = llm_agent
 
-            # Check if agent has changed - preserve conversation context during switch
+            # Update current agent tracker for display purposes
             if active_llm_agent != current_active_agent:
-                # Agent has been switched - preserve conversation history but update system prompt
-                from openai.types.chat import ChatCompletionSystemMessageParam
-
-                from qx.core.llm_components.prompts import load_and_format_system_prompt
-
-                current_agent = await agent_manager.get_current_agent()
-                preserved_history = agent_manager.get_current_message_history()
-                
-                if current_agent:
-                    new_system_prompt = load_and_format_system_prompt(current_agent)
-                    
-                    if preserved_history:
-                        # Preserve existing conversation but update system prompt for new agent
-                        current_message_history = []
-                        
-                        # Add new agent's system prompt
-                        current_message_history.append(
-                            ChatCompletionSystemMessageParam(
-                                role="system", content=new_system_prompt
-                            )
-                        )
-                        
-                        # Add existing conversation history (skip old system messages)
-                        for msg in preserved_history:
-                            if hasattr(msg, 'role') and msg.role != 'system':
-                                current_message_history.append(msg)
-                            elif isinstance(msg, dict) and msg.get('role') != 'system':
-                                current_message_history.append(msg)
-                        
-                        # Add current user message
-                        current_message_history.append(
-                            ChatCompletionUserMessageParam(
-                                role="user", content=final_user_input
-                            )
-                        )
-                        
-                        logger.info(f"Agent switched to {current_agent.name}, preserved {len(preserved_history)} messages")
-                    else:
-                        # No preserved history, create fresh
-                        current_message_history = [
-                            ChatCompletionSystemMessageParam(
-                                role="system", content=new_system_prompt
-                            ),
-                            ChatCompletionUserMessageParam(
-                                role="user", content=final_user_input
-                            ),
-                        ]
-                else:
-                    # Fallback: just reset with user message (shouldn't happen)
-                    current_message_history = [
-                        ChatCompletionUserMessageParam(
-                            role="user", content=final_user_input
-                        )
-                    ]
-                
-                # Update current agent tracker
                 current_active_agent = active_llm_agent
+                logger.info(f"🔄 Agent switched, now using: {getattr(active_llm_agent, 'agent_name', 'unknown')}")
+                # Note: Conversation history is now managed by unified LangGraph checkpoint system
 
             llm_task = asyncio.create_task(
                 _handle_llm_interaction(
@@ -663,10 +609,7 @@ async def _run_inline_mode(
                         pass
 
             if current_message_history:
-                # Update agent manager with current conversation history for agent switching context
-                from qx.core.agent_manager import get_agent_manager
-                agent_manager = get_agent_manager()
-                agent_manager.set_current_message_history(current_message_history)
+                # Save session for session management (unified workflow manages its own checkpoints)
                 save_session(current_message_history)
                 clean_old_sessions(keep_sessions)
 

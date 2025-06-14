@@ -8,6 +8,8 @@ from rich.style import Style
 from rich.text import Text
 from rich.theme import Theme
 
+from qx.core.workflow_debug_logger import get_debug_logger
+
 
 # Simple function to convert markdown text to left-aligned format
 def process_markdown_for_left_alignment(markdown_text: str) -> str:
@@ -114,6 +116,11 @@ def render_markdown_with_left_border(
         border_char (str): The character to use for the border.
         title (str | None): An optional title to display.
     """
+    # Ensure markdown_text is a string (protect against list inputs)
+    if isinstance(markdown_text, list):
+        markdown_text = "\n".join(str(item) for item in markdown_text)
+    elif not isinstance(markdown_text, str):
+        markdown_text = str(markdown_text)
     # Create a custom theme to override the h1 style and define the code style.
     custom_theme = Theme(
         {
@@ -193,6 +200,15 @@ def render_agent_markdown(
         border_char (str): The character to use for the border.
         console (Optional[Console]): Console instance to use for rendering.
     """
+    # Ensure markdown_text is a string (protect against list inputs)
+    if isinstance(markdown_text, list):
+        markdown_text = "\n".join(str(item) for item in markdown_text)
+    elif not isinstance(markdown_text, str):
+        markdown_text = str(markdown_text)
+    # Log console rendering with debug logger
+    debug_logger = get_debug_logger()
+    debug_logger.log_console_render(agent_name, agent_color, len(markdown_text))
+    
     color = get_agent_color(agent_name, agent_color)
 
     # Use provided console or create new one

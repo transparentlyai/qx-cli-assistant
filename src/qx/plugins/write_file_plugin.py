@@ -10,7 +10,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.syntax import Syntax
 
-from qx.core.approval_handler import ApprovalHandler
+from qx.core.workflow_approval import create_workflow_aware_approval_handler
 from qx.core.paths import USER_HOME_DIR, _find_project_root
 from qx.cli.console import themed_console
 
@@ -167,7 +167,7 @@ class WriteFilePluginOutput(BaseModel):
 async def write_file_tool(
     console: Console, args: WriteFilePluginInput
 ) -> WriteFilePluginOutput:
-    approval_handler = ApprovalHandler(themed_console)
+    approval_handler = await create_workflow_aware_approval_handler(themed_console)
     original_path = args.path
     expanded_path = os.path.expanduser(original_path)
     absolute_path = Path(expanded_path).resolve()
