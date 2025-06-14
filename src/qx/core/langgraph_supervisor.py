@@ -115,41 +115,49 @@ class UnifiedWorkflow:
                 logger.warning("No team members found")
                 return False
                 
-            # Create all agents from YAML configurations
-            agents = []
-            for agent_name, team_member in team_members.items():
-                agent = await self.create_agent_from_yaml(agent_name, team_member)
-                if agent:
-                    agents.append(agent)
-                    
-            if not agents:
-                logger.error("No agents could be created")
-                return False
-                
-            logger.info(f"Created {len(agents)} agents from team configuration")
-            
-            # Find the qx-director to use as supervisor
-            director_agent = None
+            # Separate qx-director from other agents
             director_config = None
+            director_member = None
+            specialist_agents = []
             
             for agent_name, team_member in team_members.items():
                 if agent_name.lower() == "qx-director":
                     director_config = team_member.agent_config
-                    # Find the director in our created agents
-                    for agent in agents:
-                        if hasattr(agent, 'name') and agent.name.lower() == "qx-director":
-                            director_agent = agent
-                            break
-                    break
-            
+                    director_member = team_member
+                else:
+                    # Create specialist agents (not the director)
+                    agent = await self.create_agent_from_yaml(agent_name, team_member)
+                    if agent:
+                        specialist_agents.append(agent)
+                    
             if not director_config:
                 logger.error("qx-director not found in team configuration")
                 return False
                 
+            if not specialist_agents:
+                logger.error("No specialist agents could be created")
+                return False
+                
+            logger.info(f"Created {len(specialist_agents)} specialist agents")
+            
+            # Log available agents for delegation
+            agent_names = [agent.name for agent in specialist_agents if hasattr(agent, 'name')]
+            logger.info(f"Available agents for delegation: {', '.join(agent_names)}")
+            
             # Get supervisor prompt from qx-director's configuration
             director_role = getattr(director_config, 'role', '') or ''
             director_instructions = getattr(director_config, 'instructions', '') or ''
-            supervisor_prompt = f"{director_role}\n\n{director_instructions}"
+            
+            # Add explicit delegation instructions to the supervisor prompt
+            supervisor_prompt = f"""{director_role}
+
+{director_instructions}
+
+IMPORTANT: When the user requests coding tasks:
+- You MUST delegate to the appropriate specialist agent (e.g., full_stack_swe for coding)
+- Do NOT attempt to write code yourself
+- Use the provided tools to hand off tasks to specialist agents
+"""
             
             logger.info("Using qx-director configuration for supervisor")
             
@@ -172,9 +180,9 @@ class UnifiedWorkflow:
                 logger.error("Failed to create supervisor model")
                 return False
             
-            # Create the supervisor workflow
+            # Create the supervisor workflow with specialist agents only
             workflow = create_supervisor(
-                agents,
+                specialist_agents,  # Only specialist agents, not the director
                 model=supervisor_model,
                 prompt=supervisor_prompt,
                 output_mode="last_message"  # Only return the last message

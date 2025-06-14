@@ -1,0 +1,41 @@
+[
+  {
+    "role": "user",
+    "content": "hello\n\n---\nIMPLEMENTING mode activated"
+  },
+  {
+    "content": "Hello there! I'm Qx, your AI assistant. How can I help you today?",
+    "refusal": null,
+    "role": "assistant",
+    "annotations": null,
+    "audio": null,
+    "function_call": null,
+    "tool_calls": null
+  },
+  {
+    "role": "user",
+    "content": "write a simple ./tmp/calculator.py\n\n---\nIMPLEMENTING mode activated"
+  },
+  {
+    "content": "I will create a simple command-line calculator in Python.\n\n**Proposed Plan:**\n\n1.  **Write the Python code:** I will write the code for a simple calculator that performs addition, subtraction, multiplication, and division.\n2.  **Save to file:** I will save the code to `/tmp/calculator.py`.\n\nHere is the code I will use:\n",
+    "refusal": null,
+    "role": "assistant",
+    "annotations": null,
+    "audio": null,
+    "function_call": null,
+    "tool_calls": null
+  },
+  {
+    "role": "user",
+    "content": "continue\n\n---\nIMPLEMENTING mode activated"
+  },
+  {
+    "content": null,
+    "refusal": null,
+    "role": "assistant",
+    "annotations": null,
+    "audio": null,
+    "function_call": null,
+    "tool_calls": null
+  }
+]
