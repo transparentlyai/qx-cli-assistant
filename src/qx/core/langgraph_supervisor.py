@@ -461,6 +461,12 @@ class UnifiedLangGraphWorkflow:
                             
                             updated_state["human_response"] = user_feedback
                             
+                            # Add user feedback to messages
+                            from langchain_core.messages import HumanMessage
+                            current_messages = list(state.get("messages", []))
+                            current_messages.append(HumanMessage(content=user_feedback))
+                            updated_state["messages"] = current_messages
+                            
                             if "satisfied" in user_feedback.lower() or "done" in user_feedback.lower() or "thanks" in user_feedback.lower():
                                 updated_state["workflow_stage"] = "complete"
                             else:
@@ -479,6 +485,13 @@ class UnifiedLangGraphWorkflow:
                     # The interrupt handler should have set human_response
                     user_feedback = state.get("human_response", "")
                     if user_feedback:
+                        # Add user feedback to messages if not already there
+                        from langchain_core.messages import HumanMessage
+                        current_messages = list(state.get("messages", []))
+                        if not current_messages or current_messages[-1].content != user_feedback:
+                            current_messages.append(HumanMessage(content=user_feedback))
+                            updated_state["messages"] = current_messages
+                        
                         if "satisfied" in user_feedback.lower() or "done" in user_feedback.lower() or "thanks" in user_feedback.lower():
                             updated_state["workflow_stage"] = "complete"
                         else:
@@ -495,7 +508,18 @@ class UnifiedLangGraphWorkflow:
                     if director_agent:
                         user_input = state.get("user_input", "")
                         
-                        # Execute director within workflow context
+                        # Get conversation history from state
+                        messages = state.get("messages", [])
+                        message_history = []
+                        for msg in messages:
+                            if hasattr(msg, 'content') and hasattr(msg, 'type'):
+                                # Convert LangGraph message to dict format
+                                if msg.type == "human":
+                                    message_history.append({"role": "user", "content": msg.content})
+                                elif msg.type == "ai":
+                                    message_history.append({"role": "assistant", "content": msg.content})
+                        
+                        # Execute director within workflow context with conversation history
                         async with workflow_execution_context(
                             workflow_id="unified_workflow",
                             agent_name="qx-director",
@@ -503,7 +527,7 @@ class UnifiedLangGraphWorkflow:
                             thread_id=f"workflow_{time.time()}",
                             use_interrupts=True
                         ):
-                            result = await director_agent.run(user_input)
+                            result = await director_agent.run(user_input, message_history=message_history)
                             response = result.output if hasattr(result, 'output') else str(result)
                         
                         # Display director response with QX styling
@@ -516,6 +540,12 @@ class UnifiedLangGraphWorkflow:
                         
                         updated_state["agent_results"] = {"qx-director": response}
                         updated_state["workflow_stage"] = "complete"
+                        
+                        # Add director's response to messages for conversation history
+                        from langchain_core.messages import AIMessage
+                        current_messages = list(state.get("messages", []))
+                        current_messages.append(AIMessage(content=response))
+                        updated_state["messages"] = current_messages
                         
                         logger.info(f"✅ Director handled task directly: {len(response)} chars")
                 
@@ -586,9 +616,20 @@ class UnifiedLangGraphWorkflow:
                                 agent_color=agent_color
                             )
                             
-                            # Execute the specialist agent
+                            # Get conversation history from state
+                            messages = state.get("messages", [])
+                            message_history = []
+                            for msg in messages:
+                                if hasattr(msg, 'content') and hasattr(msg, 'type'):
+                                    # Convert LangGraph message to dict format
+                                    if msg.type == "human":
+                                        message_history.append({"role": "user", "content": msg.content})
+                                    elif msg.type == "ai":
+                                        message_history.append({"role": "assistant", "content": msg.content})
+                            
+                            # Execute the specialist agent with conversation history
                             logger.debug(f"🔧 Executing {agent_name} with task: {task_description[:100]}...")
-                            result = await agent.run(task_description)
+                            result = await agent.run(task_description, message_history=message_history)
                             
                             # Extract response from result, handling different formats
                             if hasattr(result, 'output'):
@@ -611,6 +652,11 @@ class UnifiedLangGraphWorkflow:
                         agent_results = state.get("agent_results", {})
                         agent_results[agent_name] = response
                         
+                        # Add specialist's response to messages for conversation history
+                        from langchain_core.messages import AIMessage
+                        current_messages = list(state.get("messages", []))
+                        current_messages.append(AIMessage(content=response))
+                        
                         # Record timing
                         node_time = time.time() - node_start_time
                         timings = state.get("node_timings", {})
@@ -620,6 +666,7 @@ class UnifiedLangGraphWorkflow:
                             **state,
                             "current_node": agent_name,
                             "agent_results": agent_results,
+                            "messages": current_messages,
                             "node_timings": timings,
                             "workflow_stage": "specialist_execution"
                         }
