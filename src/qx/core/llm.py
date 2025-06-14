@@ -141,10 +141,7 @@ class QXLLMAgent:
         
         # Log agent context for debugging
         if self.agent_name:
-            debug_logger = get_debug_logger()
-            debug_logger.log_agent_context(self.agent_name, self.agent_color, len(self._tool_functions))
-            if agent_config:
-                debug_logger.log_agent_config(self.agent_name, agent_config)
+            logger.debug(f"Agent Context: name={self.agent_name}, color={self.agent_color}, tools={len(self._tool_functions)}")
 
     async def _handle_timeout_fallback(self, messages, user_input, recursion_depth):
         """Delegate to fallback handler."""

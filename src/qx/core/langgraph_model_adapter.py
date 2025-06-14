@@ -23,11 +23,13 @@ class QXLiteLLMAdapter(BaseChatModel):
     Adapter that wraps QX's LiteLLM agent to work with LangChain/LangGraph.
     """
     
-    def __init__(self, qx_agent: QXLLMAgent):
+    qx_agent: Any  # The QX LLM agent instance
+    agent_name: str = "unknown"  # Name of the agent
+    
+    def __init__(self, qx_agent: QXLLMAgent, **kwargs):
         """Initialize with a QX LLM agent."""
-        super().__init__()
-        self.qx_agent = qx_agent
-        self.agent_name = getattr(qx_agent, 'agent_name', 'unknown')
+        agent_name = getattr(qx_agent, 'agent_name', 'unknown')
+        super().__init__(qx_agent=qx_agent, agent_name=agent_name, **kwargs)
         
     @property
     def _llm_type(self) -> str:
@@ -118,6 +120,18 @@ class QXLiteLLMAdapter(BaseChatModel):
             "model_name": getattr(self.qx_agent, 'model_name', 'unknown'),
             "qx_version": "litellm-adapter-v1"
         }
+    
+    def bind_tools(self, tools: List[Any], **kwargs) -> "QXLiteLLMAdapter":
+        """Bind tools to the model.
+        
+        This is required by LangGraph but we handle tools differently in QX.
+        Tools are already bound to the QX agent during initialization.
+        We return self to maintain compatibility.
+        """
+        # QX agents already have their tools configured during initialization
+        # We don't need to rebind them here
+        logger.debug(f"bind_tools called with {len(tools) if tools else 0} tools - QX tools already configured")
+        return self
 
 
 def create_langchain_model(qx_agent: QXLLMAgent) -> BaseChatModel:
