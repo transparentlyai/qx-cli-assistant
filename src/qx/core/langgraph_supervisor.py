@@ -434,20 +434,13 @@ class UnifiedLangGraphWorkflow:
                         elif not isinstance(latest_result, str):
                             latest_result = str(latest_result)
                         
-                        from qx.cli.quote_bar_component import render_agent_markdown
-                        render_agent_markdown(
-                            f"**Task Completed**\n\n{latest_result[:300]}...",
-                            "qx-director",
-                            agent_color="#ff5f00"
-                        )
-                        
                         # Ask user if they're satisfied or need more work
                         logger.info("⏸️ INTERRUPT: Checking user satisfaction")
                         
-                        # Show QX-styled satisfaction check before interrupt
+                        # Show only the satisfaction check - the agent result was already displayed
                         from qx.cli.quote_bar_component import render_agent_markdown
                         render_agent_markdown(
-                            f"**Task Completed**\n\n{latest_result[:300]}...\n\n**Are you satisfied with this result, or would you like me to do anything else?**",
+                            f"**Are you satisfied with this result, or would you like me to do anything else?**",
                             "qx-director",
                             agent_color="#ff5f00"
                         )
@@ -591,12 +584,9 @@ class UnifiedLangGraphWorkflow:
                             elif not isinstance(response, str):
                                 response = str(response)
                         
-                        # Display agent response with QX styling
-                        render_agent_markdown(
-                            f"**Task Complete**\n\n{response}",
-                            agent_name,
-                            agent_color=agent_color
-                        )
+                        # Agent already displayed its response through QX's system
+                        # No need to display again here
+                        logger.debug(f"📝 {agent_name} completed task, response captured")
                         
                         # Update agent results
                         agent_results = state.get("agent_results", {})
