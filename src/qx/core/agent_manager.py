@@ -48,6 +48,7 @@ class AgentManager:
 
     def __init__(self):
         self._agent_loader = get_agent_loader()
+        self._current_message_history = None  # Track current session's message history
         self._current_agent_session: Optional[AgentSession] = None
         self._autonomous_agents: Dict[str, AgentSession] = {}
         self._task_tracker = TaskTracker()
@@ -238,6 +239,14 @@ class AgentManager:
     def get_active_llm_agent(self):
         """Get the active LLM agent instance."""
         return getattr(self, "_active_llm_agent", None)
+    
+    def set_current_message_history(self, message_history):
+        """Set the current session's message history for agent context."""
+        self._current_message_history = message_history
+    
+    def get_current_message_history(self):
+        """Get the current session's message history."""
+        return self._current_message_history
 
     async def switch_llm_agent(self, agent_name: str, mcp_manager) -> bool:
         """Switch the active LLM agent to a different agent configuration."""

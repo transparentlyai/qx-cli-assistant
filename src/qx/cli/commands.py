@@ -242,6 +242,22 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
                         style="text.muted",
                     )
                     
+                    # Ensure the new agent gets access to conversation context (for agents without initial_query)
+                    existing_history = agent_manager.get_current_message_history()
+                    if existing_history and not (hasattr(current_agent, 'initial_query') and current_agent.initial_query):
+                        # Agent doesn't have initial_query but we have conversation history
+                        # Update the active LLM agent with conversation context by updating its system prompt
+                        try:
+                            from qx.core.llm_components.prompts import load_and_format_system_prompt
+                            active_llm_agent = agent_manager.get_active_llm_agent()
+                            
+                            if active_llm_agent:
+                                # The agent will get conversation context in subsequent interactions
+                                # No need to send a message now, just ensure context is preserved
+                                logger.info(f"Agent '{agent_name}' now has access to {len(existing_history)} previous messages")
+                        except Exception as e:
+                            logger.warning(f"Could not transfer conversation context to agent '{agent_name}': {e}")
+                    
                     # Process initial_query if defined in agent config
                     if hasattr(current_agent, 'initial_query') and current_agent.initial_query:
                         logger.debug(f"Processing initial_query for agent '{agent_name}': {current_agent.initial_query}")
@@ -253,19 +269,48 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
                                 # Import the system prompt loading function
                                 from qx.core.llm_components.prompts import load_and_format_system_prompt
                                 
-                                # Create fresh message history with system prompt and initial query
+                                # Get existing conversation history for context preservation
+                                existing_history = agent_manager.get_current_message_history()
                                 system_prompt = load_and_format_system_prompt(current_agent)
-                                initial_message_history = [
-                                    ChatCompletionSystemMessageParam(
-                                        role="system", content=system_prompt
-                                    ),
-                                    ChatCompletionUserMessageParam(
-                                        role="user", content=current_agent.initial_query
-                                    ),
-                                ]
+                                
+                                # Create message history that preserves conversation context
+                                if existing_history:
+                                    # Preserve existing conversation but update system prompt for new agent
+                                    initial_message_history = []
+                                    
+                                    # Add new agent's system prompt
+                                    initial_message_history.append(
+                                        ChatCompletionSystemMessageParam(
+                                            role="system", content=system_prompt
+                                        )
+                                    )
+                                    
+                                    # Add existing conversation history (skip old system messages)
+                                    for msg in existing_history:
+                                        if hasattr(msg, 'role') and msg.role != 'system':
+                                            initial_message_history.append(msg)
+                                        elif isinstance(msg, dict) and msg.get('role') != 'system':
+                                            initial_message_history.append(msg)
+                                    
+                                    # Add initial query at the end
+                                    initial_message_history.append(
+                                        ChatCompletionUserMessageParam(
+                                            role="user", content=current_agent.initial_query
+                                        )
+                                    )
+                                else:
+                                    # No existing history, create fresh
+                                    initial_message_history = [
+                                        ChatCompletionSystemMessageParam(
+                                            role="system", content=system_prompt
+                                        ),
+                                        ChatCompletionUserMessageParam(
+                                            role="user", content=current_agent.initial_query
+                                        ),
+                                    ]
                                 
                                 # Send the initial query to the LLM (this will display the response)
-                                await query_llm(
+                                result = await query_llm(
                                     active_llm_agent,
                                     current_agent.initial_query,
                                     message_history=initial_message_history,
@@ -273,6 +318,13 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
                                     add_user_message_to_history=False,  # Already added above
                                     config_manager=config_manager,
                                 )
+                                
+                                # Update agent manager with the new message history that includes the agent switch interaction
+                                if result and hasattr(result, 'message_history'):
+                                    agent_manager.set_current_message_history(result.message_history)
+                                elif existing_history:
+                                    # If no new history returned, at least preserve the conversation context
+                                    agent_manager.set_current_message_history(initial_message_history)
                                 
                             except Exception as e:
                                 logger.error(f"Error processing initial_query for agent '{agent_name}': {e}")
@@ -940,7 +992,7 @@ async def _handle_team_enable_command(config_manager: ConfigManager):
         # Switch to supervisor agent
         agent_manager = get_agent_manager()
         switch_success = await agent_manager.switch_llm_agent(
-            "qx.supervisor", config_manager.mcp_manager
+            "qx-director", config_manager.mcp_manager
         )
         if switch_success:
             themed_console.print("  Switched to supervisor agent", style="dim green")

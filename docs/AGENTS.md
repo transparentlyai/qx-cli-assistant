@@ -554,11 +554,15 @@ The `{discovered_agents}` variable provides a simple list of all discovered agen
 
 ```
 - qx: Main agent
+- qx-director: USER LAYER coordinator (manual selection for strategic planning)
 - code_reviewer: Specialized code review and analysis agent
 - devops_automation: DevOps automation and infrastructure management agent
 - documentation_writer: Technical documentation and content creation specialist
 - data_processor: Data analysis and processing automation agent
-- qx.supervisor: Team supervisor and coordinator for multi-agent workflows
+
+System Agents (Internal Use):
+- task_delegator.system.agent: SYSTEM LAYER delegation engine (automatic routing)
+- task_decomposer.system.agent: Task analysis and decomposition
 ```
 
 ## Team Management
@@ -616,15 +620,70 @@ QX supports advanced multi-agent coordination through its team management system
 /team-mode
 ```
 
+## Agent Architecture Overview
+
+QX implements a sophisticated **two-layer agent architecture** that separates user-facing coordination from internal system operations:
+
+### Layer 1: User Layer (Manual Selection)
+- **qx-director**: Strategic coordinator agent that users can manually select
+- **Usage**: `qx -a qx-director` or `/agents switch qx-director`
+- **Purpose**: High-level planning, architecture design, and user interaction
+- **Position**: Outside the team graph, acts as main agent when selected
+
+### Layer 2: System Layer (Automatic Delegation)
+- **task_delegator.system.agent**: Internal delegation engine within team graph
+- **Usage**: Used automatically by LangGraph supervisor when team mode is enabled
+- **Purpose**: Pure task routing and delegation without explanation
+- **Position**: Inside the team graph, routes tasks to specialist agents
+
+### Architectural Flow Diagram
+
+```
+USER REQUEST
+     ↓
+┌────────────────────┐    OR    ┌──────────────────────┐
+│   qx-director      │          │  Team Mode Enabled  │
+│  (User Selected)   │          │  (Automatic)         │
+│                    │          │                      │
+│  • Planning        │          │                      │
+│  • Architecture    │    →     │  task_delegator      │
+│  • Coordination    │          │  (System Agent)      │
+└────────────────────┘          └──────────────────────┘
+                                          ↓
+                              ┌─────────────────────────┐
+                              │    Specialist Agents    │
+                              │                         │
+                              │ • full_stack_swe        │
+                              │ • data_analyst          │
+                              │ • content_writer        │
+                              │ • agent-writer          │
+                              │ • [custom agents]       │
+                              └─────────────────────────┘
+```
+
 ### How Team Mode Works
 
 When team mode is enabled and you have a team configured:
 
-1. **Task Analysis**: The supervisor agent analyzes your request
+1. **Task Analysis**: The task_delegator system agent analyzes your request
 2. **Task Decomposition**: Complex tasks are broken into parallelizable subtasks
 3. **Agent Selection**: Best-suited agents are chosen based on their specializations
 4. **Parallel Execution**: Subtasks run concurrently across agent instances
 5. **Result Synthesis**: Multiple agent outputs are combined into unified responses
+
+### Coordination Strategies
+
+#### Manual Coordination (qx-director)
+- User explicitly selects qx-director as their main agent
+- Provides strategic planning and high-level architecture
+- Can delegate to team members through its own coordination logic
+- Best for: Complex projects requiring strategic oversight
+
+#### Automatic Coordination (task_delegator)
+- Activated automatically when team mode is enabled
+- Provides immediate task routing without explanation
+- Uses LangGraph supervisor pattern for efficient delegation
+- Best for: Direct task execution with specialized agents
 
 ### Team Composition Best Practices
 
