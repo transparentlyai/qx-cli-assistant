@@ -91,31 +91,33 @@ class TeamManager:
         self._team_members: Dict[str, TeamMember] = {}
         self._load_team_from_storage()
         
-    def _get_team_storage_path(self) -> Path:
-        """Get the path where team composition is stored."""
+    def _get_storage_path(self, filename: str) -> Path:
+        """Get the storage path for team-related files.
+        
+        Args:
+            filename: Name of the file (e.g., 'team.json', 'teams.json')
+            
+        Returns:
+            Path to the file in the project directory
+        """
         # Store in the current project directory if possible, otherwise user config
-        project_path = Path.cwd() / ".Q" / "config" / "team.json"
-        user_path = Path.home() / ".config" / "qx" / "team.json"
+        project_path = Path.cwd() / ".Q" / "config" / filename
+        user_path = Path.home() / ".config" / "qx" / filename
         
         # Create directories if they don't exist
         project_path.parent.mkdir(parents=True, exist_ok=True)
         user_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Prefer project-specific team composition
+        # Prefer project-specific storage
         return project_path
+    
+    def _get_team_storage_path(self) -> Path:
+        """Get the path where team composition is stored."""
+        return self._get_storage_path("team.json")
 
     def _get_teams_storage_path(self) -> Path:
         """Get the path where all saved teams are stored."""
-        # Store in the current project directory if possible, otherwise user config
-        project_path = Path.cwd() / ".Q" / "config" / "teams.json"
-        user_path = Path.home() / ".config" / "qx" / "teams.json"
-        
-        # Create directories if they don't exist
-        project_path.parent.mkdir(parents=True, exist_ok=True)
-        user_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Prefer project-specific teams storage
-        return project_path
+        return self._get_storage_path("teams.json")
 
     def _load_team_from_storage(self, team_name: Optional[str] = None):
         """Load the team composition from persistent storage."""
@@ -125,29 +127,9 @@ class TeamManager:
         else:
             # Load current team
             team_file = self._get_team_storage_path()
-            if not team_file.exists():
-                return
-                
-            try:
-                with open(team_file, 'r') as f:
-                    team_data = json.load(f)
-                    
-                # Clear existing team first
-                self._team_members.clear()
-                    
-                # Reconstruct team members
-                agent_manager = get_agent_manager()
-                agents_data = team_data.get('agents', {})
-                
-                # Load agents with instance counts
-                for agent_name, agent_info in agents_data.items():
-                    instance_count = agent_info.get('instance_count', 1)
-                    self._load_agent_member(agent_manager, agent_name, instance_count)
-                        
-            except (json.JSONDecodeError, FileNotFoundError) as e:
-                logger.warning(f"Failed to load team from {team_file}: {e}")
+            self._load_team_from_file(team_file, is_saved_team=False)
 
-    def _load_saved_team(self, team_name: str):
+    def _load_saved_team(self, team_name: str) -> bool:
         """Load a specific saved team from teams.json."""
         teams_file = self._get_teams_storage_path()
         if not teams_file.exists():
@@ -160,22 +142,42 @@ class TeamManager:
             if team_name not in all_teams.get('teams', {}):
                 return False
                 
-            # Clear existing team first
-            self._team_members.clear()
-                
-            # Load the specific team
+            # Load the specific team data
             team_data = all_teams['teams'][team_name]
-            agent_manager = get_agent_manager()
-            
-            for agent_name, agent_info in team_data.get('agents', {}).items():
-                instance_count = agent_info.get('instance_count', 1)
-                self._load_agent_member(agent_manager, agent_name, instance_count)
-                
+            self._load_team_data(team_data)
             return True
                 
         except (json.JSONDecodeError, FileNotFoundError) as e:
             logger.warning(f"Failed to load saved team {team_name} from {teams_file}: {e}")
             return False
+    
+    def _load_team_from_file(self, team_file: Path, is_saved_team: bool = False):
+        """Load team data from a JSON file."""
+        if not team_file.exists():
+            return
+            
+        try:
+            with open(team_file, 'r') as f:
+                team_data = json.load(f)
+            
+            self._load_team_data(team_data)
+                        
+        except (json.JSONDecodeError, FileNotFoundError) as e:
+            logger.warning(f"Failed to load team from {team_file}: {e}")
+    
+    def _load_team_data(self, team_data: dict):
+        """Load team data from a dictionary."""
+        # Clear existing team first
+        self._team_members.clear()
+        
+        # Reconstruct team members
+        agent_manager = get_agent_manager()
+        agents_data = team_data.get('agents', {})
+        
+        # Load agents with instance counts
+        for agent_name, agent_info in agents_data.items():
+            instance_count = agent_info.get('instance_count', 1)
+            self._load_agent_member(agent_manager, agent_name, instance_count)
     
     def _load_agent_member(self, agent_manager, agent_name: str, instance_count: int):
         """Helper method to load a single agent member."""

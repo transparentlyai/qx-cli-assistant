@@ -106,6 +106,16 @@ class QXToolAdapter:
         logger.info(f"Loaded {len(tools)} tools for agent '{agent_name}'")
         return tools
     
+    # Tool registry mapping tool names to their import paths
+    _TOOL_REGISTRY = {
+        "write_file": ("qx.plugins.write_file_plugin", "write_file_tool", "WriteFilePluginInput"),
+        "read_file": ("qx.plugins.read_file_plugin", "read_file_tool", "ReadFilePluginInput"),
+        "execute_shell": ("qx.plugins.execute_shell_plugin", "execute_shell_tool", "ExecuteShellPluginInput"),
+        "web_fetch": ("qx.plugins.web_fetch_plugin", "web_fetch_tool", "WebFetchPluginInput"),
+        "worktree_manager": ("qx.plugins.worktree_manager_plugin", "worktree_manager_tool", "WorktreeManagerPluginInput"),
+        "current_time": ("qx.plugins.current_time_plugin", "current_time_tool", "CurrentTimePluginInput"),
+    }
+    
     def _get_qx_tool(self, tool_name: str) -> tuple[Callable, BaseModel]:
         """
         Get a QX tool function and its schema.
@@ -120,27 +130,20 @@ class QXToolAdapter:
             ValueError: If tool is not found
             ImportError: If tool module cannot be imported
         """
-        # Import the specific plugin module
-        if tool_name == "write_file":
-            from qx.plugins.write_file_plugin import write_file_tool, WriteFilePluginInput
-            return write_file_tool, WriteFilePluginInput
-        elif tool_name == "read_file":
-            from qx.plugins.read_file_plugin import read_file_tool, ReadFilePluginInput
-            return read_file_tool, ReadFilePluginInput
-        elif tool_name == "execute_shell":
-            from qx.plugins.execute_shell_plugin import execute_shell_tool, ExecuteShellPluginInput
-            return execute_shell_tool, ExecuteShellPluginInput
-        elif tool_name == "web_fetch":
-            from qx.plugins.web_fetch_plugin import web_fetch_tool, WebFetchPluginInput
-            return web_fetch_tool, WebFetchPluginInput
-        elif tool_name == "worktree_manager":
-            from qx.plugins.worktree_manager_plugin import worktree_manager_tool, WorktreeManagerPluginInput
-            return worktree_manager_tool, WorktreeManagerPluginInput
-        elif tool_name == "current_time":
-            from qx.plugins.current_time_plugin import current_time_tool, CurrentTimePluginInput
-            return current_time_tool, CurrentTimePluginInput
-        else:
+        if tool_name not in self._TOOL_REGISTRY:
             raise ValueError(f"Tool '{tool_name}' not found in plugin registry")
+        
+        module_path, tool_func_name, schema_name = self._TOOL_REGISTRY[tool_name]
+        
+        try:
+            # Dynamic import
+            import importlib
+            module = importlib.import_module(module_path)
+            tool_func = getattr(module, tool_func_name)
+            schema_class = getattr(module, schema_name)
+            return tool_func, schema_class
+        except (ImportError, AttributeError) as e:
+            raise ImportError(f"Failed to import tool '{tool_name}' from {module_path}: {e}")
 
 
 # Singleton instance
