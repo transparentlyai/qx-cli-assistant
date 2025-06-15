@@ -12,6 +12,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, System
 from langchain_core.outputs import ChatResult, ChatGeneration
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from qx.core.llm import QXLLMAgent
+from qx.core.message_utils import extract_last_user_input
 
 logger = logging.getLogger(__name__)
 
@@ -74,13 +75,9 @@ class QXLiteLLMAdapter(BaseChatModel):
                 elif isinstance(msg, AIMessage):
                     qx_messages.append({"role": "assistant", "content": msg.content})
                     
-            # If no user input found, use empty string
+            # If no user input found, extract from messages
             if not user_input and qx_messages:
-                # Find the last user message
-                for msg in reversed(qx_messages):
-                    if msg.get("role") == "user":
-                        user_input = msg.get("content", "")
-                        break
+                user_input = extract_last_user_input(qx_messages)
                         
             # Tools are already bound via bind_tools method
             
