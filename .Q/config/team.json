@@ -3,9 +3,11 @@
     "qx-director": {
       "instance_count": 1
     },
-    "full_stack_swe": {
+    "code-writer": {
+      "instance_count": 1
+    },
+    "tester": {
       "instance_count": 1
     }
-  },
-  "version": "1.1"
+  }
 }
