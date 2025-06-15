@@ -189,70 +189,6 @@ async def _ask_basic_confirmation(
             _resume_global_hotkeys()
 
 
-def _is_textual_environment(console: RichConsole) -> bool:
-    return hasattr(console, "_app") and console._app is not None
-
-
-async def _request_confirmation_textual(
-    prompt_message: str,
-    console: RichConsole,
-    content_to_display: Optional[RenderableType] = None,
-    current_value_for_modification: Optional[str] = None,
-    default_choice_key: str = "n",
-) -> Tuple[ApprovalDecisionStatus, Optional[str]]:
-    if await is_approve_all_active():
-        _managed_print(console, "[info]AUTO-APPROVED due to active 'Approve All' session.[/info]")
-        return ("session_approved", current_value_for_modification)
-
-    if content_to_display:
-        console.print("\n--- Content Preview ---")
-        console.print(content_to_display)
-        console.print("--- End Preview ---\n")
-
-    app = console._app
-
-    if not app or not hasattr(app, "request_confirmation"):
-        logger.error("Textual app instance or request_confirmation method not found.")
-        console.print("[warning]AUTO-APPROVED (UI limitation).[/warning]")
-        return ("approved", current_value_for_modification)
-
-    try:
-        user_selected_key = await app.request_confirmation(
-            message=prompt_message, choices="ynac", default=default_choice_key
-        )
-        if user_selected_key is None:
-            console.print("[info]Operation cancelled.[/info]")
-            return ("cancelled", None)
-        
-        # Normalize input to handle variations (Y, y, Yes, yes, etc.)
-        user_input_lower = user_selected_key.lower().strip()
-        
-        # Check for "yes" variations
-        if user_input_lower in ["y", "yes"]:
-            return ("approved", current_value_for_modification)
-        # Check for "no" variations  
-        elif user_input_lower in ["n", "no"]:
-            console.print("[info]Operation denied by user.[/info]")
-            return ("denied", None)
-        # Check for "approve all" variations
-        elif user_input_lower in ["a", "approve all", "all"]:
-            global _approve_all_active
-            async with _approve_all_lock:
-                _approve_all_active = True
-            _managed_print(console, "[info]'Approve All' activated for this session.[/info]")
-            return ("session_approved", current_value_for_modification)
-        # Check for "cancel" variations
-        elif user_input_lower in ["c", "cancel"]:
-            console.print("[info]Operation cancelled by user.[/info]")
-            return ("cancelled", None)
-        else:
-            logger.warning(f"Unexpected choice '{user_selected_key}'. Denying.")
-            console.print("[info]Operation denied (unexpected choice).[/info]")
-            return ("denied", None)
-    except Exception as e:
-        logger.error(f"Error in textual confirmation: {e}", exc_info=True)
-        console.print(f"[error]Error during confirmation: {e}[/]")
-        return ("cancelled", None)
 
 
 async def _request_confirmation_terminal(
@@ -318,22 +254,13 @@ async def request_confirmation(
     current_value_for_modification: Optional[str] = None,
     default_choice_key: str = "n",
 ) -> Tuple[ApprovalDecisionStatus, Optional[str]]:
-    if _is_textual_environment(console):
-        return await _request_confirmation_textual(
-            prompt_message,
-            console,
-            content_to_display,
-            current_value_for_modification,
-            default_choice_key,
-        )
-    else:
-        return await _request_confirmation_terminal(
-            prompt_message,
-            console,
-            content_to_display,
-            current_value_for_modification,
-            default_choice_key,
-        )
+    return await _request_confirmation_terminal(
+        prompt_message,
+        console,
+        content_to_display,
+        current_value_for_modification,
+        default_choice_key,
+    )
 
 
 async def get_user_choice_from_options_async(
