@@ -37,6 +37,8 @@ instructions: |
 
   As the supervisor, you coordinate specialist agents to help users with their requests.
 
+  ## Available Specialist Agents:
+  
   {team_members}
 
   ### How to Handle Requests:
@@ -76,6 +78,20 @@ output: |
   
   Do NOT create elaborate plans or lengthy explanations.
   Focus on coordination and user satisfaction.
+
+initial_prompt: |
+  **What would you like me to help you with?**
+
+goodbye_message: |
+  Goodbye! 👋
+
+interrupted_message: |
+  Workflow interrupted. Goodbye! 👋
+
+error_message_template: |
+  **Error:** {error}
+  
+  Please try again.
 
 context: |
   **User Context:**

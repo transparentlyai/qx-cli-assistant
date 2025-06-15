@@ -8,9 +8,10 @@ LiteLLM integration to work with langgraph-supervisor.
 import logging
 from typing import Any, Dict, List, Optional, Union
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, ToolCall
 from langchain_core.outputs import ChatResult, ChatGeneration
 from langchain_core.callbacks import CallbackManagerForLLMRun
+import json
 
 from qx.core.llm import QXLLMAgent
 from qx.cli.quote_bar_component import render_agent_markdown
@@ -25,6 +26,7 @@ class QXLiteLLMAdapter(BaseChatModel):
     
     qx_agent: Any  # The QX LLM agent instance
     agent_name: str = "unknown"  # Name of the agent
+    langchain_tools: List[Any] = []  # Additional tools bound by LangChain/LangGraph
     
     def __init__(self, qx_agent: QXLLMAgent, **kwargs):
         """Initialize with a QX LLM agent."""
@@ -57,6 +59,13 @@ class QXLiteLLMAdapter(BaseChatModel):
     ) -> ChatResult:
         """Generate a response using the QX agent."""
         try:
+            # Check if we have handoff tools bound
+            if self.langchain_tools:
+                logger.info(f"Processing with {len(self.langchain_tools)} LangChain tools available")
+                # For now, just log - we need to figure out how to use them
+                for tool in self.langchain_tools:
+                    logger.debug(f"Available tool: {getattr(tool, 'name', 'unknown')}")
+            
             # Convert LangChain messages to QX format
             qx_messages = []
             user_input = ""
@@ -79,6 +88,34 @@ class QXLiteLLMAdapter(BaseChatModel):
                         user_input = msg.get("content", "")
                         break
                         
+            # Prepare tools for QX agent if we have handoff tools
+            if self.langchain_tools:
+                # Convert LangChain tools to QX tool format
+                for tool in self.langchain_tools:
+                    tool_name = getattr(tool, 'name', None)
+                    # Check if tool already exists in agent's schema
+                    existing_tool_names = [t['function']['name'] for t in self.qx_agent._openai_tools_schema]
+                    if tool_name and tool_name not in existing_tool_names:
+                        tool_desc = {
+                            "name": tool_name,
+                            "description": getattr(tool, 'description', f"Tool: {tool_name}"),
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "task_description": {
+                                        "type": "string",
+                                        "description": "Description of the task to delegate"
+                                    }
+                                },
+                                "required": []
+                            }
+                        }
+                        # Add to OpenAI tools schema format
+                        self.qx_agent._openai_tools_schema.append({
+                            "type": "function",
+                            "function": tool_desc
+                        })
+            
             # Call QX agent's run method
             result = await self.qx_agent.run(
                 user_input=user_input,
@@ -86,18 +123,33 @@ class QXLiteLLMAdapter(BaseChatModel):
                 add_user_message_to_history=False  # Already in messages
             )
             
-            # Extract response
+            # Extract response and check for tool calls
             response_text = result.output if hasattr(result, 'output') else str(result)
+            tool_calls = []
             
-            # Display the response using QX's BorderedMarkdown
-            # Note: The QX agent already displays its output, so we might not need this
-            # Keeping it commented for now to avoid duplicate output
-            # agent_color = getattr(self.qx_agent, 'agent_color', None)
-            # render_agent_markdown(response_text, self.agent_name, agent_color=agent_color)
+            # Check if QX agent made tool calls
+            if hasattr(result, 'tool_calls') and result.tool_calls:
+                for tc in result.tool_calls:
+                    if tc.get('name', '').startswith('transfer_to_'):
+                        tool_calls.append(ToolCall(
+                            name=tc['name'],
+                            args=tc.get('args', {}),
+                            id=tc.get('id', f"call_{tc['name']}")
+                        ))
             
-            # Create LangChain response
+            # Create LangChain response message
+            if tool_calls:
+                # If there are tool calls, create a message with them
+                ai_message = AIMessage(
+                    content=response_text,
+                    tool_calls=tool_calls
+                )
+            else:
+                # Regular message without tool calls
+                ai_message = AIMessage(content=response_text)
+            
             generation = ChatGeneration(
-                message=AIMessage(content=response_text),
+                message=ai_message,
                 generation_info={"agent_name": self.agent_name}
             )
             
@@ -124,13 +176,37 @@ class QXLiteLLMAdapter(BaseChatModel):
     def bind_tools(self, tools: List[Any], **kwargs) -> "QXLiteLLMAdapter":
         """Bind tools to the model.
         
-        This is required by LangGraph but we handle tools differently in QX.
-        Tools are already bound to the QX agent during initialization.
-        We return self to maintain compatibility.
+        This is required by LangGraph. We need to add these tools
+        to the QX agent so it can use them.
         """
-        # QX agents already have their tools configured during initialization
-        # We don't need to rebind them here
-        logger.debug(f"bind_tools called with {len(tools) if tools else 0} tools - QX tools already configured")
+        logger.debug(f"bind_tools called with {len(tools) if tools else 0} tools")
+        # Store the LangChain tools
+        self.langchain_tools = tools or []
+        
+        if tools and hasattr(self.qx_agent, '_tool_functions'):
+            # Add handoff tools to the QX agent's tool list
+            for tool in tools:
+                tool_name = getattr(tool, 'name', None)
+                if tool_name and tool_name.startswith('transfer_to_'):
+                    logger.info(f"Adding handoff tool to QX agent: {tool_name}")
+                    # Create a QX-compatible tool description
+                    tool_description = {
+                        "name": tool_name,
+                        "description": getattr(tool, 'description', f"Transfer to {tool_name.replace('transfer_to_', '')}"),
+                        "parameters": {
+                            "type": "object",
+                            "properties": {},
+                            "required": []
+                        }
+                    }
+                    # Add to agent's OpenAI tools schema
+                    if hasattr(self.qx_agent, '_openai_tools_schema'):
+                        self.qx_agent._openai_tools_schema.append({
+                            "type": "function",
+                            "function": tool_description
+                        })
+                        logger.info(f"Added tool {tool_name} to agent's tool list")
+                    
         return self
 
 
