@@ -81,29 +81,42 @@ class QXToolAdapter:
             args_schema=tool_schema
         )
     
-    def load_tools_for_agent(self, agent_name: str) -> List[Tool]:
+    def load_tools_for_agent(self, agent_name: str, agent_config=None) -> List[Tool]:
         """
         Load all tools available for a specific agent.
         
         Args:
             agent_name: Name of the agent
+            agent_config: Optional agent configuration with tools list
             
         Returns:
             List of LangChain Tools
         """
         tools = []
+        tool_names = []
         
-        # Map agent names to their typical tools
-        agent_tool_mapping = {
-            "full_stack_swe": [
-                "write_file", "read_file", "execute_shell", 
-                "worktree_manager", "web_fetch"
-            ],
-            "qx-director": [],  # Director typically doesn't need tools
-            # Add more agent-tool mappings as needed
-        }
-        
-        tool_names = agent_tool_mapping.get(agent_name, [])
+        # First try to get tools from agent config if provided
+        if agent_config and hasattr(agent_config, 'tools'):
+            # Convert tool names from YAML format (e.g., 'read_file_tool' -> 'read_file')
+            for tool_name in agent_config.tools:
+                # Remove '_tool' suffix if present
+                clean_name = tool_name.replace('_tool', '') if tool_name.endswith('_tool') else tool_name
+                tool_names.append(clean_name)
+        else:
+            # Fallback to hardcoded mappings for backward compatibility
+            agent_tool_mapping = {
+                "full_stack_swe": [
+                    "write_file", "read_file", "execute_shell", 
+                    "worktree_manager", "web_fetch"
+                ],
+                "qx-director": [],  # Director typically doesn't need base tools in team mode
+                "qx": [
+                    "read_file", "write_file", "web_fetch", 
+                    "current_time", "execute_shell"
+                ],
+                # Add more agent-tool mappings as needed
+            }
+            tool_names = agent_tool_mapping.get(agent_name, [])
         
         for tool_name in tool_names:
             try:

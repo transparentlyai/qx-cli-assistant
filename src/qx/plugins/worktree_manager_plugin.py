@@ -28,6 +28,7 @@ class WorktreeManagerInput(BaseModel):
     action: str = Field(description="Action to perform: 'list', 'create', or 'remove'.")
     path: Optional[str] = Field(default=None, description="Path for the new worktree (for 'create') or the worktree to remove (for 'remove'.")
     branch: Optional[str] = Field(default=None, description="Branch to check out in the new worktree. Defaults to the current branch if not specified.")
+    new_branch: Optional[str] = Field(default=None, description="Name of the new branch to create and check out in the new worktree.")
     force: bool = Field(default=False, description="Force removal of the worktree, even if it has uncommitted changes.")
 
 class WorktreeManagerOutput(BaseModel):
@@ -51,7 +52,7 @@ async def _run_git_command(command: str) -> CommandOutput:
     )
 
 def _parse_worktree_list(output: str) -> List[Worktree]:
-    """Parses the output of 'git worktree list --porcelain'รูปแบบ."""
+    """Parses the output of 'git worktree list --porcelain'."""
     worktrees: List[Worktree] = []
     if not output:
         return worktrees
@@ -95,15 +96,22 @@ async def worktree_manager_tool(
     elif args.action == "create":
         if not args.path:
             return WorktreeManagerOutput(success=False, error="The 'path' parameter is required for the 'create' action.")
+        if args.branch and args.new_branch:
+            return WorktreeManagerOutput(success=False, error="The 'branch' and 'new_branch' parameters cannot be used together.")
 
         if not re.match(r'^[\w\-\_\./]+$', args.path):
             return WorktreeManagerOutput(success=False, error=f"Invalid path specified: {args.path}")
         
         if args.branch and not re.match(r'^[\w\-\_\./]+$', args.branch):
              return WorktreeManagerOutput(success=False, error=f"Invalid branch name specified: {args.branch}")
+        
+        if args.new_branch and not re.match(r'^[\w\-\_\./]+$', args.new_branch):
+             return WorktreeManagerOutput(success=False, error=f"Invalid new branch name specified: {args.new_branch}")
 
         command = f"git worktree add {args.path}"
-        if args.branch:
+        if args.new_branch:
+            command += f" -b {args.new_branch}"
+        elif args.branch:
             command += f" {args.branch}"
             
         status, _ = await approval_handler.request_approval(
