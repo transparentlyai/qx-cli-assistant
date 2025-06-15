@@ -2,7 +2,7 @@
 Tool adapter to integrate QX's tool plugin system with LangGraph agents.
 
 This module bridges QX's dynamic tool system with the tool format expected
-by langgraph-supervisor's create_react_agent.
+by LangGraph agents.
 """
 
 import logging
@@ -11,7 +11,6 @@ from langchain_core.tools import Tool
 from pydantic import BaseModel
 
 from qx.core.console_manager import get_console_manager
-from qx.core.workflow_context import get_workflow_context
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +20,6 @@ class QXToolAdapter:
     
     def __init__(self):
         self.console_manager = get_console_manager()
-        self._tool_registry = {}
         
     def create_langchain_tool(self, 
                             tool_name: str, 
@@ -36,37 +34,25 @@ class QXToolAdapter:
             tool_schema: Pydantic model for tool arguments
             
         Returns:
-            LangChain Tool compatible with create_react_agent
+            LangChain Tool compatible with LangGraph agents
         """
         
         async def wrapped_tool_func(**kwargs):
             """Wrapper that handles QX-specific tool execution."""
-            try:
-                # Get workflow context if available
-                workflow_context = await get_workflow_context()
-                
-                # Prepare arguments for QX tool
-                tool_args = {
-                    'console': self.console_manager,
-                    'args': tool_schema(**kwargs) if tool_schema else kwargs
-                }
-                
-                # Add workflow context if tool supports it
-                if workflow_context:
-                    tool_args['workflow_context'] = workflow_context
-                    
-                # Execute the tool
-                result = await tool_func(**tool_args)
-                
-                # Convert result to string if needed
-                if hasattr(result, 'model_dump_json'):
-                    return result.model_dump_json()
-                else:
-                    return str(result)
-                    
-            except Exception as e:
-                logger.error(f"Error executing tool {tool_name}: {e}", exc_info=True)
-                return f"Error: {str(e)}"
+            # Prepare arguments for QX tool
+            tool_args = {
+                'console': self.console_manager,
+                'args': tool_schema(**kwargs) if tool_schema else kwargs
+            }
+            
+            # Execute the tool
+            result = await tool_func(**tool_args)
+            
+            # Convert result to string if needed
+            if hasattr(result, 'model_dump_json'):
+                return result.model_dump_json()
+            else:
+                return str(result)
         
         # Create tool description
         description = f"QX tool: {tool_name}"
@@ -95,7 +81,7 @@ class QXToolAdapter:
         tools = []
         tool_names = []
         
-        # First try to get tools from agent config if provided
+        # Get tools from agent config
         if agent_config and hasattr(agent_config, 'tools'):
             # Convert tool names from YAML format (e.g., 'read_file_tool' -> 'read_file')
             for tool_name in agent_config.tools:
@@ -103,36 +89,24 @@ class QXToolAdapter:
                 clean_name = tool_name.replace('_tool', '') if tool_name.endswith('_tool') else tool_name
                 tool_names.append(clean_name)
         else:
-            # Fallback to hardcoded mappings for backward compatibility
-            agent_tool_mapping = {
-                "full_stack_swe": [
-                    "write_file", "read_file", "execute_shell", 
-                    "worktree_manager", "web_fetch"
-                ],
-                "qx-director": [],  # Director typically doesn't need base tools in team mode
-                "qx": [
-                    "read_file", "write_file", "web_fetch", 
-                    "current_time", "execute_shell"
-                ],
-                # Add more agent-tool mappings as needed
-            }
-            tool_names = agent_tool_mapping.get(agent_name, [])
+            # No tools specified in agent config
+            logger.warning(f"Agent '{agent_name}' has no tools specified in configuration")
+            return []
         
         for tool_name in tool_names:
-            try:
-                # Get tool from QX's plugin system
-                tool_func, tool_schema = self._get_qx_tool(tool_name)
-                if tool_func:
-                    tool = self.create_langchain_tool(tool_name, tool_func, tool_schema)
-                    tools.append(tool)
-                    logger.debug(f"Loaded tool '{tool_name}' for agent '{agent_name}'")
-            except Exception as e:
-                logger.error(f"Failed to load tool '{tool_name}': {e}")
+            # Get tool from QX's plugin system
+            tool_func, tool_schema = self._get_qx_tool(tool_name)
+            if not tool_func:
+                raise ValueError(f"Tool '{tool_name}' not found for agent '{agent_name}'")
+            
+            tool = self.create_langchain_tool(tool_name, tool_func, tool_schema)
+            tools.append(tool)
+            logger.debug(f"Loaded tool '{tool_name}' for agent '{agent_name}'")
                 
         logger.info(f"Loaded {len(tools)} tools for agent '{agent_name}'")
         return tools
     
-    def _get_qx_tool(self, tool_name: str) -> tuple[Optional[Callable], Optional[BaseModel]]:
+    def _get_qx_tool(self, tool_name: str) -> tuple[Callable, BaseModel]:
         """
         Get a QX tool function and its schema.
         
@@ -141,34 +115,32 @@ class QXToolAdapter:
             
         Returns:
             Tuple of (tool_function, argument_schema)
+            
+        Raises:
+            ValueError: If tool is not found
+            ImportError: If tool module cannot be imported
         """
-        try:
-            # Import the specific plugin module
-            if tool_name == "write_file":
-                from qx.plugins.write_file_plugin import write_file_tool, WriteFilePluginInput
-                return write_file_tool, WriteFilePluginInput
-            elif tool_name == "read_file":
-                from qx.plugins.read_file_plugin import read_file_tool, ReadFilePluginInput
-                return read_file_tool, ReadFilePluginInput
-            elif tool_name == "execute_shell":
-                from qx.plugins.execute_shell_plugin import execute_shell_tool, ExecuteShellPluginInput
-                return execute_shell_tool, ExecuteShellPluginInput
-            elif tool_name == "web_fetch":
-                from qx.plugins.web_fetch_plugin import web_fetch_tool, WebFetchPluginInput
-                return web_fetch_tool, WebFetchPluginInput
-            elif tool_name == "worktree_manager":
-                from qx.plugins.worktree_manager_plugin import worktree_manager_tool, WorktreeManagerPluginInput
-                return worktree_manager_tool, WorktreeManagerPluginInput
-            elif tool_name == "current_time":
-                from qx.plugins.current_time_plugin import current_time_tool, CurrentTimePluginInput
-                return current_time_tool, CurrentTimePluginInput
-            else:
-                logger.warning(f"Tool '{tool_name}' not found in plugin registry")
-                return None, None
-                
-        except ImportError as e:
-            logger.error(f"Failed to import tool '{tool_name}': {e}")
-            return None, None
+        # Import the specific plugin module
+        if tool_name == "write_file":
+            from qx.plugins.write_file_plugin import write_file_tool, WriteFilePluginInput
+            return write_file_tool, WriteFilePluginInput
+        elif tool_name == "read_file":
+            from qx.plugins.read_file_plugin import read_file_tool, ReadFilePluginInput
+            return read_file_tool, ReadFilePluginInput
+        elif tool_name == "execute_shell":
+            from qx.plugins.execute_shell_plugin import execute_shell_tool, ExecuteShellPluginInput
+            return execute_shell_tool, ExecuteShellPluginInput
+        elif tool_name == "web_fetch":
+            from qx.plugins.web_fetch_plugin import web_fetch_tool, WebFetchPluginInput
+            return web_fetch_tool, WebFetchPluginInput
+        elif tool_name == "worktree_manager":
+            from qx.plugins.worktree_manager_plugin import worktree_manager_tool, WorktreeManagerPluginInput
+            return worktree_manager_tool, WorktreeManagerPluginInput
+        elif tool_name == "current_time":
+            from qx.plugins.current_time_plugin import current_time_tool, CurrentTimePluginInput
+            return current_time_tool, CurrentTimePluginInput
+        else:
+            raise ValueError(f"Tool '{tool_name}' not found in plugin registry")
 
 
 # Singleton instance

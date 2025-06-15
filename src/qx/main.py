@@ -125,13 +125,8 @@ async def _async_main(
                     )
 
             except Exception as e:
-                logger.warning(f"Agent-based initialization failed: {e}")
-                logger.info("Falling back to legacy system prompt loading")
-                # Fallback to legacy initialization
-                fallback_llm_agent: Optional[
-                    QXLLMAgent
-                ] = await initialize_agent_with_mcp(config_manager.mcp_manager)
-                llm_agent = fallback_llm_agent
+                logger.error(f"Agent-based initialization failed: {e}")
+                raise
 
             # Get QX_KEEP_SESSIONS from environment, default to 20 if not set or invalid
             try:
@@ -372,8 +367,8 @@ def main():
         themed_console.print("\nQx terminated by user.")
         sys.exit(0)
     except Exception as e:
-        fallback_logger = logging.getLogger("qx.critical")
-        fallback_logger.critical(f"Critical error running QX: {e}", exc_info=True)
+        logger = logging.getLogger("qx.critical")
+        logger.critical(f"Critical error running QX: {e}", exc_info=True)
         from qx.cli.theme import themed_console
 
         themed_console.print(f"[critical]Critical error running QX:[/] {e}")
