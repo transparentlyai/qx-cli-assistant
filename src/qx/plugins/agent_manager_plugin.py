@@ -14,7 +14,6 @@ from rich.table import Table
 from rich.panel import Panel
 
 # Import only types at module level to avoid circular dependencies
-from qx.core.autonomous_agent import AutonomousTask, TaskPriority
 
 logger = logging.getLogger(__name__)
 
@@ -164,25 +163,6 @@ class ReloadAgentOutput(BaseModel):
     reloaded_from: Optional[str] = None
 
 
-class AddAutonomousTaskInput(BaseModel):
-    """Input parameters for adding autonomous task."""
-
-    agent_name: str = Field(description="Name of the autonomous agent to add task to")
-    description: str = Field(description="Short description of the task")
-    content: str = Field(description="Detailed task instructions")
-    priority: str = Field(
-        default="medium",
-        description="Task priority: 'low', 'medium', 'high', or 'urgent'",
-    )
-    timeout: int = Field(default=300, description="Task timeout in seconds")
-
-
-class AddAutonomousTaskOutput(BaseModel):
-    """Output for autonomous task addition."""
-
-    success: bool
-    message: str
-    task_id: Optional[str] = None
 
 
 # Tool Functions
@@ -528,49 +508,3 @@ async def reload_agent_tool(
         return ReloadAgentOutput(success=False, message=error_msg)
 
 
-async def add_autonomous_task_tool(
-    console: RichConsole, args: AddAutonomousTaskInput
-) -> AddAutonomousTaskOutput:
-    """Add a task to an autonomous agent's queue."""
-    try:
-        # Note: This is a placeholder for future autonomous task management
-        # For now, we'll just validate the input and prepare for implementation
-
-        # Validate priority
-        try:
-            priority = TaskPriority(args.priority.lower())
-        except ValueError:
-            return AddAutonomousTaskOutput(
-                success=False,
-                message=f"Invalid priority '{args.priority}'. Must be one of: low, medium, high, urgent",
-            )
-
-        # Create task
-        task = AutonomousTask(
-            id=str(uuid.uuid4()),
-            description=args.description,
-            content=args.content,
-            priority=priority,
-            timeout=args.timeout,
-        )
-
-        _managed_plugin_print(
-            f"Task '{task.description}' prepared for autonomous agent '{args.agent_name}'",
-            style="blue",
-        )
-
-        # TODO: Integrate with actual autonomous agent task queue
-        # This would require extending the agent manager to access running autonomous agents
-
-        return AddAutonomousTaskOutput(
-            success=True,
-            message=f"Task added to autonomous agent '{args.agent_name}' (placeholder implementation)",
-            task_id=task.id,
-        )
-
-    except Exception as e:
-        error_msg = f"Failed to add autonomous task: {e}"
-        logger.error(error_msg, exc_info=True)
-        _managed_plugin_print(error_msg, style="red")
-
-        return AddAutonomousTaskOutput(success=False, message=error_msg)

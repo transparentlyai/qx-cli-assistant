@@ -13,7 +13,7 @@ from openai.types.chat import (
     ChatCompletionSystemMessageParam,
 )
 
-from qx.cli.inline_mode import _handle_llm_interaction, _run_inline_mode
+from qx.cli.qpromp import _handle_llm_interaction, _run_inline_mode
 from qx.cli.session_selector import select_session
 from qx.cli.version import QX_VERSION, display_version_info
 from qx.core.config_manager import ConfigManager
@@ -57,7 +57,6 @@ async def _async_main(
             # Configure logging after config is loaded so QX_LOG_LEVEL is available
             configure_logging()
 
-            logger.debug("Using Textual interface.")
 
             syntax_theme_from_env = os.getenv("QX_SYNTAX_HIGHLIGHT_THEME")
             code_theme_to_use = (
