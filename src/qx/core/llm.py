@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, Type, cast
 
 import httpx
+from litellm import acompletion
 from openai.types.chat import (
     ChatCompletionMessageParam,
     ChatCompletionSystemMessageParam,
@@ -24,8 +25,6 @@ from qx.core.llm_components.config import configure_litellm
 from qx.core.llm_components.messages import MessageCache
 from qx.core.llm_components.streaming import StreamingHandler
 from qx.core.llm_components.tools import ToolProcessor
-from qx.core.llm_components.fallbacks import FallbackHandler, LiteLLMCaller
-# Debug logger removed with old workflow
 
 
 class ConsoleProtocol(Protocol):
@@ -101,14 +100,12 @@ class QXLLMAgent:
                 f"QXLLMAgent: Registered tool function '{func.__name__}' with schema name '{function_def.get('name')}'"
             )
 
-        # Configure LiteLLM and get reliability settings
-        self._reliability_config = configure_litellm()
+        # Configure LiteLLM
+        configure_litellm()
 
         # Initialize handlers
-        self._litellm_caller = LiteLLMCaller(self._reliability_config)
         self._streaming_handler = StreamingHandler(
-            self._litellm_caller.make_litellm_call,
-            self._handle_timeout_fallback,
+            self._make_litellm_call,
             self._process_tool_calls_and_continue,
             console,
         )
@@ -126,15 +123,6 @@ class QXLLMAgent:
         self._tool_processor = ToolProcessor(
             self._tool_functions, self._tool_input_models, self.console, self.run
         )
-        self._fallback_handler = FallbackHandler(
-            self.model_name,
-            self.temperature,
-            self.max_output_tokens,
-            self._openai_tools_schema,
-            self._serialize_messages_efficiently,
-            self._process_tool_calls_and_continue,
-            self.console,
-        )
 
         logger.info(f"QXLLMAgent initialized with model: {self.model_name}")
         logger.info(f"Registered {len(self._tool_functions)} tool functions.")
@@ -143,11 +131,19 @@ class QXLLMAgent:
         if self.agent_name:
             logger.debug(f"Agent Context: name={self.agent_name}, color={self.agent_color}, tools={len(self._tool_functions)}")
 
-    async def _handle_timeout_fallback(self, messages, user_input, recursion_depth):
-        """Delegate to fallback handler."""
-        return await self._fallback_handler.handle_timeout_fallback(
-            messages, user_input, recursion_depth
-        )
+    async def _make_litellm_call(self, chat_params: Dict[str, Any]) -> Any:
+        """Make LiteLLM API call."""
+        # Remove None values to clean up parameters
+        clean_params = {k: v for k, v in chat_params.items() if v is not None}
+        
+        # Log if debug enabled
+        if os.environ.get("QX_LOG_LEVEL", "").upper() == "DEBUG":
+            logger.debug(f"Making LiteLLM call with model: {clean_params.get('model')}")
+            logger.debug(f"Retries: {clean_params.get('num_retries', 0)}")
+            logger.debug(f"Timeout: {clean_params.get('timeout', 'default')}")
+        
+        return await acompletion(**clean_params)
+
 
     async def _process_tool_calls_and_continue(
         self, response_message, messages, user_input, recursion_depth
@@ -157,9 +153,6 @@ class QXLLMAgent:
             response_message, messages, user_input, recursion_depth
         )
 
-    async def _make_litellm_call(self, chat_params):
-        """Delegate to LiteLLM caller."""
-        return await self._litellm_caller.make_litellm_call(chat_params)
 
     def _serialize_messages_efficiently(
         self, messages: List[ChatCompletionMessageParam]
@@ -326,15 +319,6 @@ class QXLLMAgent:
         # Add retry configuration
         chat_params["num_retries"] = int(os.environ.get("QX_NUM_RETRIES", "3"))
 
-        # Add fallback models if configured
-        if self._reliability_config.fallback_models:
-            chat_params["fallbacks"] = self._reliability_config.fallback_models
-
-        # Add context window fallback if configured
-        if self._reliability_config.context_window_fallbacks:
-            chat_params["context_window_fallback_dict"] = (
-                self._reliability_config.context_window_fallbacks
-            )
 
         try:
             if self.enable_streaming:
@@ -352,17 +336,8 @@ class QXLLMAgent:
                     chat_params, messages, user_input, _recursion_depth
                 )
             else:
-                try:
-                    response = await self._litellm_caller.make_litellm_call(chat_params)
-                    response_message = response.choices[0].message
-                except (asyncio.TimeoutError, httpx.TimeoutException):
-                    # After retries failed, try "try again" message
-                    return await self._fallback_handler.handle_timeout_fallback(
-                        messages, user_input, _recursion_depth
-                    )
-                except Exception as e:
-                    logger.error(f"Non-streaming API call failed: {e}")
-                    raise
+                response = await self._make_litellm_call(chat_params)
+                response_message = response.choices[0].message
 
                 # Log the received message if QX_LOG_RECEIVED is set
                 if os.getenv("QX_LOG_RECEIVED"):

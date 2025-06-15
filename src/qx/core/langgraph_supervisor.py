@@ -1,19 +1,15 @@
 """
 Simplified LangGraph Supervisor implementation using langgraph-supervisor library.
 
-This module implements the proper supervisor pattern where:
-- All agents are defined in YAML (no hardcoded director)
-- Uses create_supervisor() and create_react_agent() from the library
-- Leverages built-in handoff mechanisms
+This module implements the supervisor pattern where:
+- All agents are defined in YAML
+- Leverages handoff mechanisms for agent delegation
 - Maintains QX's constraints (liteLLM, console manager, tool plugins, etc.)
 """
 
-import asyncio
 import logging
-import time
 import uuid
 from typing import Dict, List, Optional, Any
-from pathlib import Path
 
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langgraph.checkpoint.memory import InMemorySaver
@@ -25,17 +21,13 @@ import operator
 
 # Import langgraph-supervisor components
 from langgraph_supervisor import create_handoff_tool
-from langgraph.prebuilt import create_react_agent
-from langgraph.types import interrupt, Command
+from langgraph.types import Command
 
-from qx.core.team_manager import get_team_manager, TeamManager, TeamMember
+from qx.core.team_manager import get_team_manager, TeamMember
 from qx.core.config_manager import ConfigManager
 from qx.core.console_manager import get_console_manager
-from qx.core.workflow_context import get_workflow_context
-from qx.core.interrupt_bridge import get_interrupt_bridge
 from qx.core.langgraph_tool_adapter import get_tool_adapter
 from qx.core.langgraph_model_adapter import create_langchain_model
-from qx.core.langgraph_interrupt_adapter import get_interrupt_adapter
 from qx.core.llm_utils import initialize_agent_with_mcp
 from qx.core.mcp_manager import MCPManager
 
@@ -55,7 +47,7 @@ class TeamState(MessagesState):
 
 class UnifiedWorkflow:
     """
-    Simplified unified workflow using langgraph-supervisor library.
+    Unified workflow implementing the LangGraph supervisor pattern for team mode.
     """
     
     def __init__(self, config_manager: ConfigManager):
@@ -111,16 +103,15 @@ class UnifiedWorkflow:
                 langchain_model = create_langchain_model(llm_agent)
                 langchain_model.agent_name = agent_name  # Set agent name for display
                     
-                # Create the agent using create_react_agent
-                agent = create_react_agent(
-                    model=langchain_model,
-                    tools=tools,
-                    name=agent_name,
-                    prompt=agent_prompt
-                )
+                # Use the model directly - agents invoke their models with messages
+                agent = langchain_model
                 
-                # Invoke the agent with current state
-                result = await agent.ainvoke(state)
+                # Invoke the model with current state messages
+                messages = state.get("messages", [])
+                system_msg = SystemMessage(content=agent_prompt)
+                full_messages = [system_msg] + messages
+                response = await langchain_model.ainvoke(full_messages)
+                result = {"messages": [response]}
                 
                 # Extract the response
                 if "messages" in result and result["messages"]:
@@ -177,8 +168,7 @@ class UnifiedWorkflow:
             
             team_members = self.team_manager.get_team_members()
             if not team_members:
-                logger.warning("No team members found")
-                return False
+                raise ValueError("No team members found. Add agents to your team first.")
                 
             # Build the graph using StateGraph
             builder = StateGraph(TeamState)
@@ -208,12 +198,10 @@ class UnifiedWorkflow:
                     handoff_tools.append(handoff_tool)
                     
             if not director_config:
-                logger.error("qx-director not found in team configuration")
-                return False
+                raise ValueError("qx-director not found in team configuration. The director agent is required.")
                 
             if not agent_nodes:
-                logger.error("No specialist agents could be created")
-                return False
+                raise ValueError("No specialist agents could be created. Team must have at least one agent besides the director.")
                 
             logger.info(f"Created {len(agent_nodes)} specialist agent nodes")
             
@@ -238,6 +226,9 @@ class UnifiedWorkflow:
                     # Create supervisor prompt
                     supervisor_prompt = f"{director_role}\n\n{director_instructions}"
                     
+                    # Log the prompt for debugging
+                    logger.debug(f"Supervisor prompt: {supervisor_prompt[:200]}...")
+                    
                     # Get MCP manager
                     mcp_manager = getattr(self.config_manager, 'mcp_manager', None)
                     if not mcp_manager:
@@ -245,32 +236,46 @@ class UnifiedWorkflow:
                         task_group = getattr(self.config_manager, 'task_group', None)
                         mcp_manager = MCPManager(console, task_group)
                     
-                    # Create supervisor LLM (without base tools, only handoff tools)
-                    temp_config = director_config.copy()
-                    temp_config.tools = []  # Clear base tools
+                    # Create a minimal supervisor LLM agent
+                    # We'll use only the supervisor prompt, not the full QX agent prompt
+                    from qx.core.llm import QXLLMAgent
                     
-                    supervisor_llm_agent = await initialize_agent_with_mcp(
-                        mcp_manager=mcp_manager,
-                        agent_config=temp_config
+                    # Get the proper console from console manager
+                    console = getattr(self.console_manager, '_default_console', None)
+                    if not console:
+                        from qx.cli.theme import themed_console
+                        console = themed_console
+                    
+                    supervisor_llm_agent = QXLLMAgent(
+                        model_name=getattr(director_config.model, 'name', 'openrouter/google/gemini-2.5-pro-preview-06-05'),
+                        system_prompt=supervisor_prompt,  # Use only supervisor prompt
+                        tools=[],  # No base tools
+                        console=console,
+                        temperature=getattr(director_config.model.parameters, 'temperature', 0.7),
+                        agent_name="qx-director",
+                        agent_color=getattr(director_config, 'color', '#ff5f00')
                     )
-                    
-                    if not supervisor_llm_agent:
-                        raise Exception("Failed to create supervisor LLM")
                     
                     # Create LangChain model and bind handoff tools
                     supervisor_model = create_langchain_model(supervisor_llm_agent)
                     supervisor_model = supervisor_model.bind_tools(handoff_tools)
                     
-                    # Create the supervisor agent
-                    supervisor_agent = create_react_agent(
-                        model=supervisor_model,
-                        tools=handoff_tools,
-                        name="qx-director",
-                        prompt=supervisor_prompt
-                    )
+                    # Instead of using create_react_agent, directly invoke the model
+                    # This gives us more control over the behavior
+                    messages = state.get("messages", [])
                     
-                    # Invoke supervisor
-                    result = await supervisor_agent.ainvoke(state)
+                    # Add system message with supervisor prompt
+                    system_message = SystemMessage(content=supervisor_prompt)
+                    full_messages = [system_message] + messages
+                    
+                    # Invoke the model directly
+                    response = await supervisor_model.ainvoke(full_messages)
+                    
+                    # Create result with the response
+                    result = {
+                        "messages": [response],
+                        "active_agent": state.get("active_agent", "qx-director")
+                    }
                     
                     # Check if supervisor wants to end or delegate
                     if "messages" in result and result["messages"]:
@@ -290,23 +295,40 @@ class UnifiedWorkflow:
                         # Check for tool calls (delegation)
                         if hasattr(last_message, "tool_calls") and last_message.tool_calls:
                             for tool_call in last_message.tool_calls:
-                                if tool_call.get("name", "").startswith("transfer_to_"):
-                                    agent_name = tool_call["name"].replace("transfer_to_", "")
+                                # Handle both dict and object formats
+                                if isinstance(tool_call, dict):
+                                    tool_name = tool_call.get("name", "")
+                                    tool_args = tool_call.get("args", {})
+                                else:
+                                    tool_name = getattr(tool_call, "name", "")
+                                    tool_args = getattr(tool_call, "args", {})
+                                    
+                                if tool_name.startswith("transfer_to_"):
+                                    agent_name = tool_name.replace("transfer_to_", "")
                                     if agent_name in agent_nodes:
+                                        task_desc = tool_args.get("task_description", "") if isinstance(tool_args, dict) else ""
                                         return Command(
                                             goto=agent_name,
                                             update={
                                                 "active_agent": agent_name,
-                                                "task_context": tool_call.get("args", {}).get("task_description", "")
+                                                "task_context": task_desc
                                             }
                                         )
                         
                         # Check for exit signals
                         content = last_message.content.lower() if hasattr(last_message, "content") else ""
                         if any(word in content for word in ["goodbye", "done", "completed", "finished"]):
-                            return Command(goto="__end__")
+                            return Command(goto=END)
                     
-                    # Default: continue conversation
+                    # If this is just a conversational response (no tool calls), end the current iteration
+                    # This prevents infinite recursion while keeping the conversation open
+                    if not (hasattr(last_message, "tool_calls") and last_message.tool_calls):
+                        return Command(
+                            goto=END,
+                            update={"messages": state["messages"] + result.get("messages", [])}
+                        )
+                    
+                    # Otherwise continue conversation
                     return Command(
                         goto="supervisor",  # Loop back to supervisor
                         update={"messages": state["messages"] + result.get("messages", [])}
@@ -320,7 +342,7 @@ class UnifiedWorkflow:
                         "qx-director",
                         agent_color="#ff5f00"
                     )
-                    return Command(goto="__end__")
+                    return Command(goto=END)
             
             # Add supervisor node
             builder.add_node("supervisor", supervisor_node)
@@ -347,16 +369,14 @@ class UnifiedWorkflow:
             
         except Exception as e:
             logger.error(f"❌ Failed to build workflow: {e}", exc_info=True)
-            return False
+            raise
     
     async def process_input(self, user_input: str = "", thread_id: Optional[str] = None) -> str:
         """Process user input through the workflow."""
         if not self.workflow_app:
             # Build workflow if not already built
             logger.warning("Workflow not initialized, building now...")
-            success = await self.build_team_workflow()
-            if not success:
-                return "Failed to initialize team workflow"
+            await self.build_team_workflow()
                 
         # Use existing thread or create new one
         if not thread_id:
@@ -411,10 +431,7 @@ class UnifiedWorkflow:
         logger.info("🎯 Starting continuous workflow mode")
         
         # Build workflow fresh for this session
-        success = await self.build_team_workflow()
-        if not success:
-            logger.error("Failed to build team workflow")
-            return
+        await self.build_team_workflow()
         
         # Initialize thread for conversation
         thread_id = str(uuid.uuid4())
@@ -529,8 +546,6 @@ class UnifiedWorkflow:
                 thread_id = str(uuid.uuid4())
 
 
-# Note: No singleton management - each team mode session gets a fresh instance
-# This ensures clean state without persisted conversations
 
 
 def get_unified_workflow(config_manager: ConfigManager) -> UnifiedWorkflow:

@@ -11,10 +11,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, ToolCall
 from langchain_core.outputs import ChatResult, ChatGeneration
 from langchain_core.callbacks import CallbackManagerForLLMRun
-import json
-
 from qx.core.llm import QXLLMAgent
-from qx.cli.quote_bar_component import render_agent_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -59,12 +56,9 @@ class QXLiteLLMAdapter(BaseChatModel):
     ) -> ChatResult:
         """Generate a response using the QX agent."""
         try:
-            # Check if we have handoff tools bound
+            # Log available tools if any
             if self.langchain_tools:
-                logger.info(f"Processing with {len(self.langchain_tools)} LangChain tools available")
-                # For now, just log - we need to figure out how to use them
-                for tool in self.langchain_tools:
-                    logger.debug(f"Available tool: {getattr(tool, 'name', 'unknown')}")
+                logger.debug(f"Processing with {len(self.langchain_tools)} LangChain tools available")
             
             # Convert LangChain messages to QX format
             qx_messages = []
@@ -72,7 +66,7 @@ class QXLiteLLMAdapter(BaseChatModel):
             
             for msg in messages:
                 if isinstance(msg, SystemMessage):
-                    # System messages are handled by agent's own prompt
+                    # Skip system messages - QX agents have their own system prompts
                     continue
                 elif isinstance(msg, HumanMessage):
                     qx_messages.append({"role": "user", "content": msg.content})
@@ -88,33 +82,7 @@ class QXLiteLLMAdapter(BaseChatModel):
                         user_input = msg.get("content", "")
                         break
                         
-            # Prepare tools for QX agent if we have handoff tools
-            if self.langchain_tools:
-                # Convert LangChain tools to QX tool format
-                for tool in self.langchain_tools:
-                    tool_name = getattr(tool, 'name', None)
-                    # Check if tool already exists in agent's schema
-                    existing_tool_names = [t['function']['name'] for t in self.qx_agent._openai_tools_schema]
-                    if tool_name and tool_name not in existing_tool_names:
-                        tool_desc = {
-                            "name": tool_name,
-                            "description": getattr(tool, 'description', f"Tool: {tool_name}"),
-                            "parameters": {
-                                "type": "object",
-                                "properties": {
-                                    "task_description": {
-                                        "type": "string",
-                                        "description": "Description of the task to delegate"
-                                    }
-                                },
-                                "required": []
-                            }
-                        }
-                        # Add to OpenAI tools schema format
-                        self.qx_agent._openai_tools_schema.append({
-                            "type": "function",
-                            "function": tool_desc
-                        })
+            # Tools are already bound via bind_tools method
             
             # Call QX agent's run method
             result = await self.qx_agent.run(
@@ -170,7 +138,7 @@ class QXLiteLLMAdapter(BaseChatModel):
         return {
             "agent_name": self.agent_name,
             "model_name": getattr(self.qx_agent, 'model_name', 'unknown'),
-            "qx_version": "litellm-adapter-v1"
+            "adapter_type": "qx-litellm"
         }
     
     def bind_tools(self, tools: List[Any], **kwargs) -> "QXLiteLLMAdapter":

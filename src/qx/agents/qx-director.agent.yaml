@@ -1,12 +1,9 @@
 # QX-DIRECTOR AGENT
-# This is the USER LAYER coordinator agent that can be manually selected by users.
-# It operates OUTSIDE the team graph and provides strategic planning and coordination.
+# This is the team supervisor agent used in team mode.
+# It coordinates specialist agents and handles user interactions.
 # Usage: `qx -a qx-director` or `/agents switch qx-director`
-# 
-# Distinguished from task_delegator.system.agent which is the SYSTEM LAYER
-# internal delegation engine that works within the LangGraph team graph.
 
-name: Qx Director
+name: qx-director
 description: Team Director and coordinator for multi-agent workflows
 specializations: ["task_coordination", "delegation", "synthesis", "project_management", "team_leadership"]
 
