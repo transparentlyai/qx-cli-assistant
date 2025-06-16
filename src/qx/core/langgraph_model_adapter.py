@@ -5,6 +5,7 @@ This module creates a LangChain-compatible model wrapper around QX's
 LiteLLM integration to work with langgraph-supervisor.
 """
 
+import json
 import logging
 from typing import Any, Dict, List, Optional, Union
 from langchain_core.language_models import BaseChatModel
@@ -78,39 +79,84 @@ class QXLiteLLMAdapter(BaseChatModel):
             # If no user input found, extract from messages
             if not user_input and qx_messages:
                 user_input = extract_last_user_input(qx_messages)
-                        
-            # Tools are already bound via bind_tools method
             
-            # Call QX agent's run method
-            result = await self.qx_agent.run(
-                user_input=user_input,
-                message_history=qx_messages[:-1] if qx_messages else [],  # Exclude current input
-                add_user_message_to_history=False  # Already in messages
-            )
-            
-            # Extract response and check for tool calls
-            response_text = result.output if hasattr(result, 'output') else str(result)
-            tool_calls = []
-            
-            # Check if QX agent made tool calls
-            if hasattr(result, 'tool_calls') and result.tool_calls:
-                for tc in result.tool_calls:
-                    if tc.get('name', '').startswith('transfer_to_'):
+            # For supervisor nodes, we need to handle tool calls differently
+            # We'll use QX's LLM integration through the agent's _make_litellm_call method
+            if self.langchain_tools and any(t.name.startswith('transfer_to_') for t in self.langchain_tools):
+                # This is a supervisor - use QX's LLM integration
+                
+                # Prepare messages for LLM
+                llm_messages = []
+                for msg in messages:
+                    if isinstance(msg, SystemMessage):
+                        llm_messages.append({"role": "system", "content": msg.content})
+                    elif isinstance(msg, HumanMessage):
+                        llm_messages.append({"role": "user", "content": msg.content})
+                    elif isinstance(msg, AIMessage):
+                        llm_messages.append({"role": "assistant", "content": msg.content})
+                
+                # Prepare tools for LLM
+                tools = []
+                for tool in self.langchain_tools:
+                    if hasattr(tool, 'name') and tool.name.startswith('transfer_to_'):
+                        tools.append({
+                            "type": "function",
+                            "function": {
+                                "name": tool.name,
+                                "description": getattr(tool, 'description', ''),
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        "task_description": {
+                                            "type": "string",
+                                            "description": "Description of the task to hand off"
+                                        }
+                                    },
+                                    "required": []
+                                }
+                            }
+                        })
+                
+                # Use QX's LLM integration through the agent's method
+                chat_params = {
+                    "model": self.qx_agent.model_name,
+                    "messages": llm_messages,
+                    "tools": tools if tools else None,
+                    "temperature": self.qx_agent.temperature,
+                    "stream": False
+                }
+                
+                # Call through QX's LLM integration
+                response = await self.qx_agent._make_litellm_call(chat_params)
+                
+                # Extract response
+                message = response.choices[0].message
+                response_text = message.content or ""
+                tool_calls = []
+                
+                if hasattr(message, 'tool_calls') and message.tool_calls:
+                    for tool_call in message.tool_calls:
                         tool_calls.append(ToolCall(
-                            name=tc['name'],
-                            args=tc.get('args', {}),
-                            id=tc.get('id', f"call_{tc['name']}")
+                            name=tool_call.function.name,
+                            args=json.loads(tool_call.function.arguments) if tool_call.function.arguments else {},
+                            id=tool_call.id
                         ))
-            
-            # Create LangChain response message
-            if tool_calls:
-                # If there are tool calls, create a message with them
-                ai_message = AIMessage(
-                    content=response_text,
-                    tool_calls=tool_calls
-                )
+                
+                # Create response message
+                if tool_calls:
+                    ai_message = AIMessage(content=response_text, tool_calls=tool_calls)
+                else:
+                    ai_message = AIMessage(content=response_text)
+                
             else:
-                # Regular message without tool calls
+                # Regular agent - use QX agent's run method
+                result = await self.qx_agent.run(
+                    user_input=user_input,
+                    message_history=qx_messages[:-1] if qx_messages else [],
+                    add_user_message_to_history=False
+                )
+                
+                response_text = result.output if hasattr(result, 'output') else str(result)
                 ai_message = AIMessage(content=response_text)
             
             generation = ChatGeneration(
@@ -148,20 +194,38 @@ class QXLiteLLMAdapter(BaseChatModel):
         # Store the LangChain tools
         self.langchain_tools = tools or []
         
-        if tools and hasattr(self.qx_agent, '_tool_functions'):
+        if tools:
+            # Initialize _openai_tools_schema if it doesn't exist
+            if not hasattr(self.qx_agent, '_openai_tools_schema'):
+                self.qx_agent._openai_tools_schema = []
+            
+            # Also ensure _tool_functions dict exists
+            if not hasattr(self.qx_agent, '_tool_functions'):
+                self.qx_agent._tool_functions = {}
+            
             # Add handoff tools to the QX agent's tool list
             for tool in tools:
                 tool_name = getattr(tool, 'name', None)
                 if tool_name and tool_name.startswith('transfer_to_'):
                     logger.info(f"Adding handoff tool to QX agent: {tool_name}")
                     # Create a QX-compatible tool description
+                    # For handoff tools, we need a simple schema
+                    # The langgraph-supervisor expects only a task_description parameter
+                    properties = {
+                        "task_description": {
+                            "type": "string",
+                            "description": "Description of the task to hand off"
+                        }
+                    }
+                    required = []  # task_description is optional
+                    
                     tool_description = {
                         "name": tool_name,
                         "description": getattr(tool, 'description', f"Transfer to {tool_name.replace('transfer_to_', '')}"),
                         "parameters": {
                             "type": "object",
-                            "properties": {},
-                            "required": []
+                            "properties": properties,
+                            "required": required
                         }
                     }
                     # Add to agent's OpenAI tools schema
@@ -171,6 +235,14 @@ class QXLiteLLMAdapter(BaseChatModel):
                             "function": tool_description
                         })
                         logger.info(f"Added tool {tool_name} to agent's tool list")
+                    
+                    # Add a dummy function for the handoff tool
+                    # This will be intercepted by LangGraph before actual execution
+                    async def handoff_function(**kwargs):
+                        return {"status": "handoff", "tool": tool_name, "args": kwargs}
+                    
+                    self.qx_agent._tool_functions[tool_name] = handoff_function
+                    logger.info(f"Added handoff function for {tool_name}")
                     
         return self
 
