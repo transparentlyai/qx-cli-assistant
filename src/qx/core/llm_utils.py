@@ -35,7 +35,7 @@ async def initialize_agent_with_mcp(
         current_agent_name = getattr(agent_config, "name", "")
         
         # Determine agent mode based on agent name
-        if current_agent_name == "qx.supervisor":
+        if current_agent_name == "qx-director":
             agent_mode = "supervisor"
         elif current_agent_name == "qx":
             agent_mode = "single"
@@ -93,16 +93,10 @@ async def initialize_agent_with_mcp(
     logger.debug(f"  Model Name: {model_name}")
     logger.debug(f"  Agent Config: {'Yes' if agent_config else 'No'}")
 
-    # Check if streaming is enabled via environment variable or agent config
-    if agent_config is not None:
-        # TODO: Add streaming config to agent schema if needed
-        enable_streaming = (
-            os.environ.get("QX_ENABLE_STREAMING", "true").lower() == "true"
-        )
-    else:
-        enable_streaming = (
-            os.environ.get("QX_ENABLE_STREAMING", "true").lower() == "true"
-        )
+    # Check if streaming is enabled via environment variable
+    enable_streaming = (
+        os.environ.get("QX_ENABLE_STREAMING", "true").lower() == "true"
+    )
 
     agent: Optional[QXLLMAgent] = initialize_llm_agent(
         model_name_str=model_name,

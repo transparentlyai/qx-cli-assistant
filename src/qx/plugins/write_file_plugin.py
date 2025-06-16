@@ -167,7 +167,7 @@ class WriteFilePluginOutput(BaseModel):
 async def write_file_tool(
     console: Console, args: WriteFilePluginInput
 ) -> WriteFilePluginOutput:
-    approval_handler = ApprovalHandler(themed_console)
+    approval_handler = ApprovalHandler(themed_console, use_console_manager=True)
     original_path = args.path
     expanded_path = os.path.expanduser(original_path)
     absolute_path = Path(expanded_path).resolve()

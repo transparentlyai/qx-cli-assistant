@@ -61,12 +61,10 @@ class StreamingHandler:
     def __init__(
         self,
         make_litellm_call_func: Callable,
-        handle_timeout_fallback_func: Callable,
         process_tool_calls_func: Callable,
         console: Any = None,
     ):
         self._make_litellm_call = make_litellm_call_func
-        self._handle_timeout_fallback = handle_timeout_fallback_func
         self._process_tool_calls_and_continue = process_tool_calls_func
         self._console = console
         self._current_agent_name: Optional[str] = None
@@ -223,13 +221,7 @@ class StreamingHandler:
             with console.status(
                 "[dim]Processing[/dim]", spinner="point", speed=2, refresh_per_second=25
             ) as status:
-                try:
-                    stream = await self._make_litellm_call(chat_params)
-                except (asyncio.TimeoutError, httpx.TimeoutException):
-                    status.stop()
-                    return await self._handle_timeout_fallback(
-                        messages, user_input, recursion_depth
-                    )
+                stream = await self._make_litellm_call(chat_params)
 
                 async for chunk in stream:
                     # Check for cancellation
@@ -499,39 +491,8 @@ class StreamingHandler:
                 except Exception:
                     pass  # Ignore errors closing stream
 
-            # Only fall back to non-streaming if we haven't accumulated any content
-            # This prevents losing partial responses that were already streamed
-            if not accumulated_content:
-                # Fall back to non-streaming
-                chat_params["stream"] = False
-                try:
-                    response = await self._make_litellm_call(chat_params)
-                    response_message = response.choices[0].message
-                    messages.append(response_message)
-
-                    if response_message.tool_calls:
-                        return await self._process_tool_calls_and_continue(
-                            response_message, messages, user_input, recursion_depth
-                        )
-                    else:
-                        return QXRunResult(response_message.content, messages)
-                except (asyncio.TimeoutError, httpx.TimeoutException):
-                    return await self._handle_timeout_fallback(
-                        messages, user_input, recursion_depth
-                    )
-                except Exception as fallback_error:
-                    logger.error(
-                        f"Fallback non-streaming also failed: {fallback_error}",
-                        exc_info=True,
-                    )
-                    return QXRunResult(
-                        "Error: Both streaming and fallback failed", messages
-                    )
-            else:
-                # We have partial content from streaming, continue with that
-                logger.warning(
-                    f"Streaming failed but recovered {len(accumulated_content)} characters of content"
-                )
+            # Re-raise the exception - no fallbacks
+            raise
 
         # After streaming, flush any remaining content
         remaining_content = markdown_buffer.flush()

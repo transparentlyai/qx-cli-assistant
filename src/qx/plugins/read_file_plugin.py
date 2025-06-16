@@ -139,7 +139,7 @@ async def read_file_tool(
     console: RichConsole,
     args: ReadFilePluginInput,
 ) -> ReadFilePluginOutput:
-    approval_handler = ApprovalHandler(themed_console)
+    approval_handler = ApprovalHandler(themed_console, use_console_manager=True)
     original_path = args.path
     expanded_path = os.path.expanduser(original_path)
     absolute_path = Path(expanded_path).resolve()

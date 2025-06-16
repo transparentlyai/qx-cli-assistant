@@ -13,7 +13,7 @@ from openai.types.chat import (
     ChatCompletionSystemMessageParam,
 )
 
-from qx.cli.inline_mode import _handle_llm_interaction, _run_inline_mode
+from qx.cli.qpromp import _handle_llm_interaction, _run_inline_mode
 from qx.cli.session_selector import select_session
 from qx.cli.version import QX_VERSION, display_version_info
 from qx.core.config_manager import ConfigManager
@@ -57,7 +57,6 @@ async def _async_main(
             # Configure logging after config is loaded so QX_LOG_LEVEL is available
             configure_logging()
 
-            logger.debug("Using Textual interface.")
 
             syntax_theme_from_env = os.getenv("QX_SYNTAX_HIGHLIGHT_THEME")
             code_theme_to_use = (
@@ -82,7 +81,7 @@ async def _async_main(
             
             # Determine default agent based on team mode state
             if team_mode_manager.is_team_mode_enabled():
-                default_agent_name = os.environ.get("QX_DEFAULT_AGENT", "qx.supervisor")
+                default_agent_name = os.environ.get("QX_DEFAULT_AGENT", "qx-director")
             else:
                 default_agent_name = os.environ.get("QX_DEFAULT_AGENT", "qx")
             try:
@@ -125,13 +124,8 @@ async def _async_main(
                     )
 
             except Exception as e:
-                logger.warning(f"Agent-based initialization failed: {e}")
-                logger.info("Falling back to legacy system prompt loading")
-                # Fallback to legacy initialization
-                fallback_llm_agent: Optional[
-                    QXLLMAgent
-                ] = await initialize_agent_with_mcp(config_manager.mcp_manager)
-                llm_agent = fallback_llm_agent
+                logger.error(f"Agent-based initialization failed: {e}")
+                raise
 
             # Get QX_KEEP_SESSIONS from environment, default to 20 if not set or invalid
             try:
@@ -301,8 +295,6 @@ async def _async_main(
 
 
 def main():
-    configure_logging()
-
     parser = argparse.ArgumentParser(
         description="Qx - A terminal-based agentic coding assistant with simplified interface."
     )
@@ -372,8 +364,8 @@ def main():
         themed_console.print("\nQx terminated by user.")
         sys.exit(0)
     except Exception as e:
-        fallback_logger = logging.getLogger("qx.critical")
-        fallback_logger.critical(f"Critical error running QX: {e}", exc_info=True)
+        logger = logging.getLogger("qx.critical")
+        logger.critical(f"Critical error running QX: {e}", exc_info=True)
         from qx.cli.theme import themed_console
 
         themed_console.print(f"[critical]Critical error running QX:[/] {e}")

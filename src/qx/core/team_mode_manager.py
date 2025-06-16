@@ -19,17 +19,22 @@ class TeamModeManager:
     def __init__(self):
         self._cached_state: Optional[bool] = None
         
-    def _get_project_config_path(self) -> Path:
-        """Get the project-specific team mode config path."""
-        project_path = Path.cwd() / ".Q" / "config" / "team-config.json"
-        project_path.parent.mkdir(parents=True, exist_ok=True)
-        return project_path
+    def _get_config_path(self, level: str = "project") -> Path:
+        """Get the config path for team mode settings.
         
-    def _get_user_config_path(self) -> Path:
-        """Get the user-level team mode config path."""
-        user_path = Path.home() / ".config" / "qx" / "team-config.json"
-        user_path.parent.mkdir(parents=True, exist_ok=True)
-        return user_path
+        Args:
+            level: Either "project" or "user"
+            
+        Returns:
+            Path to the config file
+        """
+        if level == "project":
+            path = Path.cwd() / ".Q" / "config" / "team-config.json"
+        else:  # user
+            path = Path.home() / ".config" / "qx" / "team-config.json"
+        
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
         
     def _load_config_from_file(self, config_path: Path) -> Optional[bool]:
         """Load team mode state from a config file."""
@@ -71,13 +76,13 @@ class TeamModeManager:
             return self._cached_state
             
         # Check project-specific setting first (highest priority)
-        project_state = self._load_config_from_file(self._get_project_config_path())
+        project_state = self._load_config_from_file(self._get_config_path("project"))
         if project_state is not None:
             self._cached_state = project_state
             return project_state
             
         # Check user-level setting
-        user_state = self._load_config_from_file(self._get_user_config_path())
+        user_state = self._load_config_from_file(self._get_config_path("user"))
         if user_state is not None:
             self._cached_state = user_state
             return user_state
@@ -97,7 +102,7 @@ class TeamModeManager:
         Returns:
             True if successfully saved, False otherwise
         """
-        config_path = self._get_project_config_path() if project_level else self._get_user_config_path()
+        config_path = self._get_config_path("project" if project_level else "user")
         
         success = self._save_config_to_file(config_path, enabled)
         if success:
@@ -128,11 +133,11 @@ class TeamModeManager:
         
     def get_config_source(self) -> str:
         """Get description of where the current team mode setting comes from."""
-        project_state = self._load_config_from_file(self._get_project_config_path())
+        project_state = self._load_config_from_file(self._get_config_path("project"))
         if project_state is not None:
             return "project (.Q/config/team-config.json)"
             
-        user_state = self._load_config_from_file(self._get_user_config_path())
+        user_state = self._load_config_from_file(self._get_config_path("user"))
         if user_state is not None:
             return "user (~/.config/qx/team-config.json)"
             

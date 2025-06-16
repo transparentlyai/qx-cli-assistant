@@ -9,6 +9,8 @@ import asyncio
 import json
 import logging
 import os
+import re
+import time
 from typing import Any, Dict, List, Optional, Set
 from pathlib import Path
 
@@ -79,39 +81,6 @@ class TeamMember:
         
         return min(score, 1.0)
 
-    def send_message(self, message: str, style: str = "info") -> None:
-        """Send a message to the user through the console."""
-        self.console_manager.print(
-            message, 
-            style=style, 
-            source_identifier=self.agent_name
-        )
-
-    def ask_for_input(self, prompt: str) -> str:
-        """Ask the user for input through the console."""
-        return self.console_manager.request_input_blocking(
-            prompt, 
-            source_identifier=self.agent_name
-        )
-
-    def ask_for_approval(self, action_description: str) -> bool:
-        """Ask the user for approval of an action."""
-        from qx.cli.theme import themed_console
-        response, _ = self.console_manager.request_approval_blocking(
-            action_description,
-            console=themed_console,
-            source_identifier=self.agent_name
-        )
-        return response == "approved"
-
-    def show_progress(self, task: str, status: str = "working") -> None:
-        """Show progress on a task."""
-        message = f"{task} - {status}"
-        self.console_manager.print(
-            message, 
-            style="dim yellow", 
-            source_identifier=self.agent_name
-        )
 
 
 class TeamManager:
@@ -122,31 +91,33 @@ class TeamManager:
         self._team_members: Dict[str, TeamMember] = {}
         self._load_team_from_storage()
         
-    def _get_team_storage_path(self) -> Path:
-        """Get the path where team composition is stored."""
+    def _get_storage_path(self, filename: str) -> Path:
+        """Get the storage path for team-related files.
+        
+        Args:
+            filename: Name of the file (e.g., 'team.json', 'teams.json')
+            
+        Returns:
+            Path to the file in the project directory
+        """
         # Store in the current project directory if possible, otherwise user config
-        project_path = Path.cwd() / ".Q" / "config" / "team.json"
-        user_path = Path.home() / ".config" / "qx" / "team.json"
+        project_path = Path.cwd() / ".Q" / "config" / filename
+        user_path = Path.home() / ".config" / "qx" / filename
         
         # Create directories if they don't exist
         project_path.parent.mkdir(parents=True, exist_ok=True)
         user_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Prefer project-specific team composition
+        # Prefer project-specific storage
         return project_path
+    
+    def _get_team_storage_path(self) -> Path:
+        """Get the path where team composition is stored."""
+        return self._get_storage_path("team.json")
 
     def _get_teams_storage_path(self) -> Path:
         """Get the path where all saved teams are stored."""
-        # Store in the current project directory if possible, otherwise user config
-        project_path = Path.cwd() / ".Q" / "config" / "teams.json"
-        user_path = Path.home() / ".config" / "qx" / "teams.json"
-        
-        # Create directories if they don't exist
-        project_path.parent.mkdir(parents=True, exist_ok=True)
-        user_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Prefer project-specific teams storage
-        return project_path
+        return self._get_storage_path("teams.json")
 
     def _load_team_from_storage(self, team_name: Optional[str] = None):
         """Load the team composition from persistent storage."""
@@ -156,35 +127,9 @@ class TeamManager:
         else:
             # Load current team
             team_file = self._get_team_storage_path()
-            if not team_file.exists():
-                return
-                
-            try:
-                with open(team_file, 'r') as f:
-                    team_data = json.load(f)
-                    
-                # Clear existing team first
-                self._team_members.clear()
-                    
-                # Reconstruct team members
-                agent_manager = get_agent_manager()
-                agents_data = team_data.get('agents', [])
-                
-                # Handle both old format (list) and new format (dict with instance counts)
-                if isinstance(agents_data, list):
-                    # Old format: just agent names
-                    for agent_name in agents_data:
-                        self._load_agent_member(agent_manager, agent_name, 1)
-                else:
-                    # New format: dict with instance counts
-                    for agent_name, agent_info in agents_data.items():
-                        instance_count = agent_info.get('instance_count', 1)
-                        self._load_agent_member(agent_manager, agent_name, instance_count)
-                        
-            except (json.JSONDecodeError, FileNotFoundError) as e:
-                logger.warning(f"Failed to load team from {team_file}: {e}")
+            self._load_team_from_file(team_file, is_saved_team=False)
 
-    def _load_saved_team(self, team_name: str):
+    def _load_saved_team(self, team_name: str) -> bool:
         """Load a specific saved team from teams.json."""
         teams_file = self._get_teams_storage_path()
         if not teams_file.exists():
@@ -197,22 +142,42 @@ class TeamManager:
             if team_name not in all_teams.get('teams', {}):
                 return False
                 
-            # Clear existing team first
-            self._team_members.clear()
-                
-            # Load the specific team
+            # Load the specific team data
             team_data = all_teams['teams'][team_name]
-            agent_manager = get_agent_manager()
-            
-            for agent_name, agent_info in team_data.get('agents', {}).items():
-                instance_count = agent_info.get('instance_count', 1)
-                self._load_agent_member(agent_manager, agent_name, instance_count)
-                
+            self._load_team_data(team_data)
             return True
                 
         except (json.JSONDecodeError, FileNotFoundError) as e:
             logger.warning(f"Failed to load saved team {team_name} from {teams_file}: {e}")
             return False
+    
+    def _load_team_from_file(self, team_file: Path, is_saved_team: bool = False):
+        """Load team data from a JSON file."""
+        if not team_file.exists():
+            return
+            
+        try:
+            with open(team_file, 'r') as f:
+                team_data = json.load(f)
+            
+            self._load_team_data(team_data)
+                        
+        except (json.JSONDecodeError, FileNotFoundError) as e:
+            logger.warning(f"Failed to load team from {team_file}: {e}")
+    
+    def _load_team_data(self, team_data: dict):
+        """Load team data from a dictionary."""
+        # Clear existing team first
+        self._team_members.clear()
+        
+        # Reconstruct team members
+        agent_manager = get_agent_manager()
+        agents_data = team_data.get('agents', {})
+        
+        # Load agents with instance counts
+        for agent_name, agent_info in agents_data.items():
+            instance_count = agent_info.get('instance_count', 1)
+            self._load_agent_member(agent_manager, agent_name, instance_count)
     
     def _load_agent_member(self, agent_manager, agent_name: str, instance_count: int):
         """Helper method to load a single agent member."""
@@ -239,8 +204,7 @@ class TeamManager:
             }
         
         team_data = {
-            'agents': agents_data,
-            'version': '1.1'  # Updated version to support instance counts
+            'agents': agents_data
         }
         
         try:
@@ -255,7 +219,7 @@ class TeamManager:
         teams_file = self._get_teams_storage_path()
         
         # Load existing teams or create new structure
-        all_teams = {'teams': {}, 'version': '1.0'}
+        all_teams = {'teams': {}}
         if teams_file.exists():
             try:
                 with open(teams_file, 'r') as f:
@@ -275,11 +239,9 @@ class TeamManager:
             }
         
         # Save team with metadata
-        import time
         all_teams['teams'][team_name] = {
             'agents': agents_data,
-            'saved_at': int(time.time()),
-            'version': '1.1'
+            'saved_at': int(time.time())
         }
         
         try:
@@ -330,16 +292,6 @@ class TeamManager:
         """Add an agent to the team with specified instance count."""
         # Get the agent configuration first to check max_instances
         agent_manager = get_agent_manager()
-        
-        # Check if agent is a system agent (not available to users)
-        agent_info = agent_manager.get_agent_info(agent_name)
-        if agent_info and agent_info.get("type") == "system":
-            themed_console.print(
-                f"Cannot add system agent '{agent_name}' to team. System agents are not available to users.",
-                style="error"
-            )
-            return False
-        
         agent_config = agent_manager.get_agent_config(agent_name, cwd=os.getcwd())
         
         if not agent_config:
@@ -389,9 +341,6 @@ class TeamManager:
         # Save to storage
         self._save_team_to_storage()
         
-        # Rebuild supervisor workflow
-        self._rebuild_supervisor_workflow()
-        
         return True
 
     async def remove_agent(self, agent_name: str) -> bool:
@@ -403,9 +352,6 @@ class TeamManager:
         del self._team_members[agent_name]
         self._save_team_to_storage()
         
-        # Rebuild supervisor workflow
-        self._rebuild_supervisor_workflow()
-        
         themed_console.print(f"✓ Removed {agent_name} from your team", style="success")
         return True
 
@@ -414,9 +360,6 @@ class TeamManager:
         count = len(self._team_members)
         self._team_members.clear()
         self._save_team_to_storage()
-        
-        # Rebuild supervisor workflow
-        self._rebuild_supervisor_workflow()
         
         themed_console.print(f"✓ Cleared team ({count} agents removed)", style="success")
 
@@ -473,7 +416,6 @@ class TeamManager:
             return False
         
         # Validate team name (no special characters except hyphens and underscores)
-        import re
         if not re.match(r'^[a-zA-Z0-9_-]+$', team_name):
             themed_console.print("Team name can only contain letters, numbers, hyphens, and underscores", style="error")
             return False
@@ -510,15 +452,10 @@ class TeamManager:
             return False
         
         try:
-            # Try loading from new format first
             success = self._load_saved_team(team_name)
             
-            # If not found in new format, try loading from old format and migrate
             if not success:
-                success = self._load_and_migrate_old_team(team_name)
-            
-            if not success:
-                themed_console.print(f"Failed to load team '{team_name}'", style="error")
+                themed_console.print(f"Team '{team_name}' not found", style="error")
                 return False
                 
             member_count = len(self._team_members)
@@ -538,8 +475,7 @@ class TeamManager:
                 # Save as current team
                 self._save_team_to_storage()
                 
-                # Rebuild supervisor workflow
-                self._rebuild_supervisor_workflow()
+                # Team loaded successfully
                 
                 return True
             else:
@@ -561,17 +497,6 @@ class TeamManager:
                     all_teams = json.load(f)
                     teams = list(all_teams.get('teams', {}).keys())
             
-            # Also check for old format team files for migration
-            project_dir = Path.cwd() / ".Q"
-            project_config_dir = Path.cwd() / ".Q" / "config"
-            user_dir = Path.home() / ".config" / "qx"
-            
-            for directory in [project_dir, project_config_dir, user_dir]:
-                if directory.exists():
-                    for file_path in directory.glob("team-*.json"):
-                        team_name = file_path.stem.replace("team-", "")
-                        if team_name not in teams:
-                            teams.append(team_name)
                             
         except Exception as e:
             logger.warning(f"Failed to list saved teams: {e}")
@@ -585,7 +510,6 @@ class TeamManager:
             return False
         
         # Validate team name (no special characters except hyphens and underscores)
-        import re
         if not re.match(r'^[a-zA-Z0-9_-]+$', team_name):
             themed_console.print("Team name can only contain letters, numbers, hyphens, and underscores", style="error")
             return False
@@ -606,9 +530,6 @@ class TeamManager:
             # Also update current team storage
             self._save_team_to_storage()
             
-            # Rebuild supervisor workflow
-            self._rebuild_supervisor_workflow()
-            
             themed_console.print(f"✓ Created empty team '{team_name}'", style="success")
             themed_console.print("Use /team-add-member <agent> to add agents to your team", style="dim white")
             return True
@@ -617,79 +538,6 @@ class TeamManager:
             themed_console.print(f"Failed to create team '{team_name}': {e}", style="error")
             return False
 
-    def _load_and_migrate_old_team(self, team_name: str) -> bool:
-        """Load team from old format file and migrate to new format."""
-        # Check both project and user directories for old format files
-        project_file = Path.cwd() / ".Q" / f"team-{team_name}.json"
-        project_config_file = Path.cwd() / ".Q" / "config" / f"team-{team_name}.json"
-        user_file = Path.home() / ".config" / "qx" / f"team-{team_name}.json"
-        
-        old_team_file = None
-        if project_config_file.exists():
-            old_team_file = project_config_file
-        elif project_file.exists():
-            old_team_file = project_file
-        elif user_file.exists():
-            old_team_file = user_file
-        
-        if not old_team_file:
-            return False
-        
-        try:
-            with open(old_team_file, 'r') as f:
-                team_data = json.load(f)
-            
-            # Clear existing team
-            self._team_members.clear()
-            
-            # Load agents from old format
-            agent_manager = get_agent_manager()
-            agents_data = team_data.get('agents', [])
-            
-            # Handle both old format (list) and newer format (dict with instance counts)
-            if isinstance(agents_data, list):
-                # Old format: just agent names
-                for agent_name in agents_data:
-                    self._load_agent_member(agent_manager, agent_name, 1)
-            else:
-                # Newer format: dict with instance counts
-                for agent_name, agent_info in agents_data.items():
-                    instance_count = agent_info.get('instance_count', 1)
-                    self._load_agent_member(agent_manager, agent_name, instance_count)
-            
-            # Migrate to new format
-            if self._team_members:
-                self._save_team_to_teams_file(team_name)
-                logger.info(f"Migrated team '{team_name}' from old format to teams.json")
-                
-                # Optionally remove old file after successful migration
-                try:
-                    old_team_file.unlink()
-                    logger.info(f"Removed old team file: {old_team_file}")
-                except Exception as e:
-                    logger.warning(f"Failed to remove old team file {old_team_file}: {e}")
-            
-            return True
-            
-        except Exception as e:
-            logger.warning(f"Failed to migrate old team file {old_team_file}: {e}")
-            return False
-
-    def _rebuild_supervisor_workflow(self):
-        """Rebuild the LangGraph supervisor workflow when team changes."""
-        try:
-            import asyncio
-            from qx.core.langgraph_supervisor import rebuild_supervisor_workflow
-            
-            # Try to run in existing event loop, otherwise schedule for later
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(rebuild_supervisor_workflow())
-            except RuntimeError:
-                # No running loop, schedule for when one starts
-                pass
-        except Exception as e:
-            logger.warning(f"Failed to rebuild supervisor workflow: {e}")
 
     def reload_from_storage(self):
         """Reload team from persistent storage, useful when team files change."""

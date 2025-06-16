@@ -8,65 +8,6 @@ import litellm
 logger = logging.getLogger(__name__)
 
 
-class ReliabilityConfig:
-    """Handles reliability configuration parsing and storage."""
-
-    def __init__(self):
-        self.fallback_models: List[str] = []
-        self.context_window_fallbacks: Dict[str, str] = {}
-        self.fallback_api_keys: Dict[str, str] = {}
-        self.fallback_api_bases: Dict[str, str] = {}
-        self.fallback_timeout: float = 45.0
-        self.fallback_cooldown: float = 60.0
-        self.retry_delay: float = 1.0
-        self.max_retry_delay: float = 60.0
-        self.backoff_factor: float = 2.0
-
-    def load_from_environment(self) -> None:
-        """Parse and setup reliability configuration from environment variables."""
-        # Parse fallback models
-        fallback_models_str = os.environ.get("QX_FALLBACK_MODELS", "")
-        if fallback_models_str:
-            self.fallback_models = [
-                model.strip() for model in fallback_models_str.split(",")
-            ]
-
-        # Parse context window fallbacks
-        context_fallbacks_str = os.environ.get("QX_CONTEXT_WINDOW_FALLBACKS", "{}")
-        try:
-            self.context_window_fallbacks = json.loads(context_fallbacks_str)
-        except json.JSONDecodeError:
-            logger.warning(
-                "Invalid JSON for QX_CONTEXT_WINDOW_FALLBACKS, using empty dict"
-            )
-            self.context_window_fallbacks = {}
-
-        # Parse fallback API keys
-        fallback_keys_str = os.environ.get("QX_FALLBACK_API_KEYS", "{}")
-        try:
-            self.fallback_api_keys = json.loads(fallback_keys_str)
-        except json.JSONDecodeError:
-            logger.warning("Invalid JSON for QX_FALLBACK_API_KEYS, using empty dict")
-            self.fallback_api_keys = {}
-
-        # Parse fallback API bases
-        fallback_bases_str = os.environ.get("QX_FALLBACK_API_BASES", "{}")
-        try:
-            self.fallback_api_bases = json.loads(fallback_bases_str)
-        except json.JSONDecodeError:
-            logger.warning("Invalid JSON for QX_FALLBACK_API_BASES, using empty dict")
-            self.fallback_api_bases = {}
-
-        # Set up timeout and retry configuration
-        self.fallback_timeout = float(os.environ.get("QX_FALLBACK_TIMEOUT", "45"))
-        self.fallback_cooldown = float(os.environ.get("QX_FALLBACK_COOLDOWN", "60"))
-        self.retry_delay = float(os.environ.get("QX_RETRY_DELAY", "1.0"))
-        self.max_retry_delay = float(os.environ.get("QX_MAX_RETRY_DELAY", "60.0"))
-        self.backoff_factor = float(os.environ.get("QX_BACKOFF_FACTOR", "2.0"))
-
-        logger.debug(f"Reliability config - Fallback models: {self.fallback_models}")
-        logger.debug(f"Context window fallbacks: {self.context_window_fallbacks}")
-        logger.debug(f"Fallback timeout: {self.fallback_timeout}s")
 
 
 def validate_api_keys() -> None:
@@ -92,8 +33,8 @@ def validate_api_keys() -> None:
         raise ValueError("No valid API key found.")
 
 
-def configure_litellm() -> ReliabilityConfig:
-    """Configure LiteLLM settings and return reliability configuration."""
+def configure_litellm() -> None:
+    """Configure LiteLLM settings."""
     # Set up HTTP debugging if enabled (shows actual HTTP requests to providers)
     if os.environ.get("QX_DEBUG_HTTP", "").lower() in ("true", "1", "yes"):
         logger.warning("HTTP debugging enabled - this will log API keys and request payloads!")
@@ -122,9 +63,3 @@ def configure_litellm() -> ReliabilityConfig:
 
     # Set up API key validation
     validate_api_keys()
-
-    # Parse and return reliability configuration
-    reliability_config = ReliabilityConfig()
-    reliability_config.load_from_environment()
-
-    return reliability_config

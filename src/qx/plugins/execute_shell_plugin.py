@@ -133,7 +133,7 @@ def _is_command_auto_approved(command: str) -> bool:
 async def execute_shell_tool(
     console: RichConsole, args: ExecuteShellPluginInput
 ) -> ExecuteShellPluginOutput:
-    approval_handler = ApprovalHandler(themed_console)
+    approval_handler = ApprovalHandler(themed_console, use_console_manager=True)
     command = args.command.strip()
     timeout = args.timeout_seconds
 
