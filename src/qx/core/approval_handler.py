@@ -216,14 +216,21 @@ class ApprovalHandler:
         option_map = {key: status for key, _, status in options}
         valid_keys = [key for key, _, _ in options]
 
-        # Color the first letter of each option
-        colored_display_texts = []
+        # Display the colored options above the prompt
+        colored_options = []
         for key, text, _ in options:
-            colored_text = f"[highlight]{text[0]}[/highlight]{text[1:]}"
-            colored_display_texts.append(colored_text)
+            colored_option = f"[highlight]{text[0]}[/highlight]{text[1:]}"
+            colored_options.append(colored_option)
+        
+        options_display = " | ".join(colored_options)
+        if self.use_console_manager and self._console_manager:
+            self._console_manager.print(f"Options: {options_display}", console=self.console)
+        else:
+            self.console.print(f"Options: {options_display}")
 
-        prompt_choices = ", ".join(colored_display_texts)
-        full_prompt_text = f"{prompt_message} ({prompt_choices}) "
+        # Create plain text prompt for input() function
+        plain_choices = "/".join([key for key, _, _ in options])
+        full_prompt_text = f"{prompt_message} ({plain_choices}): "
 
         if self.use_console_manager and self._console_manager:
             chosen_key = self._console_manager.request_choice_blocking(

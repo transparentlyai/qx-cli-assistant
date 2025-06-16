@@ -31,7 +31,7 @@ class WebFetchPluginOutput(BaseModel):
 async def web_fetch_tool(
     console: RichConsole, args: WebFetchPluginInput
 ) -> WebFetchPluginOutput:
-    approval_handler = ApprovalHandler(themed_console)
+    approval_handler = ApprovalHandler(themed_console, use_console_manager=True)
     url = args.url.strip()
     output_format = args.format.lower()
 

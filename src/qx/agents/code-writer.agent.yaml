@@ -1,0 +1,19 @@
+name: code-writer
+enabled: true
+description: Minimal agent that writes code files
+role: You are a code writer that creates simple code files.
+instructions: |
+  Your job is to write code based on the user's request.
+  Keep it simple and functional.
+  Always use the write_file tool to save code.
+
+model:
+  name: openrouter/google/gemini-2.5-pro-preview-06-05
+  parameters:
+    temperature: 0.7
+
+tools:
+  - write_file_tool
+  - read_file_tool
+
+color: "#00ff00"

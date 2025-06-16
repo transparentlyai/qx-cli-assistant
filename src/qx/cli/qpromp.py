@@ -351,7 +351,7 @@ async def _run_inline_mode(
         new_state = team_mode_manager.toggle_team_mode(project_level=True)
 
         mode_text = "enabled" if new_state else "disabled"
-        agent_name = "qx.supervisor" if new_state else "qx"
+        agent_name = "qx-director" if new_state else "qx"
 
         # Switch agent
         agent_manager = get_agent_manager()
@@ -455,6 +455,27 @@ async def _run_inline_mode(
     signal.signal(signal.SIGWINCH, handle_resize)
 
     try:
+        # Check if we should start team mode workflow immediately
+        from qx.core.team_mode_manager import get_team_mode_manager
+        team_mode_manager = get_team_mode_manager()
+        
+        if team_mode_manager.is_team_mode_enabled():
+            # In team mode, start the workflow immediately
+            logger.info("🎯 Team mode active - starting unified workflow")
+            
+            try:
+                # Use unified workflow
+                from qx.core.langgraph_supervisor import get_unified_workflow
+                workflow = get_unified_workflow(config_manager)
+                
+                # Start continuous workflow mode
+                await workflow.start_continuous_workflow()
+                # Workflow handles everything including exit, so we're done
+                return
+            except Exception as e:
+                logger.error(f"Team mode workflow error: {e}", exc_info=True)
+                themed_console.print("Team mode workflow error. Falling back to normal mode.", style="error")
+        
         while True:
             if not is_multiline_mode[0]:
                 is_multiline_mode[0] = False
@@ -580,34 +601,11 @@ async def _run_inline_mode(
                 logger.warning("No active LLM agent found in agent manager, using original agent")
                 active_llm_agent = llm_agent
 
-            # Check if agent has changed - if so, reset conversation history for clean switch
+            # Update current agent tracker for display purposes
             if active_llm_agent != current_active_agent:
-                # Agent has been switched - create fresh history with new system prompt
-                from openai.types.chat import ChatCompletionSystemMessageParam
-
-                from qx.core.llm_components.prompts import load_and_format_system_prompt
-
-                current_agent = await agent_manager.get_current_agent()
-                if current_agent:
-                    new_system_prompt = load_and_format_system_prompt(current_agent)
-                    current_message_history = [
-                        ChatCompletionSystemMessageParam(
-                            role="system", content=new_system_prompt
-                        ),
-                        ChatCompletionUserMessageParam(
-                            role="user", content=final_user_input
-                        ),
-                    ]
-                else:
-                    # Fallback: just reset with user message
-                    current_message_history = [
-                        ChatCompletionUserMessageParam(
-                            role="user", content=final_user_input
-                        )
-                    ]
-                
-                # Update current agent tracker
                 current_active_agent = active_llm_agent
+                logger.info(f"🔄 Agent switched, now using: {getattr(active_llm_agent, 'agent_name', 'unknown')}")
+                # Note: Conversation history is now managed by unified LangGraph checkpoint system
 
             llm_task = asyncio.create_task(
                 _handle_llm_interaction(
@@ -632,6 +630,7 @@ async def _run_inline_mode(
                         pass
 
             if current_message_history:
+                # Save session for session management (unified workflow manages its own checkpoints)
                 save_session(current_message_history)
                 clean_old_sessions(keep_sessions)
 

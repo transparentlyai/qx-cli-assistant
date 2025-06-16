@@ -48,6 +48,7 @@ class AgentManager:
 
     def __init__(self):
         self._agent_loader = get_agent_loader()
+        # Removed separate message history tracking - using unified LangGraph checkpoint system
         self._current_agent_session: Optional[AgentSession] = None
         self._autonomous_agents: Dict[str, AgentSession] = {}
         self._task_tracker = TaskTracker()
@@ -238,6 +239,9 @@ class AgentManager:
     def get_active_llm_agent(self):
         """Get the active LLM agent instance."""
         return getattr(self, "_active_llm_agent", None)
+    
+    # Removed separate message history tracking methods
+    # Message history is now managed by the unified LangGraph checkpoint system
 
     async def switch_llm_agent(self, agent_name: str, mcp_manager) -> bool:
         """Switch the active LLM agent to a different agent configuration."""
