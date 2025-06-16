@@ -196,11 +196,13 @@ class UnifiedWorkflow:
                             if tool_name.startswith("transfer_to_"):
                                 target_agent = tool_name.replace("transfer_to_", "")
                                 task_desc = tool_args.get("task_description", "") if isinstance(tool_args, dict) else ""
+                                logger.info(f"🔀 Routing to agent: {target_agent} with task: {task_desc}")
                                 return Command(
                                     goto=target_agent,
                                     update={
                                         "active_agent": target_agent,
-                                        "task_context": task_desc
+                                        "task_context": task_desc,
+                                        "messages": state["messages"] + [response]
                                     }
                                 )
                     
@@ -291,6 +293,7 @@ class UnifiedWorkflow:
                         description=getattr(team_member.agent_config, 'description', f'Transfer to {agent_name}')
                     )
                     handoff_tools.append(handoff_tool)
+                    logger.info(f"Created handoff tool: {handoff_tool.name} for agent: {agent_name}")
                     
             if not director_member:
                 raise ValueError("qx-director not found in team configuration. The director agent is required.")
