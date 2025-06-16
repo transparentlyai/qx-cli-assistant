@@ -15,14 +15,23 @@ def configure_logging():
     """
     Configures the application's logging.
 
-    - If QX_LOG_FILE is set, all logs (from qx and other libraries) are
+    - If QX_LOG_LEVEL contains a path (has '/' or '\'), all logs (from qx and other libraries) are
       redirected to the specified file, and console output is disabled.
-    - If QX_LOG_FILE is not set, only qx logs are sent to the console.
+    - If QX_LOG_LEVEL is a log level name (DEBUG, INFO, etc.), only qx logs are sent to the console.
     """
     global temp_stream_handler
 
-    log_level_name = os.getenv("QX_LOG_LEVEL", "ERROR").upper()
-    log_file_path = os.getenv("QX_LOG_FILE")
+    log_level_env = os.getenv("QX_LOG_LEVEL", "ERROR")
+    
+    # Check if QX_LOG_LEVEL contains a path
+    if '/' in log_level_env or '\\' in log_level_env:
+        # It's a file path
+        log_file_path = log_level_env
+        log_level_name = "DEBUG"  # Default to DEBUG when using file logging
+    else:
+        # It's a log level name
+        log_file_path = None
+        log_level_name = log_level_env.upper()
 
     # Configure LiteLLM logging based on whether we're using file or console logging
     os.environ["LITELLM_LOG"] = log_level_name
@@ -95,12 +104,6 @@ def configure_logging():
         )
         logger.addHandler(temp_stream_handler)
 
-        critical_stream_handler = logging.StreamHandler(sys.stderr)
-        critical_stream_handler.setLevel(logging.CRITICAL)
-        critical_stream_handler.setFormatter(
-            logging.Formatter("%(levelname)s: %(message)s")
-        )
-        logger.addHandler(critical_stream_handler)
 
         # Stop qx logs from propagating to the handler-less root logger.
         logger.propagate = False

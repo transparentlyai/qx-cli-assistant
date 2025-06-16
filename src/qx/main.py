@@ -295,8 +295,6 @@ async def _async_main(
 
 
 def main():
-    configure_logging()
-
     parser = argparse.ArgumentParser(
         description="Qx - A terminal-based agentic coding assistant with simplified interface."
     )
