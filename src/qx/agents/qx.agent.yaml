@@ -151,14 +151,5 @@ tools: [
   execute_shell_tool,
 ]
 
-model:
-  # name: openrouter/google/gemini-2.5-pro-preview-06-05
-  parameters:
-    temperature: 0.73
-    max_tokens: 65535
-    top_p: 1.0
-    frequency_penalty: 0.0
-    presence_penalty: 0.0
-    reasoning_budget: medium
 max_execution_time: 300
 max_iterations: 10

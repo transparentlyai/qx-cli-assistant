@@ -15,23 +15,16 @@ def configure_logging():
     """
     Configures the application's logging.
 
-    - If QX_LOG_LEVEL contains a path (has '/' or '\'), all logs (from qx and other libraries) are
-      redirected to the specified file, and console output is disabled.
-    - If QX_LOG_LEVEL is a log level name (DEBUG, INFO, etc.), only qx logs are sent to the console.
+    - QX_LOG_LEVEL sets the logging level for all logs (qx and other libraries)
+    - QX_LOG_FILE, if set, redirects all logs to the specified file and disables console output
     """
     global temp_stream_handler
 
-    log_level_env = os.getenv("QX_LOG_LEVEL", "ERROR")
+    # Get log level from QX_LOG_LEVEL (always a level name)
+    log_level_name = os.getenv("QX_LOG_LEVEL", "ERROR").upper()
     
-    # Check if QX_LOG_LEVEL contains a path
-    if '/' in log_level_env or '\\' in log_level_env:
-        # It's a file path
-        log_file_path = log_level_env
-        log_level_name = "DEBUG"  # Default to DEBUG when using file logging
-    else:
-        # It's a log level name
-        log_file_path = None
-        log_level_name = log_level_env.upper()
+    # Get log file path from QX_LOG_FILE (if set)
+    log_file_path = os.getenv("QX_LOG_FILE")
 
     # Configure LiteLLM logging based on whether we're using file or console logging
     os.environ["LITELLM_LOG"] = log_level_name
@@ -94,19 +87,17 @@ def configure_logging():
             lib_logger.propagate = True
 
     else:
-        # When QX_LOG_FILE is not set, configure the 'qx' logger for console output.
-        # Other library logs will go to the root logger, which has no handlers,
-        # effectively silencing them.
-        temp_stream_handler = logging.StreamHandler()
-        temp_stream_handler.setLevel(effective_log_level)
-        temp_stream_handler.setFormatter(
-            logging.Formatter("%(levelname)s: %(message)s")
+        # When QX_LOG_FILE is not set, configure all loggers for console output.
+        # This includes both qx and library logs.
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(effective_log_level)
+        console_handler.setFormatter(
+            logging.Formatter("%(levelname)s - %(name)s: %(message)s")
         )
-        logger.addHandler(temp_stream_handler)
-
-
-        # Stop qx logs from propagating to the handler-less root logger.
-        logger.propagate = False
+        root_logger.addHandler(console_handler)
+        
+        # Ensure qx logger uses root logger's handler
+        logger.propagate = True
 
     # Enable debug logging for HTTP libraries if requested.
     # If QX_LOG_FILE is set, their logs will go to the file.
