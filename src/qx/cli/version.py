@@ -1,6 +1,7 @@
 import sys
 import asyncio
 
+from qx import __version__
 from qx.cli.theme import themed_console
 from qx.core.config_manager import ConfigManager
 from qx.core.llm_utils import initialize_agent_with_mcp
@@ -8,7 +9,7 @@ from qx.cli.commands import _handle_model_command
 from qx.core.logging_config import configure_logging
 
 # Qx Version
-QX_VERSION = "0.3.46"
+QX_VERSION = __version__
 
 
 def display_version_info():

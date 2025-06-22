@@ -1,6 +1,8 @@
 # qx/core/constants.py
 
-QX_VERSION = "0.3.46"
+from qx import __version__
+
+QX_VERSION = __version__
 
 # Default model name if not specified by the user
 # Using LiteLLM format for OpenRouter
