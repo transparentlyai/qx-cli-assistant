@@ -20,6 +20,9 @@ OPENROUTER_API_KEY=sk-or-v1-your_openrouter_api_key_here
 # For Anthropic (if using Anthropic directly)
 # ANTHROPIC_API_KEY=sk-ant-your_anthropic_api_key_here
 
+# For Google AI / Vertex AI
+# GOOGLE_API_KEY=your_google_api_key_here
+
 # For Azure OpenAI
 # AZURE_API_KEY=your_azure_api_key_here
 # AZURE_API_BASE=https://your-resource.openai.azure.com/
@@ -41,6 +44,12 @@ QX_ALLOW_PROVIDER_FALLBACK=true
 
 # Streaming Configuration
 QX_ENABLE_STREAMING=true
+
+# === PROVIDER-SPECIFIC SETTINGS ===
+
+# --- Google Vertex AI ---
+# QX_VERTEX_PROJECT=your-gcp-project-id   # Required for Vertex AI
+# QX_VERTEX_LOCATION=us-central1          # Required for Vertex AI
 
 # === RELIABILITY & RESILIENCE SETTINGS ===
 
