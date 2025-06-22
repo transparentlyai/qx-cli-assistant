@@ -222,6 +222,8 @@ class StreamingHandler:
                 "[dim]Processing[/dim]", spinner="point", speed=2, refresh_per_second=25
             ) as status:
                 stream = await self._make_litellm_call(chat_params)
+                consecutive_errors = 0  # Track consecutive parsing errors
+                max_consecutive_errors = 3  # Maximum allowed consecutive errors
 
                 async for chunk in stream:
                     # Check for cancellation
@@ -249,6 +251,10 @@ class StreamingHandler:
                         current_chunk_content = delta.content
                     elif hasattr(delta, "reasoning") and delta.reasoning:
                         current_chunk_content = delta.reasoning
+                    elif hasattr(delta, "reasoning_content") and delta.reasoning_content:
+                        current_chunk_content = delta.reasoning_content
+                    elif hasattr(delta, "thinking") and delta.thinking:
+                        current_chunk_content = delta.thinking
 
                     if (
                         current_chunk_content
@@ -264,9 +270,37 @@ class StreamingHandler:
                         duplicate_chunk_count = 0
                         last_chunk_content = current_chunk_content
 
-                    # Handle reasoning streaming (OpenRouter specific)
+                    # Handle reasoning streaming (check multiple fields for different providers)
+                    reasoning_text = None
+                    
+                    # Check for reasoning content in various formats
                     if hasattr(delta, "reasoning") and delta.reasoning:
+                        # OpenRouter format
                         reasoning_text = delta.reasoning
+                    elif hasattr(delta, "reasoning_content") and delta.reasoning_content:
+                        # Standard LiteLLM format
+                        reasoning_text = delta.reasoning_content
+                    elif hasattr(delta, "thinking") and delta.thinking:
+                        # Alternative format
+                        reasoning_text = delta.thinking
+                    
+                    # Also check at the choice level for non-streaming fields
+                    if not reasoning_text and hasattr(choice, "reasoning_content") and choice.reasoning_content:
+                        reasoning_text = choice.reasoning_content
+                    
+                    # Debug logging for reasoning content
+                    if os.getenv("QX_DEBUG_REASONING"):
+                        if reasoning_text:
+                            logger.debug(f"Found reasoning text: {reasoning_text[:100]}...")
+                        else:
+                            # Log what fields are present for debugging
+                            delta_attrs = [attr for attr in dir(delta) if not attr.startswith('_')]
+                            logger.debug(f"Delta attributes: {delta_attrs}")
+                            if hasattr(choice, "__dict__"):
+                                choice_attrs = [attr for attr in dir(choice) if not attr.startswith('_')]
+                                logger.debug(f"Choice attributes: {choice_attrs}")
+                    
+                    if reasoning_text:
 
                         # Check if we should display thinking messages
                         show_details = await is_details_active()
@@ -426,6 +460,8 @@ class StreamingHandler:
                     if (
                         not delta.content
                         and not (hasattr(delta, "reasoning") and delta.reasoning)
+                        and not (hasattr(delta, "reasoning_content") and delta.reasoning_content)
+                        and not (hasattr(delta, "thinking") and delta.thinking)
                         and not delta.tool_calls
                     ):
                         if (
@@ -480,7 +516,69 @@ class StreamingHandler:
                 )
                 return QXRunResult("Operation cancelled", messages)
         except Exception as e:
-            logger.error(f"Error during streaming: {e}", exc_info=True)
+            # Special handling for JSON parsing errors from Vertex AI
+            if isinstance(e, RuntimeError) and "Error parsing chunk" in str(e) and "JSONDecodeError" in str(e):
+                logger.warning(f"JSON parsing error in Vertex AI stream: {e}")
+                
+                # If we have accumulated content, return what we have
+                if accumulated_content or has_rendered_content:
+                    logger.info("Returning partial response due to JSON parsing error")
+                    
+                    # Flush any remaining content
+                    if markdown_buffer:
+                        remaining_content = markdown_buffer.flush()
+                        if remaining_content and remaining_content.strip():
+                            await render_content(remaining_content)
+                    
+                    # Create response message from accumulated data
+                    response_message_dict: Dict[str, Any] = {
+                        "role": "assistant",
+                        "content": accumulated_content if accumulated_content else None,
+                    }
+                    
+                    if accumulated_tool_calls:
+                        # Convert accumulated tool calls to proper format
+                        tool_calls = []
+                        for tc in accumulated_tool_calls:
+                            if tc["id"] and tc["function"]["name"]:
+                                tool_calls.append({
+                                    "id": tc["id"],
+                                    "type": "function",
+                                    "function": {
+                                        "name": tc["function"]["name"],
+                                        "arguments": tc["function"]["arguments"],
+                                    },
+                                })
+                        response_message_dict["tool_calls"] = tool_calls
+                    
+                    # Convert to proper message format
+                    if "tool_calls" in response_message_dict:
+                        streaming_response_message = ChatCompletionMessage(
+                            role="assistant",
+                            content=response_message_dict.get("content"),
+                            tool_calls=response_message_dict.get("tool_calls"),
+                        )
+                    else:
+                        streaming_response_message = ChatCompletionMessage(
+                            role="assistant", content=response_message_dict.get("content")
+                        )
+                    
+                    messages.append(cast(ChatCompletionMessageParam, streaming_response_message))
+                    
+                    # Add warning about truncated response
+                    _managed_stream_print(
+                        "\n[warning]Note: Response may be incomplete due to streaming error[/]",
+                        use_manager=True
+                    )
+                    
+                    return QXRunResult(accumulated_content or "", messages)
+                else:
+                    # No content accumulated, need to fail
+                    logger.error(f"JSON parsing error with no accumulated content: {e}")
+                    raise
+            else:
+                # Other exceptions - log and re-raise
+                logger.error(f"Error during streaming: {e}", exc_info=True)
 
             # Clean up the stream in error case
             if stream and hasattr(stream, "aclose") and not stream_completed:

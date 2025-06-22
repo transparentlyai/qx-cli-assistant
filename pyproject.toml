@@ -7,7 +7,7 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "pyfzf>=0.0.8",
     "pydantic>=2.7.1",
-    "httpx>=0.27.0",
+    "httpx[http2]>=0.27.0",
     "markitdown",
     "mcp>=1.9.1",
     "markdown-it-py>=3.0.0",
@@ -27,6 +27,7 @@ dependencies = [
     "langchain-community>=0.3.0",
     "langgraph-supervisor>=0.0.27",
     "jinja2==3.1.4",
+    "google-cloud-aiplatform>=1.98.0",
 ]
 readme = "README.md"
 requires-python = ">= 3.13"
