@@ -298,6 +298,7 @@ MODELS = (
         "name": "gemini-2.5-pro",
         "model": "openrouter/google/gemini-2.5-pro",
         "description": "Production via OpenRouter",
+        "accepts": ("thinking"),
     },
     {
         "name": "gemini-2.5-flash",

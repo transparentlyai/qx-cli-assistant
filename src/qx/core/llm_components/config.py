@@ -8,7 +8,6 @@ import litellm
 logger = logging.getLogger(__name__)
 
 
-
 def validate_api_keys() -> None:
     """Validate that required API keys are present."""
     # Check for any provider API key
