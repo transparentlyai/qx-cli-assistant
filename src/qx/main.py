@@ -13,9 +13,10 @@ from openai.types.chat import (
     ChatCompletionSystemMessageParam,
 )
 
+from qx import __version__
 from qx.cli.qpromp import _handle_llm_interaction, _run_inline_mode
 from qx.cli.session_selector import select_session
-from qx.cli.version import QX_VERSION, display_version_info
+from qx.cli.version import display_version_info
 from qx.core.config_manager import ConfigManager
 from qx.core.constants import DEFAULT_SYNTAX_HIGHLIGHT_THEME
 from qx.core.llm import QXLLMAgent, load_and_format_system_prompt
@@ -239,7 +240,7 @@ async def _async_main(
                 from qx.cli.theme import themed_console
 
                 themed_console.print(
-                    f"\n[dim]Qx ver:[info]{QX_VERSION}[/] | [dim]model:[/][info]{os.path.basename(llm_agent.model_name)}[/] | [dim]cwd:[/][info]{os.getcwd()}[/]"
+                    f"\n[dim]Qx ver:[info]{__version__}[/] | [dim]model:[/][info]{os.path.basename(llm_agent.model_name)}[/] | [dim]cwd:[/][info]{os.getcwd()}[/]"
                 )
 
                 try:
