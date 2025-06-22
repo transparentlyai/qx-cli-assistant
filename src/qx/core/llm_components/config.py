@@ -9,7 +9,6 @@ logger = logging.getLogger(__name__)
 
 
 
-
 def validate_api_keys() -> None:
     """Validate that required API keys are present."""
     # Check for any provider API key
@@ -38,18 +37,18 @@ def configure_litellm() -> None:
     # Set up HTTP debugging if enabled (shows actual HTTP requests to providers)
     if os.environ.get("QX_DEBUG_HTTP", "").lower() in ("true", "1", "yes"):
         logger.warning("HTTP debugging enabled - this will log API keys and request payloads!")
-        # Use LiteLLM's official debug mode
+        # Use LiteLLM\'s official debug mode
         litellm._turn_on_debug()
         litellm.json_logs = True
         # This will show the actual POST requests sent to OpenRouter
-        logger.info("LiteLLM debug mode enabled - you'll see raw HTTP requests to providers")
+        logger.info("LiteLLM debug mode enabled - you\'ll see raw HTTP requests to providers")
     
     # Set up debugging if enabled, but only if not using file logging
     log_file_path = os.getenv("QX_LOG_FILE")
     if os.environ.get("QX_LOG_LEVEL", "ERROR").upper() == "DEBUG" and not log_file_path:
         litellm.set_verbose = True
     elif log_file_path:
-        # When using file logging, disable LiteLLM's verbose mode to prevent console output
+        # When using file logging, disable LiteLLM\'s verbose mode to prevent console output
         litellm.set_verbose = False
 
     # Configure timeout settings
@@ -60,6 +59,17 @@ def configure_litellm() -> None:
 
     # Configure drop unsupported params behavior
     litellm.drop_params = True
+
+    # --- Provider-specific settings ---
+    
+    # Google Vertex AI
+    if vertex_project := os.environ.get("QX_VERTEX_PROJECT"):
+        litellm.vertex_project = vertex_project
+        logger.info(f"LiteLLM: Using Vertex AI project: {vertex_project}")
+
+    if vertex_location := os.environ.get("QX_VERTEX_LOCATION"):
+        litellm.vertex_location = vertex_location
+        logger.info(f"LiteLLM: Using Vertex AI location: {vertex_location}")
 
     # Set up API key validation
     validate_api_keys()

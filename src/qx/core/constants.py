@@ -296,19 +296,19 @@ DEFAULT_SYNTAX_HIGHLIGHT_THEME = (
 MODELS = (
     {
         "name": "gemini-2.5-pro",
-        "model": "openrouter/google/gemini-2.5-pro-preview-06-05",
-        "description": "Preview 06-05 (OPENROUTER)",
+        "model": "openrouter/google/gemini-2.5-pro",
+        "description": "Production via OpenRouter",
     },
     {
         "name": "gemini-2.5-flash",
-        "model": "openrouter/google/gemini-2.5-flash-preview-05-20",
-        "description": "Preview 05-20 (OPENROUTER)",
+        "model": "openrouter/google/gemini-2.5-flash",
+        "description": "Production via OpenRouter",
         "accepts": ("thinking"),
     },
     {
         "name": "gemini-2.0-flash",
         "model": "openrouter/google/gemini-2.0-flash-001",
-        "description": "Prod Version 001 (OPENROUTER)",
+        "description": "Prod Version 001 via OpenRouter",
     },
 )
 
