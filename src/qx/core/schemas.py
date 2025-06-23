@@ -49,14 +49,14 @@ class AgentExecutionMode(str, Enum):
 class AgentModelParameters(BaseModel):
     temperature: Optional[float] = Field(
         default_factory=lambda: float(
-            os.environ.get("QX_AGENT_TEMPERATURE", str(AGENT_TEMPERATURE_DEFAULT))
+            os.environ.get("QX_MODEL_TEMPERATURE", str(AGENT_TEMPERATURE_DEFAULT))
         ),
         ge=0.0,
         le=2.0,
     )
     max_tokens: Optional[int] = Field(
         default_factory=lambda: int(
-            os.environ.get("QX_AGENT_MAX_TOKENS", str(AGENT_MAX_TOKENS_DEFAULT))
+            os.environ.get("QX_MODEL_MAX_TOKENS", str(AGENT_MAX_TOKENS_DEFAULT))
         ),
         gt=0,
     )
@@ -87,7 +87,7 @@ class AgentModelParameters(BaseModel):
     )
     reasoning_budget: Optional[str] = Field(
         default_factory=lambda: os.environ.get(
-            "QX_AGENT_REASONING_BUDGET", AGENT_REASONING_BUDGET_DEFAULT
+            "QX_MODEL_REASONING_EFFORT", AGENT_REASONING_BUDGET_DEFAULT
         )
     )
 

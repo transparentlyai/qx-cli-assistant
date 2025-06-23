@@ -10,9 +10,9 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.syntax import Syntax
 
+from qx.cli.console import themed_console
 from qx.core.approval_handler import ApprovalHandler
 from qx.core.paths import USER_HOME_DIR, _find_project_root
-from qx.cli.console import themed_console
 
 
 def _managed_plugin_print(content: str, **kwargs) -> None:
@@ -22,18 +22,22 @@ def _managed_plugin_print(content: str, **kwargs) -> None:
     """
     try:
         from qx.core.console_manager import get_console_manager
+
         manager = get_console_manager()
         if manager and manager._running:
-            style = kwargs.get('style')
-            markup = kwargs.get('markup', True)
-            end = kwargs.get('end', '\n')
-            manager.print(content, style=style, markup=markup, end=end, console=themed_console)
+            style = kwargs.get("style")
+            markup = kwargs.get("markup", True)
+            end = kwargs.get("end", "\n")
+            manager.print(
+                content, style=style, markup=markup, end=end, console=themed_console
+            )
             return
     except Exception:
         pass
-    
+
     # Fallback to direct themed_console usage
     themed_console.print(content, **kwargs)
+
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +117,9 @@ def is_path_allowed(
 
 async def _write_file_core_logic(path_str: str, content: str) -> Optional[str]:
     try:
+        # remove tripple ``` if present from beginning and end of content
+        if content.startswith("```") and content.endswith("```"):
+            content = content[3:-3].strip()
         path = Path(os.path.expanduser(path_str)).resolve()
         path.parent.mkdir(parents=True, exist_ok=True)
         await asyncio.to_thread(path.write_text, content, encoding="utf-8")
@@ -155,7 +162,10 @@ async def _generate_write_preview(
 
 class WriteFilePluginInput(BaseModel):
     path: str = Field(..., description="Path to the file to write.")
-    content: str = Field(..., description="Raw content to write to the file.")
+    content: str = Field(
+        ...,
+        description="Content to write to the file wrpaped in ```. e.g. ```\nprint('Hello, World!')\n```",
+    )
 
 
 class WriteFilePluginOutput(BaseModel):
