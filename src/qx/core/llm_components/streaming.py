@@ -150,6 +150,17 @@ class StreamingHandler:
             logger.debug(f"Message history length: {len(messages)}")
             if messages and messages[-1].get("role") == "user":
                 logger.debug(f"Last user message: {messages[-1].get('content', '')[:100]}...")
+                
+        # Prevent retry loops - if we're already in a retry and get another malformed call, fail fast
+        if recursion_depth > 0:
+            # Check if the last message is our retry instruction
+            if messages and len(messages) > 0:
+                last_msg = messages[-1]
+                if (isinstance(last_msg, dict) and 
+                    last_msg.get("role") == "user" and 
+                    last_msg.get("content") == "last function call was malformed, please try again"):
+                    # We're in a retry loop - this should count against our retry limit
+                    logger.warning(f"Detected retry loop at recursion_depth={recursion_depth}")
 
         accumulated_content = ""
         accumulated_tool_calls: list[dict[str, Any]] = []
@@ -729,35 +740,30 @@ class StreamingHandler:
                         f"reasoning: {bool(accumulated_reasoning_content)}, empty_choices: {had_empty_choices}, "
                         f"finish_reason: {last_finish_reason}")
         
-        # Check 1: If we had empty choices at any point, this is suspicious
-        if had_empty_choices and not accumulated_tool_calls:
-            # Check if reasoning content suggests tool use was about to happen
-            if accumulated_reasoning_content:
-                reasoning_lower = accumulated_reasoning_content.lower()
-                tool_intent_phrases = [
-                    "ready to", "going to", "will now", "let me", "implementing", 
-                    "writing", "creating", "updating", "modifying", "executing",
-                    "next action", "next step", "memory", "rewritten"
-                ]
-                
-                if any(phrase in reasoning_lower for phrase in tool_intent_phrases):
-                    return await self._handle_malformed_function_call_retry(
-                        messages, chat_params, user_input, recursion_depth,
-                        "empty choices with reasoning content suggesting tool use, possible MALFORMED_FUNCTION_CALL",
-                        {
-                            "Reasoning content length": f"{len(accumulated_reasoning_content)} chars",
-                            "Reasoning snippet": f"{accumulated_reasoning_content[:200]}...",
-                            "Matched tool intent phrases": [phrase for phrase in tool_intent_phrases if phrase in reasoning_lower]
-                        }
-                    )
-        
-        if not accumulated_tool_calls:
-            # Check 2: Stream ended with absolutely nothing (no content, no tools)  
-            # This catches cases where only reasoning content was present
-            if not accumulated_content and not has_rendered_content:
+        # Check 1: Only check for actual malformed tool calls, not content patterns
+        # Empty choices alone are not sufficient to trigger retry - models can have reasoning-only responses
+        if had_empty_choices and accumulated_tool_calls:
+            # Check if we have incomplete tool calls (missing ID or function name)
+            last_tool_call = accumulated_tool_calls[-1] if accumulated_tool_calls else None
+            if last_tool_call and (not last_tool_call.get("id") or not last_tool_call.get("function", {}).get("name")):
                 return await self._handle_malformed_function_call_retry(
                     messages, chat_params, user_input, recursion_depth,
-                    "stream ended with no content or tool calls, possible MALFORMED_FUNCTION_CALL",
+                    "incomplete tool call detected, possible MALFORMED_FUNCTION_CALL",
+                    {
+                        "Incomplete tool call details": last_tool_call,
+                        "Total accumulated tool calls": len(accumulated_tool_calls),
+                        "stream": stream
+                    }
+                )
+        
+        if not accumulated_tool_calls:
+            # Check 2: Only retry if we have strong signals of a malformed function call
+            # A stream with no content is not necessarily an error - it could be intentional
+            # Only retry if we have explicit error indicators
+            if not accumulated_content and not has_rendered_content and last_finish_reason == "MALFORMED_FUNCTION_CALL":
+                return await self._handle_malformed_function_call_retry(
+                    messages, chat_params, user_input, recursion_depth,
+                    "stream ended with MALFORMED_FUNCTION_CALL finish reason",
                     {
                         "Stream end state - had_empty_choices": had_empty_choices,
                         "Stream end state - last_finish_reason": last_finish_reason,
@@ -765,28 +771,9 @@ class StreamingHandler:
                     }
                 )
             
-            # Second check: Stream ended with content that suggests tool use was intended
-            elif accumulated_content:
-                # Check if the content suggests the model was about to use a tool
-                content_lower = accumulated_content.lower()
-                tool_indicators = [
-                    "i will now", "i'll now", "let me", "i need to", "i'm going to",
-                    "executing", "running", "calling", "using", "invoking",
-                    "correct", "fix", "modify", "update", "create", "write", "read"
-                ]
-                
-                might_be_tool_attempt = any(indicator in content_lower for indicator in tool_indicators)
-                
-                if might_be_tool_attempt and len(accumulated_content) < 300:  # Short content suggesting tool use
-                    return await self._handle_malformed_function_call_retry(
-                        messages, chat_params, user_input, recursion_depth,
-                        "stream ended with content suggesting tool use but no tool calls, possible MALFORMED_FUNCTION_CALL",
-                        {
-                            "Content length": f"{len(accumulated_content)} chars",
-                            "Content snippet": f"{accumulated_content[:200]}...",
-                            "Matched tool indicators": [ind for ind in tool_indicators if ind in content_lower]
-                        }
-                    )
+            # Second check: Removed overly aggressive content-based detection
+            # Models can legitimately end streams with explanatory content that doesn't require tools
+            # Only rely on explicit MALFORMED_FUNCTION_CALL signals from the provider
 
         # After streaming, flush any remaining content
         remaining_content = markdown_buffer.flush()
