@@ -5,7 +5,6 @@ import os
 import time
 from typing import Any, Callable, Dict, List, Optional, cast
 
-import httpx
 from openai.types.chat import ChatCompletionMessageParam
 from openai.types.chat.chat_completion_message import ChatCompletionMessage
 
@@ -70,7 +69,9 @@ class StreamingHandler:
         self._current_agent_name: Optional[str] = None
         self._current_agent_color: Optional[str] = None
 
-    def set_agent_context(self, agent_name: str, agent_color: Optional[str] = None) -> None:
+    def set_agent_context(
+        self, agent_name: str, agent_color: Optional[str] = None
+    ) -> None:
         """Set the current agent context for quote bar rendering."""
         self._current_agent_name = agent_name
         self._current_agent_color = agent_color
@@ -80,6 +81,97 @@ class StreamingHandler:
         self._current_agent_name = None
         self._current_agent_color = None
 
+    def _get_console(self) -> Any:
+        """Get or create a console instance with custom theme.
+
+        This is a pure function that always returns the same console
+        for the same state, ensuring no side effects.
+        """
+        if self._console:
+            return self._console
+
+        from rich.console import Console
+        from qx.cli.theme import custom_theme
+
+        return Console(theme=custom_theme)
+
+    def _extract_reasoning_content(self, delta: Any, choice: Any) -> Optional[str]:
+        """Extract reasoning content from various possible fields.
+
+        This is a pure function that checks multiple fields for reasoning content
+        and returns the first non-None value found, preserving exact behavior.
+        """
+        # Check delta fields - order matters for compatibility
+        if hasattr(delta, "reasoning") and delta.reasoning:
+            return delta.reasoning
+        elif hasattr(delta, "reasoning_content") and delta.reasoning_content:
+            return delta.reasoning_content
+        elif hasattr(delta, "thinking") and delta.thinking:
+            return delta.thinking
+
+        # Also check at the choice level for non-streaming fields
+        if hasattr(choice, "reasoning_content") and choice.reasoning_content:
+            return choice.reasoning_content
+
+        return None
+
+    def _is_empty_delta(self, delta: Any) -> bool:
+        """Check if delta contains no meaningful content.
+
+        This is a pure predicate function that returns True if the delta
+        has no content, reasoning, or tool calls.
+        """
+        return (
+            not delta.content
+            and not (hasattr(delta, "reasoning") and delta.reasoning)
+            and not (hasattr(delta, "reasoning_content") and delta.reasoning_content)
+            and not (hasattr(delta, "thinking") and delta.thinking)
+            and not delta.tool_calls
+        )
+
+    def _is_malformed_tool_call(self, tool_call: Optional[Dict[str, Any]]) -> bool:
+        """Check if a tool call is malformed (missing ID or name).
+
+        This is a pure predicate function that validates tool call structure.
+        Returns True if the tool call is malformed.
+        """
+        if not tool_call:
+            return False
+        return not tool_call.get("id") or not tool_call.get("function", {}).get("name")
+
+    def _render_agent_header(
+        self,
+        console: Any,
+        agent_name: str,
+        agent_color: Optional[str] = None,
+        title_suffix: str = "",
+        separator_style_suffix: str = "",
+    ) -> None:
+        """Render agent header with title and separator line.
+
+        This preserves the exact output format including blank lines and Text objects.
+
+        Args:
+            console: The console to print to
+            agent_name: The agent name to display
+            agent_color: Optional agent color override
+            title_suffix: Optional suffix to add to the title (e.g., " Thinking")
+            separator_style_suffix: Optional style suffix for separator (e.g., " dim")
+        """
+        from qx.cli.quote_bar_component import get_agent_color
+        from rich.text import Text
+
+        color = get_agent_color(agent_name, agent_color)
+        console.print()  # Add blank line before agent title
+
+        # Create title with optional suffix
+        title = f"{agent_name}{title_suffix}"
+        console.print(Text(title, style="bold"))
+
+        # Create separator line with optional style suffix
+        separator_style = f"{color}{separator_style_suffix}"
+        console.print(Text("─" * len(title), style=separator_style))
+
     async def _handle_malformed_function_call_retry(
         self,
         messages: List[ChatCompletionMessageParam],
@@ -87,48 +179,58 @@ class StreamingHandler:
         user_input: str,
         recursion_depth: int,
         retry_reason: str,
-        debug_info: Dict[str, Any] = None,
+        debug_info: Optional[Dict[str, Any]] = None,
     ) -> Any:
         """Handle retry logic for MALFORMED_FUNCTION_CALL errors."""
         from qx.core.llm import QXRunResult  # Import here to avoid circular imports
-        
+
         logger.warning(f"Detected {retry_reason} (recursion_depth={recursion_depth})")
-        
+
         # Log debug info if provided
         if debug_info:
             for key, value in debug_info.items():
                 logger.debug(f"{key}: {value}")
-        
+
         # Close the current stream if provided
-        if "stream" in debug_info and debug_info["stream"] and hasattr(debug_info["stream"], "aclose"):
+        if (
+            "stream" in debug_info
+            and debug_info["stream"]
+            and hasattr(debug_info["stream"], "aclose")
+        ):
             try:
                 await debug_info["stream"].aclose()
             except Exception:
                 pass
-        
+
         # Add retry instruction message
         retry_message = cast(
             ChatCompletionMessageParam,
             {
                 "role": "user",
-                "content": "last function call was malformed, please try again"
-            }
+                "content": "last function call was malformed, please try again",
+            },
         )
         messages.append(retry_message)
-        
+
         # Check recursion depth to prevent infinite loops
         if recursion_depth >= 3:  # Allow up to 3 retry attempts
-            logger.error(f"Max retry attempts for MALFORMED_FUNCTION_CALL reached (recursion_depth={recursion_depth})")
+            logger.error(
+                f"Max retry attempts for MALFORMED_FUNCTION_CALL reached (recursion_depth={recursion_depth})"
+            )
             logger.debug(f"Failed after {recursion_depth} retry attempts")
             logger.debug(f"Final message count: {len(messages)}")
             _managed_stream_print(
                 "\n[error]Error: Maximum retry attempts for malformed function call reached[/]",
-                use_manager=True
+                use_manager=True,
             )
-            return QXRunResult("Failed to execute function call after multiple attempts", messages)
-        
+            return QXRunResult(
+                "Failed to execute function call after multiple attempts", messages
+            )
+
         # Recursive call to retry
-        logger.info(f"Initiating retry attempt {recursion_depth + 1} for {retry_reason}")
+        logger.info(
+            f"Initiating retry attempt {recursion_depth + 1} for {retry_reason}"
+        )
         return await self.handle_streaming_response(
             chat_params, messages, user_input, recursion_depth + 1
         )
@@ -142,25 +244,40 @@ class StreamingHandler:
     ) -> Any:
         """Handle streaming response from OpenRouter API."""
         from qx.core.llm import QXRunResult  # Import here to avoid circular imports
-        
+
         # Log entry into streaming handler
-        logger.debug(f"Entering handle_streaming_response (recursion_depth={recursion_depth})")
+        logger.debug(
+            f"Entering handle_streaming_response (recursion_depth={recursion_depth})"
+        )
         if recursion_depth > 0:
-            logger.info(f"This is retry attempt {recursion_depth} for MALFORMED_FUNCTION_CALL")
+            logger.info(
+                f"This is retry attempt {recursion_depth} for MALFORMED_FUNCTION_CALL"
+            )
             logger.debug(f"Message history length: {len(messages)}")
-            if messages and messages[-1].get("role") == "user":
-                logger.debug(f"Last user message: {messages[-1].get('content', '')[:100]}...")
-                
+            if messages:
+                last_msg = messages[-1]
+                if isinstance(last_msg, dict) and last_msg.get("role") == "user":
+                    content = last_msg.get("content", "")
+                    if isinstance(content, str):
+                        logger.debug(f"Last user message: {content[:100]}...")
+                    else:
+                        logger.debug("Last user message: [non-string content]")
+
         # Prevent retry loops - if we're already in a retry and get another malformed call, fail fast
         if recursion_depth > 0:
             # Check if the last message is our retry instruction
             if messages and len(messages) > 0:
                 last_msg = messages[-1]
-                if (isinstance(last_msg, dict) and 
-                    last_msg.get("role") == "user" and 
-                    last_msg.get("content") == "last function call was malformed, please try again"):
+                if (
+                    isinstance(last_msg, dict)
+                    and last_msg.get("role") == "user"
+                    and last_msg.get("content")
+                    == "last function call was malformed, please try again"
+                ):
                     # We're in a retry loop - this should count against our retry limit
-                    logger.warning(f"Detected retry loop at recursion_depth={recursion_depth}")
+                    logger.warning(
+                        f"Detected retry loop at recursion_depth={recursion_depth}"
+                    )
 
         accumulated_content = ""
         accumulated_tool_calls: list[dict[str, Any]] = []
@@ -185,10 +302,7 @@ class StreamingHandler:
 
         # If this is a continuation after tools, add spacing
         if user_input == "__CONTINUE_AFTER_TOOLS__":
-            from rich.console import Console
-            from qx.cli.theme import custom_theme
-
-            console = self._console if self._console else Console(theme=custom_theme)
+            console = self._get_console()
             console.print()  # Add spacing before agent response after tools
 
         # Helper function to render content as markdown via rich console
@@ -209,22 +323,14 @@ class StreamingHandler:
                         get_agent_color,
                         LeftAlignedMarkdown,
                     )
-                    from rich.console import Console
-                    from rich.markdown import Markdown
-                    from rich.text import Text
-                    from qx.cli.theme import custom_theme, default_markdown_theme
+                    from qx.cli.theme import default_markdown_theme
 
                     # Use the main console if available, otherwise create one with theme
-                    rich_console = (
-                        self._console if self._console else Console(theme=custom_theme)
-                    )
+                    rich_console = self._get_console()
 
                     # Show agent title for the first meaningful content
                     if show_agent_title:
-                        color = get_agent_color(agent_name, agent_color)
-                        rich_console.print()  # Add blank line before agent title
-                        rich_console.print(Text(agent_name, style="bold"))
-                        rich_console.print(Text("─" * len(agent_name), style=color))
+                        self._render_agent_header(rich_console, agent_name, agent_color)
                         show_agent_title = False
 
                     # Pre-process content to handle Rich markup within markdown
@@ -241,15 +347,14 @@ class StreamingHandler:
                     rich_console.print(bordered_md, end="", markup=True)
                 else:
                     # Fallback to standard markdown rendering with BorderedMarkdown
-                    from rich.console import Console
-                    from rich.markdown import Markdown
-                    from qx.cli.theme import custom_theme, default_markdown_theme
-                    from qx.cli.quote_bar_component import BorderedMarkdown, LeftAlignedMarkdown
+                    from qx.cli.theme import default_markdown_theme
+                    from qx.cli.quote_bar_component import (
+                        BorderedMarkdown,
+                        LeftAlignedMarkdown,
+                    )
 
                     # Use the main console if available, otherwise create one with theme
-                    rich_console = (
-                        self._console if self._console else Console(theme=custom_theme)
-                    )
+                    rich_console = self._get_console()
                     # Pre-process content to handle Rich markup within markdown
                     processed_content = content
 
@@ -288,17 +393,12 @@ class StreamingHandler:
                 status.update(f"[dim]{first_line}[/dim]")
 
         try:
-            from rich.console import Console
-            from qx.cli.theme import custom_theme
-
-            console = self._console if self._console else Console(theme=custom_theme)
+            console = self._get_console()
 
             with console.status(
                 "[dim]Processing[/dim]", spinner="point", speed=2, refresh_per_second=25
             ) as status:
                 stream = await self._make_litellm_call(chat_params)
-                consecutive_errors = 0  # Track consecutive parsing errors
-                max_consecutive_errors = 3  # Maximum allowed consecutive errors
 
                 async for chunk in stream:
                     # Check for cancellation
@@ -316,52 +416,81 @@ class StreamingHandler:
 
                     # Check for MALFORMED_FUNCTION_CALL in provider-specific fields
                     # This handles cases where LiteLLM doesn't populate choices for certain error conditions
-                    if hasattr(chunk, "provider_specific_fields") and chunk.provider_specific_fields:
-                        logger.debug(f"Provider specific fields present: {chunk.provider_specific_fields}")
+                    if (
+                        hasattr(chunk, "provider_specific_fields")
+                        and chunk.provider_specific_fields
+                    ):
+                        logger.debug(
+                            f"Provider specific fields present: {chunk.provider_specific_fields}"
+                        )
                         # Check if this is a Gemini MALFORMED_FUNCTION_CALL response
                         if isinstance(chunk.provider_specific_fields, dict):
-                            candidates = chunk.provider_specific_fields.get("candidates", [])
-                            logger.debug(f"Found {len(candidates)} candidates in provider fields")
+                            candidates = chunk.provider_specific_fields.get(
+                                "candidates", []
+                            )
+                            logger.debug(
+                                f"Found {len(candidates)} candidates in provider fields"
+                            )
                             for idx, candidate in enumerate(candidates):
                                 finish_reason = candidate.get("finishReason")
-                                logger.debug(f"Candidate {idx} finish reason: {finish_reason}")
+                                logger.debug(
+                                    f"Candidate {idx} finish reason: {finish_reason}"
+                                )
                                 if finish_reason == "MALFORMED_FUNCTION_CALL":
                                     return await self._handle_malformed_function_call_retry(
-                                        messages, chat_params, user_input, recursion_depth,
+                                        messages,
+                                        chat_params,
+                                        user_input,
+                                        recursion_depth,
                                         "MALFORMED_FUNCTION_CALL from Gemini",
                                         {
-                                            "Accumulated content before retry": accumulated_content[:200] if accumulated_content else 'None',
+                                            "Accumulated content before retry": accumulated_content[
+                                                :200
+                                            ]
+                                            if accumulated_content
+                                            else "None",
                                             "Accumulated tool calls before retry": accumulated_tool_calls,
                                             "Full candidate data": candidate,
-                                            "stream": stream
-                                        }
+                                            "stream": stream,
+                                        },
                                     )
 
                     if not chunk.choices:
                         # Mark that we got empty choices
                         had_empty_choices = True
-                        
+
                         # Check if this is due to a MALFORMED_FUNCTION_CALL before continuing
                         # Some providers (like Gemini via LiteLLM) may send empty choices for error conditions
                         if os.getenv("QX_LOG_RECEIVED"):
-                            logger.debug(f"Empty choices in chunk, checking for error conditions")
-                        
+                            logger.debug(
+                                "Empty choices in chunk, checking for error conditions"
+                            )
+
                         # If we've been accumulating tool calls but got empty choices, this might be an error
                         if accumulated_tool_calls and len(accumulated_tool_calls) > 0:
                             # Check if the last tool call might be malformed
-                            last_tool_call = accumulated_tool_calls[-1] if accumulated_tool_calls else None
-                            if last_tool_call and (not last_tool_call.get("id") or not last_tool_call.get("function", {}).get("name")):
+                            last_tool_call = (
+                                accumulated_tool_calls[-1]
+                                if accumulated_tool_calls
+                                else None
+                            )
+                            if self._is_malformed_tool_call(last_tool_call):
                                 return await self._handle_malformed_function_call_retry(
-                                    messages, chat_params, user_input, recursion_depth,
+                                    messages,
+                                    chat_params,
+                                    user_input,
+                                    recursion_depth,
                                     "incomplete tool call with empty choices, possible MALFORMED_FUNCTION_CALL",
                                     {
                                         "Incomplete tool call details": last_tool_call,
-                                        "Total accumulated tool calls": len(accumulated_tool_calls),
+                                        "Total accumulated tool calls": len(
+                                            accumulated_tool_calls
+                                        ),
                                         "Had empty choices": had_empty_choices,
-                                        "stream": stream
-                                    }
+                                        "stream": stream,
+                                    },
                                 )
-                        
+
                         continue
 
                     choice = chunk.choices[0]
@@ -371,12 +500,13 @@ class StreamingHandler:
                     current_chunk_content = ""
                     if delta.content:
                         current_chunk_content = delta.content
-                    elif hasattr(delta, "reasoning") and delta.reasoning:
-                        current_chunk_content = delta.reasoning
-                    elif hasattr(delta, "reasoning_content") and delta.reasoning_content:
-                        current_chunk_content = delta.reasoning_content
-                    elif hasattr(delta, "thinking") and delta.thinking:
-                        current_chunk_content = delta.thinking
+                    else:
+                        # Use reasoning content if no regular content
+                        reasoning_content = self._extract_reasoning_content(
+                            delta, choice
+                        )
+                        if reasoning_content:
+                            current_chunk_content = reasoning_content
 
                     if (
                         current_chunk_content
@@ -393,35 +523,28 @@ class StreamingHandler:
                         last_chunk_content = current_chunk_content
 
                     # Handle reasoning streaming (check multiple fields for different providers)
-                    reasoning_text = None
-                    
-                    # Check for reasoning content in various formats
-                    if hasattr(delta, "reasoning") and delta.reasoning:
-                        # OpenRouter format
-                        reasoning_text = delta.reasoning
-                    elif hasattr(delta, "reasoning_content") and delta.reasoning_content:
-                        # Standard LiteLLM format
-                        reasoning_text = delta.reasoning_content
-                    elif hasattr(delta, "thinking") and delta.thinking:
-                        # Alternative format
-                        reasoning_text = delta.thinking
-                    
-                    # Also check at the choice level for non-streaming fields
-                    if not reasoning_text and hasattr(choice, "reasoning_content") and choice.reasoning_content:
-                        reasoning_text = choice.reasoning_content
-                    
+                    reasoning_text = self._extract_reasoning_content(delta, choice)
+
                     # Debug logging for reasoning content
                     if os.getenv("QX_DEBUG_REASONING"):
                         if reasoning_text:
-                            logger.debug(f"Found reasoning text: {reasoning_text[:100]}...")
+                            logger.debug(
+                                f"Found reasoning text: {reasoning_text[:100]}..."
+                            )
                         else:
                             # Log what fields are present for debugging
-                            delta_attrs = [attr for attr in dir(delta) if not attr.startswith('_')]
+                            delta_attrs = [
+                                attr for attr in dir(delta) if not attr.startswith("_")
+                            ]
                             logger.debug(f"Delta attributes: {delta_attrs}")
                             if hasattr(choice, "__dict__"):
-                                choice_attrs = [attr for attr in dir(choice) if not attr.startswith('_')]
+                                choice_attrs = [
+                                    attr
+                                    for attr in dir(choice)
+                                    if not attr.startswith("_")
+                                ]
                                 logger.debug(f"Choice attributes: {choice_attrs}")
-                    
+
                     if reasoning_text:
                         # Accumulate reasoning content for malformed function call detection
                         accumulated_reasoning_content += reasoning_text
@@ -439,62 +562,60 @@ class StreamingHandler:
 
                                 # Use BorderedMarkdown for think messages - render directly
                                 try:
-                                    from qx.cli.quote_bar_component import BorderedMarkdown, get_agent_color, LeftAlignedMarkdown
-                                    from rich.markdown import Markdown
-                                    from rich.console import Console, Group
-                                    from rich.text import Text
-                                    from qx.cli.theme import custom_theme, dimmed_grey_markdown_theme
+                                    from qx.cli.quote_bar_component import (
+                                        BorderedMarkdown,
+                                        get_agent_color,
+                                        LeftAlignedMarkdown,
+                                    )
+                                    from qx.cli.theme import dimmed_grey_markdown_theme
 
                                     # Get agent context for proper formatting
-                                    agent_name = getattr(self, "_current_agent_name", None)
-                                    agent_color = getattr(self, "_current_agent_color", None)
-                                    
-                                    reasoning_console = (
-                                        self._console
-                                        if self._console
-                                        else Console(theme=custom_theme)
+                                    agent_name = getattr(
+                                        self, "_current_agent_name", None
                                     )
-                                    
+                                    agent_color = getattr(
+                                        self, "_current_agent_color", None
+                                    )
+
+                                    reasoning_console = self._get_console()
+
                                     if agent_name:
                                         color = get_agent_color(agent_name, agent_color)
-                                        
+
                                         # Show title and separator only once at the beginning
                                         if not thinking_title_shown:
-                                            # Add blank line before first thinking block
-                                            reasoning_console.print()
-                                            
-                                            thinking_title = f"{agent_name} Thinking"
-                                            title_text = Text(thinking_title, style="bold")
-                                            separator_line = Text("─" * len(thinking_title), style=f"{color} dim")
-                                            reasoning_console.print(title_text)
-                                            reasoning_console.print(separator_line)
+                                            self._render_agent_header(
+                                                reasoning_console,
+                                                agent_name,
+                                                agent_color,
+                                                title_suffix=" Thinking",
+                                                separator_style_suffix=" dim",
+                                            )
                                             thinking_title_shown = True
-                                        
+
                                         # Create BorderedMarkdown for the thinking content only
-                                        reasoning_md = LeftAlignedMarkdown(reasoning_text, code_theme="rrt")
+                                        reasoning_md = LeftAlignedMarkdown(
+                                            reasoning_text, code_theme="rrt"
+                                        )
                                         bordered_thinking = BorderedMarkdown(
                                             reasoning_md,
                                             border_style=f"{color} dim",  # Use dim style for thinking
                                             background_color="#0a0a0a",  # Slightly darker background for thinking
                                             markdown_theme=dimmed_grey_markdown_theme,  # Use dimmed grey theme for thinking
                                         )
-                                        
-                                        reasoning_console.print(bordered_thinking, end="")
+
+                                        reasoning_console.print(
+                                            bordered_thinking, end=""
+                                        )
                                     else:
                                         # Fallback without agent context
                                         reasoning_console.print(
                                             f"[dim]{reasoning_text}[/dim]", end=""
                                         )
-                                except Exception as e:
+                                except Exception:
                                     # Fallback to original method if anything fails
-                                    from rich.console import Console
-                                    from qx.cli.theme import custom_theme
-                                    
-                                    reasoning_console = (
-                                        self._console
-                                        if self._console
-                                        else Console(theme=custom_theme)
-                                    )
+
+                                    reasoning_console = self._get_console()
                                     reasoning_console.print(
                                         f"[dim]{reasoning_text}[/dim]", end=""
                                     )
@@ -520,11 +641,7 @@ class StreamingHandler:
                         # Add visual separation if transitioning from thinking to content
                         if content_to_render and showing_thinking_details:
                             # Add a small separator between thinking and actual response
-                            from rich.console import Console
-                            from qx.cli.theme import custom_theme
-                            transition_console = (
-                                self._console if self._console else Console(theme=custom_theme)
-                            )
+                            transition_console = self._get_console()
                             transition_console.print()  # Add blank line for separation
                             showing_thinking_details = False  # Reset flag
 
@@ -580,29 +697,28 @@ class StreamingHandler:
                         # Handle MALFORMED_FUNCTION_CALL finish reason
                         if choice.finish_reason == "MALFORMED_FUNCTION_CALL":
                             return await self._handle_malformed_function_call_retry(
-                                messages, chat_params, user_input, recursion_depth,
+                                messages,
+                                chat_params,
+                                user_input,
+                                recursion_depth,
                                 "MALFORMED_FUNCTION_CALL finish reason",
                                 {
                                     "Stream completion state - accumulated_content": f"{len(accumulated_content) if accumulated_content else 0} chars",
                                     "Stream completion state - tool_calls": f"{len(accumulated_tool_calls)} calls",
                                     "Stream completion state - reasoning_content": f"{len(accumulated_reasoning_content) if accumulated_reasoning_content else 0} chars",
-                                    "Last tool call state": accumulated_tool_calls[-1] if accumulated_tool_calls else 'No tool calls',
-                                    "stream": stream
-                                }
+                                    "Last tool call state": accumulated_tool_calls[-1]
+                                    if accumulated_tool_calls
+                                    else "No tool calls",
+                                    "stream": stream,
+                                },
                             )
-                        
+
                         stream_completed = True
                         break
 
                     # Additional safeguard: if we get multiple consecutive empty chunks after content/reasoning
                     # this might indicate the stream should end
-                    if (
-                        not delta.content
-                        and not (hasattr(delta, "reasoning") and delta.reasoning)
-                        and not (hasattr(delta, "reasoning_content") and delta.reasoning_content)
-                        and not (hasattr(delta, "thinking") and delta.thinking)
-                        and not delta.tool_calls
-                    ):
+                    if self._is_empty_delta(delta):
                         if (
                             accumulated_content or has_rendered_content
                         ):  # Only count empty chunks if we've seen content
@@ -630,8 +746,6 @@ class StreamingHandler:
                     pass
             # Return partial response if any content was accumulated
             if accumulated_content:
-                from rich.console import Console
-
                 _managed_stream_print(
                     "\n[warning]⚠ Response interrupted[/]", use_manager=True
                 )
@@ -656,40 +770,46 @@ class StreamingHandler:
                 return QXRunResult("Operation cancelled", messages)
         except Exception as e:
             # Special handling for JSON parsing errors from Vertex AI
-            if isinstance(e, RuntimeError) and "Error parsing chunk" in str(e) and "JSONDecodeError" in str(e):
+            if (
+                isinstance(e, RuntimeError)
+                and "Error parsing chunk" in str(e)
+                and "JSONDecodeError" in str(e)
+            ):
                 logger.warning(f"JSON parsing error in Vertex AI stream: {e}")
-                
+
                 # If we have accumulated content, return what we have
                 if accumulated_content or has_rendered_content:
                     logger.info("Returning partial response due to JSON parsing error")
-                    
+
                     # Flush any remaining content
                     if markdown_buffer:
                         remaining_content = markdown_buffer.flush()
                         if remaining_content and remaining_content.strip():
                             await render_content(remaining_content)
-                    
+
                     # Create response message from accumulated data
                     response_message_dict: Dict[str, Any] = {
                         "role": "assistant",
                         "content": accumulated_content if accumulated_content else None,
                     }
-                    
+
                     if accumulated_tool_calls:
                         # Convert accumulated tool calls to proper format
                         tool_calls = []
                         for tc in accumulated_tool_calls:
                             if tc["id"] and tc["function"]["name"]:
-                                tool_calls.append({
-                                    "id": tc["id"],
-                                    "type": "function",
-                                    "function": {
-                                        "name": tc["function"]["name"],
-                                        "arguments": tc["function"]["arguments"],
-                                    },
-                                })
+                                tool_calls.append(
+                                    {
+                                        "id": tc["id"],
+                                        "type": "function",
+                                        "function": {
+                                            "name": tc["function"]["name"],
+                                            "arguments": tc["function"]["arguments"],
+                                        },
+                                    }
+                                )
                         response_message_dict["tool_calls"] = tool_calls
-                    
+
                     # Convert to proper message format
                     if "tool_calls" in response_message_dict:
                         streaming_response_message = ChatCompletionMessage(
@@ -699,17 +819,20 @@ class StreamingHandler:
                         )
                     else:
                         streaming_response_message = ChatCompletionMessage(
-                            role="assistant", content=response_message_dict.get("content")
+                            role="assistant",
+                            content=response_message_dict.get("content"),
                         )
-                    
-                    messages.append(cast(ChatCompletionMessageParam, streaming_response_message))
-                    
+
+                    messages.append(
+                        cast(ChatCompletionMessageParam, streaming_response_message)
+                    )
+
                     # Add warning about truncated response
                     _managed_stream_print(
                         "\n[warning]Note: Response may be incomplete due to streaming error[/]",
-                        use_manager=True
+                        use_manager=True,
                     )
-                    
+
                     return QXRunResult(accumulated_content or "", messages)
                 else:
                     # No content accumulated, need to fail
@@ -733,44 +856,58 @@ class StreamingHandler:
 
         # After streaming, comprehensive check for MALFORMED_FUNCTION_CALL patterns
         # This might indicate a MALFORMED_FUNCTION_CALL that wasn't properly detected
-        
+
         # Log diagnostic info if debug mode
         if os.getenv("QX_LOG_RECEIVED"):
-            logger.debug(f"Stream ended - content: {bool(accumulated_content)}, tools: {bool(accumulated_tool_calls)}, "
-                        f"reasoning: {bool(accumulated_reasoning_content)}, empty_choices: {had_empty_choices}, "
-                        f"finish_reason: {last_finish_reason}")
-        
+            logger.debug(
+                f"Stream ended - content: {bool(accumulated_content)}, tools: {bool(accumulated_tool_calls)}, "
+                f"reasoning: {bool(accumulated_reasoning_content)}, empty_choices: {had_empty_choices}, "
+                f"finish_reason: {last_finish_reason}"
+            )
+
         # Check 1: Only check for actual malformed tool calls, not content patterns
         # Empty choices alone are not sufficient to trigger retry - models can have reasoning-only responses
         if had_empty_choices and accumulated_tool_calls:
             # Check if we have incomplete tool calls (missing ID or function name)
-            last_tool_call = accumulated_tool_calls[-1] if accumulated_tool_calls else None
-            if last_tool_call and (not last_tool_call.get("id") or not last_tool_call.get("function", {}).get("name")):
+            last_tool_call = (
+                accumulated_tool_calls[-1] if accumulated_tool_calls else None
+            )
+            if self._is_malformed_tool_call(last_tool_call):
                 return await self._handle_malformed_function_call_retry(
-                    messages, chat_params, user_input, recursion_depth,
+                    messages,
+                    chat_params,
+                    user_input,
+                    recursion_depth,
                     "incomplete tool call detected, possible MALFORMED_FUNCTION_CALL",
                     {
                         "Incomplete tool call details": last_tool_call,
                         "Total accumulated tool calls": len(accumulated_tool_calls),
-                        "stream": stream
-                    }
+                        "stream": stream,
+                    },
                 )
-        
+
         if not accumulated_tool_calls:
             # Check 2: Only retry if we have strong signals of a malformed function call
             # A stream with no content is not necessarily an error - it could be intentional
             # Only retry if we have explicit error indicators
-            if not accumulated_content and not has_rendered_content and last_finish_reason == "MALFORMED_FUNCTION_CALL":
+            if (
+                not accumulated_content
+                and not has_rendered_content
+                and last_finish_reason == "MALFORMED_FUNCTION_CALL"
+            ):
                 return await self._handle_malformed_function_call_retry(
-                    messages, chat_params, user_input, recursion_depth,
+                    messages,
+                    chat_params,
+                    user_input,
+                    recursion_depth,
                     "stream ended with MALFORMED_FUNCTION_CALL finish reason",
                     {
                         "Stream end state - had_empty_choices": had_empty_choices,
                         "Stream end state - last_finish_reason": last_finish_reason,
-                        "Stream end state - accumulated_reasoning": f"{len(accumulated_reasoning_content) if accumulated_reasoning_content else 0} chars"
-                    }
+                        "Stream end state - accumulated_reasoning": f"{len(accumulated_reasoning_content) if accumulated_reasoning_content else 0} chars",
+                    },
                 )
-            
+
             # Second check: Removed overly aggressive content-based detection
             # Models can legitimately end streams with explanatory content that doesn't require tools
             # Only rely on explicit MALFORMED_FUNCTION_CALL signals from the provider
@@ -823,7 +960,11 @@ class StreamingHandler:
 
         # Add final newline if we rendered any content (but not for tool executions)
         # Tool executions should not have trailing newlines to maintain clean formatting
-        if accumulated_content.strip() and (has_rendered_content or remaining_content) and not accumulated_tool_calls:
+        if (
+            accumulated_content.strip()
+            and (has_rendered_content or remaining_content)
+            and not accumulated_tool_calls
+        ):
             _managed_stream_print("", use_manager=True)
 
         # Create response message from accumulated data
@@ -872,17 +1013,12 @@ class StreamingHandler:
 
         # Process tool calls if any
         if accumulated_tool_calls:
-
             # Add spacing and agent headers for tool execution if we haven't shown agent title yet
             # or if we had content rendered (meaning this is a separate tool execution block)
             if has_rendered_content or accumulated_content.strip():
                 # Add spacing before tool execution block
-                from rich.console import Console
-                from qx.cli.theme import custom_theme
 
-                console = (
-                    self._console if self._console else Console(theme=custom_theme)
-                )
+                console = self._get_console()
                 console.print()  # Add spacing
 
             # Show agent headers for tool execution
@@ -891,17 +1027,9 @@ class StreamingHandler:
 
             if agent_name:
                 from qx.cli.quote_bar_component import get_agent_color
-                from rich.text import Text
-                from rich.console import Console
-                from qx.cli.theme import custom_theme
 
-                console = (
-                    self._console if self._console else Console(theme=custom_theme)
-                )
-                color = get_agent_color(agent_name, agent_color)
-                console.print()  # Add blank line before agent title
-                console.print(Text(agent_name, style="bold"))
-                console.print(Text("─" * len(agent_name), style=color))
+                console = self._get_console()
+                self._render_agent_header(console, agent_name, agent_color)
 
             # Pass empty content if we cleared narration
             streaming_response_message.content = (
