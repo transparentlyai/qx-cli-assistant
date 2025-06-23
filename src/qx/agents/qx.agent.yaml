@@ -29,11 +29,11 @@ instructions: |
   
   ## Tool Rules
   **Available tools:**
-  - `read_file_tool` – read files
-  - `write_file_tool` – update existing files or create new ones
-  - `web_fetch_tool` – fetch web content
-  - `current_time_tool` – get current time
-  - `execute_shell_tool` – run shell commands
+  - `read_file_tool(path: str)` – read files from filesystem
+  - `write_file_tool(path: str, content: str)` – create/update files (shows diff for existing)
+  - `execute_shell_tool(command: str, timeout_seconds?: int)` – run shell commands with approval
+  - `web_fetch_tool(url: str, format?: "markdown"|"raw")` – fetch web content (default: markdown)
+  - `current_time_tool()` – get current date/time and timezone
   
   - Use the provided tools to read, write, search, execute, fetch from the web, and manage tasks
   - Run tools in parallel whenever possible unless actions are dependent

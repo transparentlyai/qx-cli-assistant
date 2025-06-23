@@ -427,12 +427,15 @@ def initialize_llm_agent(
         try:
             # Override model parameters from agent config
             model_name_str = getattr(agent_config.model, "name", model_name_str)
-            temperature = getattr(agent_config.model.parameters, "temperature", 0.7)
+            temperature = getattr(agent_config.model.parameters, "temperature", 
+                float(os.environ.get("QX_MODEL_TEMPERATURE", "0.7")))
             max_output_tokens = getattr(
-                agent_config.model.parameters, "max_tokens", 4096
+                agent_config.model.parameters, "max_tokens", 
+                int(os.environ.get("QX_MODEL_MAX_TOKENS", "4096"))
             )
             reasoning_effort = getattr(
-                agent_config.model.parameters, "reasoning_budget", None
+                agent_config.model.parameters, "reasoning_budget", 
+                os.environ.get("QX_MODEL_REASONING_EFFORT")
             )
             logger.info(f"Using agent-based model configuration: {model_name_str}")
         except AttributeError as e:
