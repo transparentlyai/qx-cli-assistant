@@ -285,6 +285,9 @@ DEFAULT_APPROVED_COMMANDS = [
 # Shell command execution timeout in seconds
 SHELL_COMMAND_TIMEOUT = 60
 
+# Maximum recursion depth for tool calling
+MAX_TOOL_RECURSION_DEPTH = 50
+
 # Approval statuses that indicate the operation should proceed
 APPROVAL_STATUSES_OK = ["approved", "session_approved"]
 
