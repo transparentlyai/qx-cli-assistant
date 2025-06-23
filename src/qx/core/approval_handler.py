@@ -210,42 +210,48 @@ class ApprovalHandler:
             ("y", "Yes", "approved"),
             ("n", "No", "denied"),
             ("a", "All", "session_approved"),
-            ("c", "Cancel", "cancelled"),
         ]
 
         option_map = {key: status for key, _, status in options}
         valid_keys = [key for key, _, _ in options]
 
-        # Display the colored options above the prompt
+        # Strip Rich markup from prompt_message for plain text display
+        import re
+        plain_prompt = re.sub(r'\[.*?\]', '', prompt_message)
+        
+        # Display the colored prompt with styled options (without newline)
         colored_options = []
         for key, text, _ in options:
-            colored_option = f"[highlight]{text[0]}[/highlight]{text[1:]}"
+            # Highlight first letter of each option
+            colored_option = f"[yellow]{text[0]}[/yellow]{text[1:]}"
             colored_options.append(colored_option)
         
-        options_display = " | ".join(colored_options)
+        options_display = ", ".join(colored_options)
+        styled_prompt = prompt_message.replace('[primary]', '[bright_blue]').replace('[highlight]', '[magenta]')
+        full_styled_prompt = f"{styled_prompt} ({options_display}): "
+        
         if self.use_console_manager and self._console_manager:
-            self._console_manager.print(f"Options: {options_display}", console=self.console)
+            self._console_manager.print(full_styled_prompt, console=self.console, end="")
         else:
-            self.console.print(f"Options: {options_display}")
-
+            self.console.print(full_styled_prompt, end="")
+        
         # Create plain text prompt for input() function
-        plain_choices = "/".join([key for key, _, _ in options])
-        full_prompt_text = f"{prompt_message} ({plain_choices}): "
+        option_texts = []
+        for key, text, _ in options:
+            option_texts.append(text)
+        
+        options_str = ", ".join(option_texts)
+        # Use minimal prompt since we already displayed the full prompt
+        # Don't use empty string as it can cause issues with input()
+        full_prompt_text = " "
 
-        if self.use_console_manager and self._console_manager:
-            chosen_key = self._console_manager.request_choice_blocking(
-                prompt_text_with_options=full_prompt_text,
-                valid_choices=valid_keys,
-                console=self.console,
-                default_choice=None
-            )
-        else:
-            chosen_key = await get_user_choice_from_options_async(
-                self.console,
-                full_prompt_text,
-                valid_keys,
-                default_choice=None,
-            )
+        # Always use async version to avoid event loop issues
+        chosen_key = await get_user_choice_from_options_async(
+            self.console,
+            full_prompt_text,
+            valid_keys,
+            default_choice=None,
+        )
 
         if chosen_key and chosen_key in option_map:
             # Handle "All" option to activate session auto-approve
@@ -267,5 +273,5 @@ class ApprovalHandler:
             status = option_map[chosen_key]
             return status, chosen_key
         else:
-            self.print_outcome("Operation", "Cancelled.", success=False)
-            return "cancelled", None
+            self.print_outcome("Operation", "Denied.", success=False)
+            return "denied", None
