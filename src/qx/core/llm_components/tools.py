@@ -234,6 +234,7 @@ class ToolProcessor:
                 if role == "tool":
                     tool_count += 1
             logger.debug(f"Sending {tool_count} tool responses to LLM")
+            logger.debug(f"Continuing after tools with recursion depth: {recursion_depth}")
 
             # Check if we're approaching recursion limit before continuing
             if recursion_depth >= 8:
@@ -251,7 +252,10 @@ class ToolProcessor:
                 messages.append(final_system_msg)
 
             result = await self._run(
-                "__CONTINUE_AFTER_TOOLS__", messages, recursion_depth + 1
+                "__CONTINUE_AFTER_TOOLS__", 
+                message_history=messages, 
+                add_user_message_to_history=False,
+                _recursion_depth=recursion_depth + 1
             )
             logger.debug("Tool response continuation completed successfully")
             return result
