@@ -4,7 +4,6 @@ import os
 from typing import List, Literal, Optional, Tuple, Any
 
 from rich.console import RenderableType
-import signal
 from rich.prompt import Prompt
 
 from qx.core.state_manager import details_manager
@@ -50,29 +49,11 @@ def _managed_print(console: RichConsole, content: Any, **kwargs) -> None:
 
 CHOICE_YES = ("y", "Yes", "yes")
 CHOICE_NO = ("n", "No", "no")
-CHOICE_APPROVE_ALL = ("a", "Approve All", "all")
-CHOICE_CANCEL = ("c", "Cancel", "cancel")
+CHOICE_APPROVE_ALL = ("a", "All", "all")
 
 ApprovalDecisionStatus = Literal["approved", "denied", "cancelled", "session_approved"]
 
 
-def _disable_ctrl_c():
-    """Temporarily disable Ctrl+C signal handling"""
-    try:
-        return signal.signal(signal.SIGINT, signal.SIG_IGN)
-    except ValueError:
-        # Signal handling only works in main thread
-        return None
-
-
-def _restore_ctrl_c(old_handler):
-    """Restore previous Ctrl+C signal handling"""
-    if old_handler is not None:
-        try:
-            signal.signal(signal.SIGINT, old_handler)
-        except ValueError:
-            # Signal handling only works in main thread
-            pass
 
 
 def _suspend_global_hotkeys():
@@ -114,17 +95,17 @@ async def _execute_prompt_with_live_suspend(
             return await asyncio.to_thread(input, prompt_text)
         else:
             logger.warning(
-                "_execute_prompt_with_live_suspend called in non-interactive context. Returning 'c'."
+                "_execute_prompt_with_live_suspend called in non-interactive context. Returning 'n'."
             )
-            return "c"
+            return "n"
     except (EOFError, KeyboardInterrupt):
         logger.warning(
             "Input cancelled via EOF/KeyboardInterrupt in _execute_prompt_with_live_suspend."
         )
-        return "c"
+        return "n"
     except Exception as e:
         logger.error(f"Error in _execute_prompt_with_live_suspend: {e}")
-        return "c"
+        return "n"
 
 
 async def is_approve_all_active() -> bool:
@@ -149,8 +130,10 @@ async def _ask_basic_confirmation(
 
     # Create mapping of all valid inputs to their canonical choice keys
     choice_mapping = {}
+    valid_canonical_keys = []
     for choice_tuple in choices:
         canonical_key = choice_tuple[0].lower()
+        valid_canonical_keys.append(canonical_key)
         for variant in choice_tuple:
             choice_mapping[variant.lower()] = canonical_key
 
@@ -158,31 +141,75 @@ async def _ask_basic_confirmation(
     hotkeys_suspended = _suspend_global_hotkeys()
 
     try:
-        while True:
-            try:
-                old_handler = _disable_ctrl_c()
-                try:
-                    user_input = await asyncio.to_thread(
-                        input,
-                        full_prompt
+        # Use prompt_toolkit for input to avoid terminal conflicts
+        from prompt_toolkit import PromptSession
+        from prompt_toolkit.key_binding import KeyBindings
+        from prompt_toolkit.validation import Validator, ValidationError
+        
+        # Create key bindings for the approval prompt
+        bindings = KeyBindings()
+        
+        # Add Ctrl+C handler
+        @bindings.add('c-c')
+        def _(event):
+            # Set the buffer to 'n' and accept it
+            event.app.current_buffer.text = 'n'
+            event.app.current_buffer.validate_and_handle()
+        
+        # Create a validator for valid choices
+        class ChoiceValidator(Validator):
+            def validate(self, document):
+                text = document.text.strip().lower()
+                if text and text not in choice_mapping:
+                    raise ValidationError(
+                        message=f"Please choose from: {choices_display_str}"
                     )
-                finally:
-                    _restore_ctrl_c(old_handler)
-                if user_input:
-                    user_input_lower = user_input.strip().lower()
-                    if user_input_lower in choice_mapping:
-                        return choice_mapping[user_input_lower]
-                    else:
-                        console.print(f"[dim red]Invalid choice '{user_input}'. Please choose from: {choices_display_str}[/dim red]")
-                        continue
-            except Exception as e:
-                try:
-                    _restore_ctrl_c(old_handler)
-                except Exception:
-                    pass
-                logger.error(f"Error in confirmation prompt: {e}", exc_info=True)
-                console.print("[dim red]Error with prompt, please try again.[/dim red]")
-                continue
+        
+        # Create a new prompt session for this approval
+        session = PromptSession(
+            key_bindings=bindings,
+            validator=ChoiceValidator(),
+            validate_while_typing=False,
+            enable_history_search=False,
+            mouse_support=False
+        )
+        
+        try:
+            # Get input using prompt_toolkit
+            user_input = await session.prompt_async(
+                full_prompt,
+                default=""
+            )
+            
+            if user_input:
+                user_input_lower = user_input.strip().lower()
+                if user_input_lower in choice_mapping:
+                    return choice_mapping[user_input_lower]
+            
+            # Empty input - return 'n' as default
+            return "n"
+                
+        except (KeyboardInterrupt, EOFError):
+            # Handle Ctrl+C as cancel/deny
+            console.print("\n[dim red]Operation cancelled by user (Ctrl+C)[/dim red]")
+            return "n"  # Return "no" as the choice
+            
+    except Exception as e:
+        logger.error(f"Error in prompt_toolkit confirmation: {e}", exc_info=True)
+        # Fall back to basic input if prompt_toolkit fails
+        try:
+            user_input = await asyncio.to_thread(
+                input,
+                full_prompt
+            )
+            if user_input:
+                user_input_lower = user_input.strip().lower()
+                if user_input_lower in choice_mapping:
+                    return choice_mapping[user_input_lower]
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[dim red]Operation cancelled by user (Ctrl+C)[/dim red]")
+            return "n"
+                
     finally:
         # Always resume global hotkeys
         if hotkeys_suspended:
@@ -216,7 +243,7 @@ async def _request_confirmation_terminal(
         console.print(content_to_display)
         console.print("--- End Preview ---\n")
 
-    choices_map = [CHOICE_YES, CHOICE_NO, CHOICE_APPROVE_ALL, CHOICE_CANCEL]
+    choices_map = [CHOICE_YES, CHOICE_NO, CHOICE_APPROVE_ALL]
 
     try:
         user_choice_key = await _ask_basic_confirmation(
@@ -235,16 +262,13 @@ async def _request_confirmation_terminal(
                 _approve_all_active = True
             _managed_print(console, "[info]'Approve All' activated for this session.[/info]")
             return ("session_approved", current_value_for_modification)
-        elif user_choice_key == "c":
-            console.print("[info]Operation cancelled by user.[/info]")
-            return ("cancelled", None)
         else:
-            logger.warning(f"Unexpected choice '{user_choice_key}'. Cancelling.")
-            return ("cancelled", None)
+            logger.warning(f"Unexpected choice '{user_choice_key}'. Denying.")
+            return ("denied", None)
     except Exception as e:
         logger.error(f"Error in request_confirmation_terminal: {e}", exc_info=True)
         console.print(f"[error]Error during confirmation: {e}[/]")
-        return ("cancelled", None)
+        return ("denied", None)
 
 
 async def request_confirmation(
@@ -316,34 +340,80 @@ async def get_user_choice_from_options_async(
     hotkeys_suspended = _suspend_global_hotkeys()
 
     try:
-        while True:
-            try:
-                old_handler = _disable_ctrl_c()
-                try:
-                    user_input = await asyncio.to_thread(
-                        input,
-                        prompt_text_with_options
+        # Use prompt_toolkit for input to avoid terminal conflicts
+        from prompt_toolkit import PromptSession
+        from prompt_toolkit.key_binding import KeyBindings
+        from prompt_toolkit.filters import Condition
+        from prompt_toolkit.validation import Validator, ValidationError
+        
+        # Create key bindings for the approval prompt
+        bindings = KeyBindings()
+        
+        # Add Ctrl+C handler
+        @bindings.add('c-c')
+        def _(event):
+            # Set the buffer to 'n' and accept it
+            event.app.current_buffer.text = 'n'
+            event.app.current_buffer.validate_and_handle()
+        
+        # Create a validator for valid choices
+        class ChoiceValidator(Validator):
+            def validate(self, document):
+                text = document.text.strip().lower()
+                if text and text not in processed_valid_choices:
+                    raise ValidationError(
+                        message=f"Please choose from: {', '.join(valid_choices)}"
                     )
-                finally:
-                    _restore_ctrl_c(old_handler)
-                if user_input:
-                    user_input_lower = user_input.strip().lower()
-                    if user_input_lower in processed_valid_choices:
-                        return user_input_lower
-                    else:
-                        console.print(f"[dim red]Invalid choice '{user_input}'. Please choose from: {', '.join(valid_choices)}[/dim red]")
-                        continue
-                else:
-                    console.print("[dim red]Please select an option.[/dim red]")
-                    continue
-            except Exception as e:
-                try:
-                    _restore_ctrl_c(old_handler)
-                except Exception:
-                    pass
-                logger.error(f"Error during prompt: {e}", exc_info=True)
-                console.print("[dim red]Error with prompt, please try again.[/dim red]")
-                continue
+        
+        # Create a new prompt session for this approval
+        session = PromptSession(
+            key_bindings=bindings,
+            validator=ChoiceValidator(),
+            validate_while_typing=False,
+            enable_history_search=False,
+            mouse_support=False
+        )
+        
+        try:
+            # Get input using prompt_toolkit
+            user_input = await session.prompt_async(
+                prompt_text_with_options,
+                default=processed_default_choice or ""
+            )
+            
+            if user_input:
+                return user_input.strip().lower()
+            else:
+                # Empty input - treat as no selection
+                if "n" in processed_valid_choices:
+                    return "n"
+                return None
+                
+        except (KeyboardInterrupt, EOFError):
+            # Handle Ctrl+C as cancel/deny
+            console.print("\n[dim red]Operation cancelled by user (Ctrl+C)[/dim red]")
+            if "n" in processed_valid_choices:
+                return "n"
+            return None
+            
+    except Exception as e:
+        logger.error(f"Error in prompt_toolkit approval: {e}", exc_info=True)
+        # Fall back to basic input if prompt_toolkit fails
+        try:
+            user_input = await asyncio.to_thread(
+                input,
+                prompt_text_with_options
+            )
+            if user_input:
+                user_input_lower = user_input.strip().lower()
+                if user_input_lower in processed_valid_choices:
+                    return user_input_lower
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[dim red]Operation cancelled by user (Ctrl+C)[/dim red]")
+            if "n" in processed_valid_choices:
+                return "n"
+            return None
+                
     finally:
         # Always resume global hotkeys
         if hotkeys_suspended:
