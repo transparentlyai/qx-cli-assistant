@@ -10,7 +10,8 @@ import qx.core.user_prompts
 from qx.cli.theme import themed_console
 from qx.core.agent_manager import get_agent_manager
 from qx.core.config_manager import ConfigManager
-from qx.core.constants import MODELS, QX_VERSION
+from qx.core.constants import QX_VERSION
+from qx.core.models import MODELS
 from qx.core.llm import QXLLMAgent, initialize_llm_agent, query_llm
 from qx.core.session_manager import reset_session
 from qx.core.team_manager import get_team_manager
