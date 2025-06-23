@@ -186,15 +186,18 @@ class QXLLMAgent:
         # Log recursion depth to help with debugging
         if _recursion_depth > 0:
             logger.debug(f"LLM run() called with recursion depth: {_recursion_depth}")
-        # Warn when approaching recursion limit
-        if _recursion_depth >= 7:
+        
+        from qx.core.constants import MAX_TOOL_RECURSION_DEPTH
+        
+        # Warn when approaching recursion limit (70% of max)
+        warning_threshold = int(MAX_TOOL_RECURSION_DEPTH * 0.7)
+        if _recursion_depth >= warning_threshold:
             logger.warning(
-                f"High recursion depth detected: {_recursion_depth}/10. Possible infinite tool calling loop."
+                f"High recursion depth detected: {_recursion_depth}/{MAX_TOOL_RECURSION_DEPTH}. Possible infinite tool calling loop."
             )
         # Prevent infinite recursion in tool calling
-        MAX_RECURSION_DEPTH = 10
-        if _recursion_depth > MAX_RECURSION_DEPTH:
-            error_msg = f"Maximum recursion depth ({MAX_RECURSION_DEPTH}) exceeded in tool calling"
+        if _recursion_depth > MAX_TOOL_RECURSION_DEPTH:
+            error_msg = f"Maximum recursion depth ({MAX_TOOL_RECURSION_DEPTH}) exceeded in tool calling"
             logger.error(error_msg)
             self.console.print(f"[error]Error:[/] {error_msg}")
             # Create a response that doesn't continue the tool calling loop

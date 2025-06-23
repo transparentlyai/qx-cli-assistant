@@ -237,9 +237,13 @@ class ToolProcessor:
             logger.debug(f"Continuing after tools with recursion depth: {recursion_depth}")
 
             # Check if we're approaching recursion limit before continuing
-            if recursion_depth >= 8:
+            from qx.core.constants import MAX_TOOL_RECURSION_DEPTH
+            
+            # Force final response at 80% of max depth
+            force_final_threshold = int(MAX_TOOL_RECURSION_DEPTH * 0.8)
+            if recursion_depth >= force_final_threshold:
                 logger.warning(
-                    f"Approaching recursion limit (depth {recursion_depth}), forcing final response"
+                    f"Approaching recursion limit (depth {recursion_depth}/{MAX_TOOL_RECURSION_DEPTH}), forcing final response"
                 )
                 # Add a system message to encourage the LLM to provide a final response
                 final_system_msg = cast(

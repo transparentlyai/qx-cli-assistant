@@ -80,6 +80,59 @@ class StreamingHandler:
         self._current_agent_name = None
         self._current_agent_color = None
 
+    async def _handle_malformed_function_call_retry(
+        self,
+        messages: List[ChatCompletionMessageParam],
+        chat_params: Dict[str, Any],
+        user_input: str,
+        recursion_depth: int,
+        retry_reason: str,
+        debug_info: Dict[str, Any] = None,
+    ) -> Any:
+        """Handle retry logic for MALFORMED_FUNCTION_CALL errors."""
+        from qx.core.llm import QXRunResult  # Import here to avoid circular imports
+        
+        logger.warning(f"Detected {retry_reason} (recursion_depth={recursion_depth})")
+        
+        # Log debug info if provided
+        if debug_info:
+            for key, value in debug_info.items():
+                logger.debug(f"{key}: {value}")
+        
+        # Close the current stream if provided
+        if "stream" in debug_info and debug_info["stream"] and hasattr(debug_info["stream"], "aclose"):
+            try:
+                await debug_info["stream"].aclose()
+            except Exception:
+                pass
+        
+        # Add retry instruction message
+        retry_message = cast(
+            ChatCompletionMessageParam,
+            {
+                "role": "user",
+                "content": "last function call was malformed, please try again"
+            }
+        )
+        messages.append(retry_message)
+        
+        # Check recursion depth to prevent infinite loops
+        if recursion_depth >= 3:  # Allow up to 3 retry attempts
+            logger.error(f"Max retry attempts for MALFORMED_FUNCTION_CALL reached (recursion_depth={recursion_depth})")
+            logger.debug(f"Failed after {recursion_depth} retry attempts")
+            logger.debug(f"Final message count: {len(messages)}")
+            _managed_stream_print(
+                "\n[error]Error: Maximum retry attempts for malformed function call reached[/]",
+                use_manager=True
+            )
+            return QXRunResult("Failed to execute function call after multiple attempts", messages)
+        
+        # Recursive call to retry
+        logger.info(f"Initiating retry attempt {recursion_depth + 1} for {retry_reason}")
+        return await self.handle_streaming_response(
+            chat_params, messages, user_input, recursion_depth + 1
+        )
+
     async def handle_streaming_response(
         self,
         chat_params: Dict[str, Any],
@@ -89,6 +142,14 @@ class StreamingHandler:
     ) -> Any:
         """Handle streaming response from OpenRouter API."""
         from qx.core.llm import QXRunResult  # Import here to avoid circular imports
+        
+        # Log entry into streaming handler
+        logger.debug(f"Entering handle_streaming_response (recursion_depth={recursion_depth})")
+        if recursion_depth > 0:
+            logger.info(f"This is retry attempt {recursion_depth} for MALFORMED_FUNCTION_CALL")
+            logger.debug(f"Message history length: {len(messages)}")
+            if messages and messages[-1].get("role") == "user":
+                logger.debug(f"Last user message: {messages[-1].get('content', '')[:100]}...")
 
         accumulated_content = ""
         accumulated_tool_calls: list[dict[str, Any]] = []
@@ -245,42 +306,24 @@ class StreamingHandler:
                     # Check for MALFORMED_FUNCTION_CALL in provider-specific fields
                     # This handles cases where LiteLLM doesn't populate choices for certain error conditions
                     if hasattr(chunk, "provider_specific_fields") and chunk.provider_specific_fields:
+                        logger.debug(f"Provider specific fields present: {chunk.provider_specific_fields}")
                         # Check if this is a Gemini MALFORMED_FUNCTION_CALL response
                         if isinstance(chunk.provider_specific_fields, dict):
                             candidates = chunk.provider_specific_fields.get("candidates", [])
-                            for candidate in candidates:
-                                if candidate.get("finishReason") == "MALFORMED_FUNCTION_CALL":
-                                    logger.warning("Detected MALFORMED_FUNCTION_CALL from Gemini, requesting retry")
-                                    
-                                    # Close the current stream before retry
-                                    if stream and hasattr(stream, "aclose"):
-                                        try:
-                                            await stream.aclose()
-                                        except Exception:
-                                            pass
-                                    
-                                    # Add retry instruction message
-                                    retry_message = cast(
-                                        ChatCompletionMessageParam,
+                            logger.debug(f"Found {len(candidates)} candidates in provider fields")
+                            for idx, candidate in enumerate(candidates):
+                                finish_reason = candidate.get("finishReason")
+                                logger.debug(f"Candidate {idx} finish reason: {finish_reason}")
+                                if finish_reason == "MALFORMED_FUNCTION_CALL":
+                                    return await self._handle_malformed_function_call_retry(
+                                        messages, chat_params, user_input, recursion_depth,
+                                        "MALFORMED_FUNCTION_CALL from Gemini",
                                         {
-                                            "role": "user",
-                                            "content": "Your function call was malformed. Do not apologize. Immediately retry the function call with correct JSON formatting."
+                                            "Accumulated content before retry": accumulated_content[:200] if accumulated_content else 'None',
+                                            "Accumulated tool calls before retry": accumulated_tool_calls,
+                                            "Full candidate data": candidate,
+                                            "stream": stream
                                         }
-                                    )
-                                    messages.append(retry_message)
-                                    
-                                    # Check recursion depth to prevent infinite loops
-                                    if recursion_depth >= 3:  # Allow up to 3 retry attempts
-                                        logger.error("Max retry attempts for MALFORMED_FUNCTION_CALL reached")
-                                        _managed_stream_print(
-                                            "\n[error]Error: Maximum retry attempts for malformed function call reached[/]",
-                                            use_manager=True
-                                        )
-                                        return QXRunResult("Failed to execute function call after multiple attempts", messages)
-                                    
-                                    # Recursive call to retry
-                                    return await self.handle_streaming_response(
-                                        chat_params, messages, user_input, recursion_depth + 1
                                     )
 
                     if not chunk.choices:
@@ -297,37 +340,15 @@ class StreamingHandler:
                             # Check if the last tool call might be malformed
                             last_tool_call = accumulated_tool_calls[-1] if accumulated_tool_calls else None
                             if last_tool_call and (not last_tool_call.get("id") or not last_tool_call.get("function", {}).get("name")):
-                                logger.warning("Detected incomplete tool call with empty choices, possible MALFORMED_FUNCTION_CALL")
-                                
-                                # Close the current stream
-                                if stream and hasattr(stream, "aclose"):
-                                    try:
-                                        await stream.aclose()
-                                    except Exception:
-                                        pass
-                                
-                                # Add retry instruction message
-                                retry_message = cast(
-                                    ChatCompletionMessageParam,
+                                return await self._handle_malformed_function_call_retry(
+                                    messages, chat_params, user_input, recursion_depth,
+                                    "incomplete tool call with empty choices, possible MALFORMED_FUNCTION_CALL",
                                     {
-                                        "role": "user",
-                                        "content": "Your function call was malformed. Do not apologize. Immediately retry the function call with correct JSON formatting."
+                                        "Incomplete tool call details": last_tool_call,
+                                        "Total accumulated tool calls": len(accumulated_tool_calls),
+                                        "Had empty choices": had_empty_choices,
+                                        "stream": stream
                                     }
-                                )
-                                messages.append(retry_message)
-                                
-                                # Check recursion depth to prevent infinite loops
-                                if recursion_depth >= 3:  # Allow up to 3 retry attempts
-                                    logger.error("Max retry attempts for malformed function call reached")
-                                    _managed_stream_print(
-                                        "\n[error]Error: Maximum retry attempts for malformed function call reached[/]",
-                                        use_manager=True
-                                    )
-                                    return QXRunResult("Failed to execute function call after multiple attempts", messages)
-                                
-                                # Recursive call to retry
-                                return await self.handle_streaming_response(
-                                    chat_params, messages, user_input, recursion_depth + 1
                                 )
                         
                         continue
@@ -547,37 +568,16 @@ class StreamingHandler:
                         last_finish_reason = choice.finish_reason
                         # Handle MALFORMED_FUNCTION_CALL finish reason
                         if choice.finish_reason == "MALFORMED_FUNCTION_CALL":
-                            logger.warning("Detected MALFORMED_FUNCTION_CALL finish reason, requesting retry")
-                            
-                            # Close the current stream before retry
-                            if stream and hasattr(stream, "aclose"):
-                                try:
-                                    await stream.aclose()
-                                except Exception:
-                                    pass
-                            
-                            # Add retry instruction message
-                            retry_message = cast(
-                                ChatCompletionMessageParam,
+                            return await self._handle_malformed_function_call_retry(
+                                messages, chat_params, user_input, recursion_depth,
+                                "MALFORMED_FUNCTION_CALL finish reason",
                                 {
-                                    "role": "user",
-                                    "content": "Your function call was malformed. Do not apologize. Immediately retry the function call with correct JSON formatting."
+                                    "Stream completion state - accumulated_content": f"{len(accumulated_content) if accumulated_content else 0} chars",
+                                    "Stream completion state - tool_calls": f"{len(accumulated_tool_calls)} calls",
+                                    "Stream completion state - reasoning_content": f"{len(accumulated_reasoning_content) if accumulated_reasoning_content else 0} chars",
+                                    "Last tool call state": accumulated_tool_calls[-1] if accumulated_tool_calls else 'No tool calls',
+                                    "stream": stream
                                 }
-                            )
-                            messages.append(retry_message)
-                            
-                            # Check recursion depth to prevent infinite loops
-                            if recursion_depth >= 3:  # Allow up to 3 retry attempts
-                                logger.error("Max retry attempts for MALFORMED_FUNCTION_CALL reached")
-                                _managed_stream_print(
-                                    "\n[error]Error: Maximum retry attempts for malformed function call reached[/]",
-                                    use_manager=True
-                                )
-                                return QXRunResult("Failed to execute function call after multiple attempts", messages)
-                            
-                            # Recursive call to retry
-                            return await self.handle_streaming_response(
-                                chat_params, messages, user_input, recursion_depth + 1
                             )
                         
                         stream_completed = True
@@ -741,60 +741,28 @@ class StreamingHandler:
                 ]
                 
                 if any(phrase in reasoning_lower for phrase in tool_intent_phrases):
-                    logger.warning("Had empty choices with reasoning content suggesting tool use, possible MALFORMED_FUNCTION_CALL")
-                    
-                    # Add retry instruction message
-                    retry_message = cast(
-                        ChatCompletionMessageParam,
+                    return await self._handle_malformed_function_call_retry(
+                        messages, chat_params, user_input, recursion_depth,
+                        "empty choices with reasoning content suggesting tool use, possible MALFORMED_FUNCTION_CALL",
                         {
-                            "role": "user",
-                            "content": "Your function call was malformed. Do not apologize. Immediately retry the function call with correct JSON formatting."
+                            "Reasoning content length": f"{len(accumulated_reasoning_content)} chars",
+                            "Reasoning snippet": f"{accumulated_reasoning_content[:200]}...",
+                            "Matched tool intent phrases": [phrase for phrase in tool_intent_phrases if phrase in reasoning_lower]
                         }
-                    )
-                    messages.append(retry_message)
-                    
-                    # Check recursion depth to prevent infinite loops
-                    if recursion_depth >= 3:
-                        logger.error("Max retry attempts for malformed function call reached")
-                        _managed_stream_print(
-                            "\n[error]Error: Maximum retry attempts for malformed function call reached[/]",
-                            use_manager=True
-                        )
-                        return QXRunResult("Failed to execute function call after multiple attempts", messages)
-                    
-                    # Recursive call to retry
-                    return await self.handle_streaming_response(
-                        chat_params, messages, user_input, recursion_depth + 1
                     )
         
         if not accumulated_tool_calls:
             # Check 2: Stream ended with absolutely nothing (no content, no tools)  
             # This catches cases where only reasoning content was present
             if not accumulated_content and not has_rendered_content:
-                logger.warning("Stream ended with no content or tool calls, possible MALFORMED_FUNCTION_CALL")
-                
-                # Add retry instruction message
-                retry_message = cast(
-                    ChatCompletionMessageParam,
+                return await self._handle_malformed_function_call_retry(
+                    messages, chat_params, user_input, recursion_depth,
+                    "stream ended with no content or tool calls, possible MALFORMED_FUNCTION_CALL",
                     {
-                        "role": "user",
-                        "content": "Your function call was malformed. Do not apologize. Immediately retry the function call with correct JSON formatting."
+                        "Stream end state - had_empty_choices": had_empty_choices,
+                        "Stream end state - last_finish_reason": last_finish_reason,
+                        "Stream end state - accumulated_reasoning": f"{len(accumulated_reasoning_content) if accumulated_reasoning_content else 0} chars"
                     }
-                )
-                messages.append(retry_message)
-                
-                # Check recursion depth to prevent infinite loops
-                if recursion_depth >= 3:  # Allow up to 3 retry attempts
-                    logger.error("Max retry attempts for malformed function call reached")
-                    _managed_stream_print(
-                        "\n[error]Error: Maximum retry attempts for malformed function call reached[/]",
-                        use_manager=True
-                    )
-                    return QXRunResult("Failed to execute function call after multiple attempts", messages)
-                
-                # Recursive call to retry
-                return await self.handle_streaming_response(
-                    chat_params, messages, user_input, recursion_depth + 1
                 )
             
             # Second check: Stream ended with content that suggests tool use was intended
@@ -810,30 +778,14 @@ class StreamingHandler:
                 might_be_tool_attempt = any(indicator in content_lower for indicator in tool_indicators)
                 
                 if might_be_tool_attempt and len(accumulated_content) < 300:  # Short content suggesting tool use
-                    logger.warning("Stream ended with content suggesting tool use but no tool calls, possible MALFORMED_FUNCTION_CALL")
-                    
-                    # Add retry instruction message
-                    retry_message = cast(
-                        ChatCompletionMessageParam,
+                    return await self._handle_malformed_function_call_retry(
+                        messages, chat_params, user_input, recursion_depth,
+                        "stream ended with content suggesting tool use but no tool calls, possible MALFORMED_FUNCTION_CALL",
                         {
-                            "role": "user",
-                            "content": "Your function call was malformed. Do not apologize. Immediately retry the function call with correct JSON formatting."
+                            "Content length": f"{len(accumulated_content)} chars",
+                            "Content snippet": f"{accumulated_content[:200]}...",
+                            "Matched tool indicators": [ind for ind in tool_indicators if ind in content_lower]
                         }
-                    )
-                    messages.append(retry_message)
-                    
-                    # Check recursion depth to prevent infinite loops
-                    if recursion_depth >= 3:  # Allow up to 3 retry attempts
-                        logger.error("Max retry attempts for malformed function call reached")
-                        _managed_stream_print(
-                            "\n[error]Error: Maximum retry attempts for malformed function call reached[/]",
-                            use_manager=True
-                        )
-                        return QXRunResult("Failed to execute function call after multiple attempts", messages)
-                    
-                    # Recursive call to retry
-                    return await self.handle_streaming_response(
-                        chat_params, messages, user_input, recursion_depth + 1
                     )
 
         # After streaming, flush any remaining content
