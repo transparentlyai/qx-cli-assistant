@@ -5,7 +5,7 @@ from typing import List, Dict, Any
 
 from prompt_toolkit.completion import Completer, Completion
 
-from qx.core.constants import MODELS
+from qx.core.models import MODELS
 
 
 class QXCompleter(Completer):
