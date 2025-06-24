@@ -14,8 +14,7 @@ from qx.core.constants import QX_VERSION
 from qx.core.models import MODELS
 from qx.core.llm import QXLLMAgent, initialize_llm_agent, query_llm
 from qx.core.session_manager import reset_session
-from qx.core.team_manager import get_team_manager
-from qx.core.team_mode_manager import get_team_mode_manager
+# Team mode imports removed - to be reimplemented
 
 logger = logging.getLogger("qx")
 
@@ -852,270 +851,52 @@ async def handle_command(
 
 
 async def _handle_add_agent_command(command_args: str, config_manager: ConfigManager):
-    """Handle /team-add-member command with optional instance count."""
-    if not command_args.strip():
-        themed_console.print("Usage: /team-add-member <agent_name> [instance_count]", style="error")
-        themed_console.print("Examples:", style="dim white")
-        themed_console.print("  /team-add-member code_reviewer", style="dim white") 
-        themed_console.print("  /team-add-member code_reviewer 3", style="dim white")
-        return
-
-    # Parse command arguments
-    parts = command_args.strip().split()
-    agent_name = parts[0]
-    instance_count = 1
-    
-    if len(parts) > 1:
-        try:
-            instance_count = int(parts[1])
-            if instance_count <= 0:
-                themed_console.print("Instance count must be a positive integer", style="error")
-                return
-        except ValueError:
-            themed_console.print("Invalid instance count. Must be a positive integer", style="error")
-            return
-
-    team_manager = get_team_manager(config_manager)
-
-    # Check if agent exists
-    agent_manager = get_agent_manager()
-    available_agents = await agent_manager.list_user_agents(cwd=os.getcwd())
-    agent_names = [agent["name"] for agent in available_agents]
-
-    if agent_name not in agent_names:
-        themed_console.print(f"Agent '{agent_name}' not found.", style="error")
-        themed_console.print("Available agents:", style="dim white")
-        for name in agent_names:
-            themed_console.print(f"  - {name}", style="dim white")
-        return
-
-    # Check max_instances constraint
-    agent_config = None
-    for agent in available_agents:
-        if agent["name"] == agent_name:
-            # Load the full agent config to check max_instances
-            result = await agent_manager.load_agent(agent_name, cwd=os.getcwd())
-            if result.success and result.agent:
-                agent_config = result.agent
-                break
-    
-    if agent_config:
-        max_instances = getattr(agent_config, 'max_instances', 1)
-        if instance_count > max_instances:
-            themed_console.print(
-                f"Cannot add {instance_count} instances. Agent '{agent_name}' allows maximum {max_instances} instances.",
-                style="error"
-            )
-            return
-
-    await team_manager.add_agent(agent_name, instance_count)
+    """Handle /team-add-member command - placeholder."""
+    themed_console.print("Team mode is temporarily disabled. This feature will be reimplemented.", style="warning")
 
 
 async def _handle_remove_agent_command(
     command_args: str, config_manager: ConfigManager
 ):
-    """Handle /team-remove-member command."""
-    if not command_args.strip():
-        themed_console.print("Usage: /team-remove-member <agent_name>", style="error")
-        return
-
-    agent_name = command_args.strip()
-    team_manager = get_team_manager(config_manager)
-    await team_manager.remove_agent(agent_name)
+    """Handle /team-remove-member command - placeholder."""
+    themed_console.print("Team mode is temporarily disabled. This feature will be reimplemented.", style="warning")
 
 
 async def _handle_team_status_command(config_manager: ConfigManager):
-    """Handle /team-status command."""
-    team_manager = get_team_manager(config_manager)
-    status = team_manager.get_team_status()
-
-    if status["member_count"] == 0:
-        themed_console.print(
-            "Your team is empty. Use /team-create <name> to start a new team or /team-add-member <agent> [count] to build your current team.",
-            style="warning",
-        )
-        return
-
-    themed_console.print(
-        f"Team Status ({status['member_count']} agents, {status['total_instances']} instances):", 
-        style="app.header"
-    )
-
-    for agent_name, agent_info in status["members"].items():
-        text = Text()
-        
-        # Show instance count if > 1
-        if agent_info["instance_count"] > 1:
-            text.append(f"  🤖 {agent_name} (×{agent_info['instance_count']}): ", style="primary")
-        else:
-            text.append(f"  🤖 {agent_name}: ", style="primary")
-            
-        text.append(agent_info["role_summary"], style="dim white")
-        themed_console.print(text)
-
-        if agent_info["capabilities"]:
-            capabilities_text = ", ".join(agent_info["capabilities"])
-            themed_console.print(
-                f"     Capabilities: {capabilities_text}", style="dim blue"
-            )
-            
-        # Show instance capacity info
-        if agent_info["max_instances"] > 1:
-            themed_console.print(
-                f"     Instances: {agent_info['instance_count']}/{agent_info['max_instances']} (max)",
-                style="dim yellow"
-            )
+    """Handle /team-status command - placeholder."""
+    themed_console.print("Team mode is temporarily disabled. This feature will be reimplemented.", style="warning")
 
 
 async def _handle_team_clear_command(config_manager: ConfigManager):
-    """Handle /team-clear command."""
-    team_manager = get_team_manager(config_manager)
-    team_manager.clear_team()
+    """Handle /team-clear command - placeholder."""
+    themed_console.print("Team mode is temporarily disabled. This feature will be reimplemented.", style="warning")
 
 
 async def _handle_team_enable_command(config_manager: ConfigManager):
-    """Handle /team-enable command."""
-    team_mode_manager = get_team_mode_manager()
-
-    if team_mode_manager.is_team_mode_enabled():
-        themed_console.print("Team mode is already enabled", style="warning")
-        return
-
-    success = team_mode_manager.set_team_mode_enabled(True, project_level=True)
-    if success:
-        themed_console.print(
-            "✓ Team mode enabled - qx will now act as supervisor", style="success"
-        )
-        themed_console.print(
-            "  Use /team-create or /team-add-member to build your team", style="dim white"
-        )
-
-        # Switch to supervisor agent
-        agent_manager = get_agent_manager()
-        switch_success = await agent_manager.switch_llm_agent(
-            "qx-director", config_manager.mcp_manager
-        )
-        if switch_success:
-            themed_console.print("  Switched to supervisor agent", style="dim green")
-        else:
-            themed_console.print(
-                "  Warning: Failed to switch to supervisor agent", style="warning"
-            )
-    else:
-        themed_console.print("Failed to enable team mode", style="error")
+    """Handle /team-enable command - placeholder."""
+    themed_console.print("Team mode is temporarily disabled. This feature will be reimplemented.", style="warning")
 
 
 async def _handle_team_disable_command(config_manager: ConfigManager):
-    """Handle /team-disable command."""
-    team_mode_manager = get_team_mode_manager()
-
-    if not team_mode_manager.is_team_mode_enabled():
-        themed_console.print("Team mode is already disabled", style="warning")
-        return
-
-    success = team_mode_manager.set_team_mode_enabled(False, project_level=True)
-    if success:
-        themed_console.print(
-            "✓ Team mode disabled - qx will act as single agent", style="success"
-        )
-
-        # Switch to single agent
-        agent_manager = get_agent_manager()
-        switch_success = await agent_manager.switch_llm_agent(
-            "qx", config_manager.mcp_manager
-        )
-        if switch_success:
-            themed_console.print("  Switched to single agent", style="dim green")
-        else:
-            themed_console.print(
-                "  Warning: Failed to switch to single agent", style="warning"
-            )
-    else:
-        themed_console.print("Failed to disable team mode", style="error")
+    """Handle /team-disable command - placeholder."""
+    themed_console.print("Team mode is temporarily disabled. This feature will be reimplemented.", style="warning")
 
 
 async def _handle_team_mode_command(config_manager: ConfigManager):
-    """Handle /team-mode command."""
-    team_mode_manager = get_team_mode_manager()
-    team_manager = get_team_manager(config_manager)
-
-    enabled = team_mode_manager.is_team_mode_enabled()
-    config_source = team_mode_manager.get_config_source()
-
-    status_text = "enabled" if enabled else "disabled"
-    status_style = "success" if enabled else "warning"
-
-    themed_console.print(f"Team Mode: {status_text}", style=status_style)
-    themed_console.print(f"  Source: {config_source}", style="dim white")
-
-    if enabled:
-        agent_manager = get_agent_manager()
-        current_agent = await agent_manager.get_current_agent_name()
-        themed_console.print(f"  Active agent: {current_agent}", style="dim white")
-
-        # Show team composition
-        team_status = team_manager.get_team_status()
-        if team_status["member_count"] > 0:
-            themed_console.print(
-                f"  Team members: {team_status['member_count']}", style="dim blue"
-            )
-            for agent_name in team_status["members"].keys():
-                themed_console.print(f"    - {agent_name}", style="dim blue")
-        else:
-            themed_console.print(
-                "  No team members (supervisor mode)", style="dim yellow"
-            )
-    else:
-        themed_console.print(
-            "  Use /team-enable to activate team coordination", style="dim white"
-        )
+    """Handle /team-mode command - placeholder."""
+    themed_console.print("Team mode is temporarily disabled. This feature will be reimplemented.", style="warning")
 
 
 async def _handle_team_save_command(command_args: str, config_manager: ConfigManager):
-    """Handle /team-save command."""
-    if not command_args.strip():
-        themed_console.print("Usage: /team-save <team_name>", style="error")
-        themed_console.print("Examples:", style="dim white")
-        themed_console.print("  /team-save frontend-team", style="dim white")
-        themed_console.print("  /team-save code-review", style="dim white")
-        return
-
-    team_name = command_args.strip()
-    team_manager = get_team_manager(config_manager)
-    team_manager.save_team(team_name)
+    """Handle /team-save command - placeholder."""
+    themed_console.print("Team mode is temporarily disabled. This feature will be reimplemented.", style="warning")
 
 
 async def _handle_team_load_command(command_args: str, config_manager: ConfigManager):
-    """Handle /team-load command."""
-    if not command_args.strip():
-        themed_console.print("Usage: /team-load <team_name>", style="error")
-        
-        # Show available teams
-        team_manager = get_team_manager(config_manager)
-        saved_teams = team_manager.list_saved_teams()
-        
-        if saved_teams:
-            themed_console.print("Available teams:", style="dim white")
-            for team_name in saved_teams:
-                themed_console.print(f"  - {team_name}", style="dim blue")
-        else:
-            themed_console.print("No saved teams found", style="dim white")
-        return
-
-    team_name = command_args.strip()
-    team_manager = get_team_manager(config_manager)
-    team_manager.load_team(team_name)
+    """Handle /team-load command - placeholder."""
+    themed_console.print("Team mode is temporarily disabled. This feature will be reimplemented.", style="warning")
 
 
 async def _handle_team_create_command(command_args: str, config_manager: ConfigManager):
-    """Handle /team-create command."""
-    if not command_args.strip():
-        themed_console.print("Usage: /team-create <team_name>", style="error")
-        themed_console.print("Examples:", style="dim white")
-        themed_console.print("  /team-create frontend-team", style="dim white")
-        themed_console.print("  /team-create backend-specialists", style="dim white")
-        return
-
-    team_name = command_args.strip()
-    team_manager = get_team_manager(config_manager)
-    team_manager.create_team(team_name)
+    """Handle /team-create command - placeholder."""
+    themed_console.print("Team mode is temporarily disabled. This feature will be reimplemented.", style="warning")

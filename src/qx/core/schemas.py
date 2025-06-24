@@ -4,9 +4,7 @@ from typing import Optional, List
 from enum import Enum
 
 from qx.core.constants import (
-    AGENT_NAME_DEFAULT,
     AGENT_VERSION_DEFAULT,
-    AGENT_DESCRIPTION_DEFAULT,
     AGENT_CONTEXT_DEFAULT,
     AGENT_OUTPUT_DEFAULT,
     AGENT_TOOLS_DEFAULT,

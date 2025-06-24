@@ -2,7 +2,7 @@ import hashlib
 from typing import Optional
 
 from rich.console import Console, Group
-from rich.markdown import Markdown, Heading
+from rich.markdown import Markdown
 from rich.segment import Segment
 from rich.style import Style
 from rich.text import Text
@@ -13,7 +13,6 @@ from rich.theme import Theme
 # Simple function to convert markdown text to left-aligned format
 def process_markdown_for_left_alignment(markdown_text: str) -> str:
     """Convert markdown headings to simple left-aligned bold text."""
-    import re
     
     lines = markdown_text.split('\n')
     processed_lines = []

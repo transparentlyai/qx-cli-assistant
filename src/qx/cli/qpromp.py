@@ -49,8 +49,6 @@ class SingleLineNonEmptyValidator(Validator):
 
 def get_bottom_toolbar():
     import qx.core.user_prompts as user_prompts
-    from qx.core.agent_manager import get_agent_manager
-    from qx.core.team_mode_manager import get_team_mode_manager
 
     approve_all_status = (
         '<style bg="#22c55e" fg="black">ON</style>'
@@ -74,14 +72,8 @@ def get_bottom_toolbar():
         else '<style bg="#22c55e" fg="black">IMPLEMENTING</style>'
     )
 
-    # Team mode status
-    team_mode_manager = get_team_mode_manager()
-    team_mode_enabled = team_mode_manager.is_team_mode_enabled()
-    team_status = (
-        '<style bg="#3b82f6" fg="black">TEAM</style>'
-        if team_mode_enabled
-        else '<style bg="#d75f00" fg="black">SINGLE</style>'
-    )
+    # Team mode temporarily disabled
+    team_status = '<style bg="#d75f00" fg="black">SINGLE</style>'
 
     toolbar_html = f'<style fg="black" bg="white"> {mode_status} | {team_status} | Details: {details_status} | StdOE: {stdout_status} | Approve All: {approve_all_status}</style>'
     return HTML(toolbar_html)
@@ -343,36 +335,11 @@ async def _run_inline_mode(
 
     @bindings.add("f2")
     async def _(event):
-        from qx.core.agent_manager import get_agent_manager
-        from qx.core.team_mode_manager import get_team_mode_manager
-
-        team_mode_manager = get_team_mode_manager()
-        current_state = team_mode_manager.is_team_mode_enabled()
-        new_state = team_mode_manager.toggle_team_mode(project_level=True)
-
-        mode_text = "enabled" if new_state else "disabled"
-        agent_name = "qx-director" if new_state else "qx"
-
-        # Switch agent
-        agent_manager = get_agent_manager()
-        switch_success = await agent_manager.switch_llm_agent(
-            agent_name, config_manager.mcp_manager
-        )
-
-        if switch_success:
-            status_msg = (
-                f"✓ [dim green]Team mode:[/] {mode_text} (switched to {agent_name})"
-            )
-        else:
-            status_msg = (
-                f"✓ [dim green]Team mode:[/] {mode_text} (warning: agent switch failed)"
-            )
-
-        run_in_terminal(lambda: themed_console.print(status_msg, style="warning"))
-
-        # Clear the current prompt line and force restart with new agent color
-        event.current_buffer.reset()
-        event.app.exit(result="__AGENT_SWITCHED__")
+        # Team mode toggle - placeholder for future implementation
+        run_in_terminal(lambda: themed_console.print(
+            "✓ [dim green]Team mode:[/] Feature temporarily disabled - will be reimplemented", 
+            style="warning"
+        ))
 
     @bindings.add("c-e")
     def _(event):
@@ -455,26 +422,7 @@ async def _run_inline_mode(
     signal.signal(signal.SIGWINCH, handle_resize)
 
     try:
-        # Check if we should start team mode workflow immediately
-        from qx.core.team_mode_manager import get_team_mode_manager
-        team_mode_manager = get_team_mode_manager()
-        
-        if team_mode_manager.is_team_mode_enabled():
-            # In team mode, start the workflow immediately
-            logger.info("🎯 Team mode active - starting unified workflow")
-            
-            try:
-                # Use unified workflow
-                from qx.core.langgraph_supervisor import get_unified_workflow
-                workflow = get_unified_workflow(config_manager)
-                
-                # Start continuous workflow mode
-                await workflow.start_continuous_workflow()
-                # Workflow handles everything including exit, so we're done
-                return
-            except Exception as e:
-                logger.error(f"Team mode workflow error: {e}", exc_info=True)
-                themed_console.print("Team mode workflow error. Falling back to normal mode.", style="error")
+        # Team mode workflow removed - will be reimplemented later
         
         while True:
             if not is_multiline_mode[0]:
@@ -605,7 +553,7 @@ async def _run_inline_mode(
             if active_llm_agent != current_active_agent:
                 current_active_agent = active_llm_agent
                 logger.info(f"🔄 Agent switched, now using: {getattr(active_llm_agent, 'agent_name', 'unknown')}")
-                # Note: Conversation history is now managed by unified LangGraph checkpoint system
+                # Conversation history is managed per agent
 
             llm_task = asyncio.create_task(
                 _handle_llm_interaction(
