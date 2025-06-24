@@ -4,7 +4,6 @@ import os
 from typing import List, Literal, Optional, Tuple, Any
 
 from rich.console import RenderableType
-from rich.prompt import Prompt
 
 from qx.core.state_manager import details_manager
 
@@ -343,7 +342,6 @@ async def get_user_choice_from_options_async(
         # Use prompt_toolkit for input to avoid terminal conflicts
         from prompt_toolkit import PromptSession
         from prompt_toolkit.key_binding import KeyBindings
-        from prompt_toolkit.filters import Condition
         from prompt_toolkit.validation import Validator, ValidationError
         
         # Create key bindings for the approval prompt

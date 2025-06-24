@@ -76,7 +76,6 @@ class ApprovalHandler:
         if agent_name:
             try:
                 from qx.cli.quote_bar_component import BorderedMarkdown, get_agent_color
-                from rich.markdown import Markdown
                 
                 # Format with appropriate colors: green for success, red for failure
                 # Use Rich Text instead of Markdown to support Rich markup

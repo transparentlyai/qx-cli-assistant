@@ -15,7 +15,7 @@ import queue
 import threading
 import time
 import uuid
-from abc import ABC, abstractmethod
+from abc import ABC
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Union

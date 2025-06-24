@@ -9,7 +9,6 @@ The service integrates with the thinking mechanism while keeping plugins indepen
 import asyncio
 import logging
 import os
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 

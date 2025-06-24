@@ -225,75 +225,25 @@ class QXCompleter(Completer):
             return
 
         if text.startswith("/team-remove-member "):
-            # Complete with current team member names
-            try:
-                from qx.core.config_manager import ConfigManager
-                from qx.core.team_manager import get_team_manager
-                # Note: This is a best-effort completion - may not work if config manager not available
-                # But it's better than no completion
-                config_manager = ConfigManager(None)
-                team_manager = get_team_manager(config_manager)
-                team_members = team_manager.get_team_members()
-                for agent_name in team_members.keys():
-                    if agent_name.startswith(word_before_cursor):
-                        yield Completion(
-                            agent_name,
-                            start_position=-len(word_before_cursor),
-                            display=agent_name,
-                            display_meta="Remove from team",
-                        )
-            except Exception:
-                # Fallback to all available agents if team manager not accessible
-                available_agents = self._get_available_agents()
-                for agent_info in available_agents:
-                    agent_name = agent_info["name"]
-                    if agent_name.startswith(word_before_cursor):
-                        yield Completion(
-                            agent_name,
-                            start_position=-len(word_before_cursor),
-                            display=agent_name,
-                            display_meta="Remove from team",
-                        )
+            # Complete with available agent names (team functionality temporarily disabled)
+            available_agents = self._get_available_agents()
+            for agent_info in available_agents:
+                agent_name = agent_info["name"]
+                if agent_name.startswith(word_before_cursor):
+                    yield Completion(
+                        agent_name,
+                        start_position=-len(word_before_cursor),
+                        display=agent_name,
+                        display_meta="Remove from team",
+                    )
             return
 
         if text.startswith("/team-load "):
-            # Complete with saved team names
-            try:
-                from qx.core.config_manager import ConfigManager
-                from qx.core.team_manager import get_team_manager
-                config_manager = ConfigManager(None)
-                team_manager = get_team_manager(config_manager)
-                saved_teams = team_manager.list_saved_teams()
-                for team_name in saved_teams:
-                    if team_name.startswith(word_before_cursor):
-                        yield Completion(
-                            team_name,
-                            start_position=-len(word_before_cursor),
-                            display=team_name,
-                            display_meta="Load saved team",
-                        )
-            except Exception:
-                pass  # No completion available if team manager not accessible
+            # Team functionality temporarily disabled
             return
 
         if text.startswith("/team-save "):
-            # Complete with existing team names for overwrite
-            try:
-                from qx.core.config_manager import ConfigManager
-                from qx.core.team_manager import get_team_manager
-                config_manager = ConfigManager(None)
-                team_manager = get_team_manager(config_manager)
-                saved_teams = team_manager.list_saved_teams()
-                for team_name in saved_teams:
-                    if team_name.startswith(word_before_cursor):
-                        yield Completion(
-                            team_name,
-                            start_position=-len(word_before_cursor),
-                            display=team_name,
-                            display_meta="Overwrite existing team",
-                        )
-            except Exception:
-                pass  # No completion available if team manager not accessible
+            # Team functionality temporarily disabled
             return
 
         # Get the current text and cursor position
