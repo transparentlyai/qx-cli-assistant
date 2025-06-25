@@ -346,7 +346,7 @@ class AgentInvocationService:
             "user_context": os.environ.get("QX_USER_CONTEXT", ""),
             "project_context": os.environ.get("QX_PROJECT_CONTEXT", ""),
             "project_files": os.environ.get("QX_PROJECT_FILES", ""),
-            "ignore_paths": "",
+            # ignore_paths is populated dynamically at prompt formatting time
         }
         
     async def list_available_agents(self) -> List[str]:
