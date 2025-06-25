@@ -4,7 +4,7 @@ import logging
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, cast
+from typing import List, Optional, cast, Any
 
 from openai.types.chat import ChatCompletionMessageParam
 
@@ -53,24 +53,22 @@ def _get_message_role(msg) -> Optional[str]:
 
 def _add_system_message_if_missing(
     message_history: List[ChatCompletionMessageParam],
+    agent_config: Optional[Any] = None
 ) -> List[ChatCompletionMessageParam]:
     """
     Adds the system message as the first message if it's not already present.
+    
+    Args:
+        message_history: List of messages
+        agent_config: Optional agent configuration for loading system prompt
     """
     # Check if the first message is already a system message
     if message_history and _get_message_role(message_history[0]) == "system":
         return message_history
 
-    # Import here to avoid circular imports
-    from qx.core.llm_components.prompts import load_and_format_system_prompt
-
-    system_prompt = load_and_format_system_prompt()
-    system_message = cast(
-        ChatCompletionMessageParam, {"role": "system", "content": system_prompt}
-    )
-
-    # Prepend the system message
-    return [system_message] + message_history
+    # System message will be added dynamically when needed
+    # For now, just return the history as-is since we don't have agent config
+    return message_history
 
 
 async def get_or_create_session_filename():
@@ -95,53 +93,59 @@ async def get_or_create_session_filename():
     return _current_session_file
 
 
-async def save_session_async(message_history: List[ChatCompletionMessageParam]):
+async def save_session_async(current_agent_name: str,
+                           all_agent_histories: dict):
     """
-    Saves the given message history to the current session file.
+    Saves all agent message histories to the current session file.
     Creates a new session file only if one doesn't exist for this conversation.
     Thread-safe async version.
+    
+    Args:
+        current_agent_name: Name of the current agent
+        all_agent_histories: Dict of all agent histories {agent_name: history}
     """
-    if not message_history:
-        logger.info("No message history to save. Skipping session save.")
-        return
-
     # Check if .Q directory exists before attempting to save
     if not QX_SESSIONS_DIR.parent.is_dir():
         logger.info("'.Q' directory not found. Skipping session save.")
         return
 
-    session_filename = await get_or_create_session_filename()
-    if (
-        session_filename is None
-    ):  # get_or_create_session_filename returns None if .Q doesn't exist
+    if not all_agent_histories:
+        logger.info("No agent histories to save. Skipping session save.")
         return
 
-    # Exclude the system message from the history to be saved
-    history_to_save = [
-        msg for msg in message_history if _get_message_role(msg) != "system"
-    ]
+    session_filename = await get_or_create_session_filename()
+    if session_filename is None:
+        return
 
-    # Convert ChatCompletionMessageParam objects to dictionaries for JSON serialization
-    serializable_history = []
-    for msg in history_to_save:
-        if hasattr(msg, "model_dump") and callable(getattr(msg, "model_dump")):
-            # Pydantic model with model_dump method
-            serializable_history.append(msg.model_dump())  # type: ignore
-        elif hasattr(msg, "__dict__"):
-            # Object with __dict__ attribute
-            serializable_history.append(msg.__dict__)
-        elif hasattr(msg, "items"):
-            # Dict-like object
-            serializable_history.append(dict(msg))
-        else:
-            # Already serializable (dict, list, etc.)
-            serializable_history.append(msg)
+    # Prepare session data
+    session_data = {
+        "format_version": "2.0",
+        "current_agent": current_agent_name,
+        "agents": {}
+    }
+    
+    for agent_name, history in all_agent_histories.items():
+        # Exclude system messages and serialize
+        agent_history = [
+            msg for msg in history if _get_message_role(msg) != "system"
+        ]
+        serializable_history = []
+        for msg in agent_history:
+            if hasattr(msg, "model_dump") and callable(getattr(msg, "model_dump")):
+                serializable_history.append(msg.model_dump())  # type: ignore
+            elif hasattr(msg, "__dict__"):
+                serializable_history.append(msg.__dict__)
+            elif hasattr(msg, "items"):
+                serializable_history.append(dict(msg))
+            else:
+                serializable_history.append(msg)
+        session_data["agents"][agent_name] = serializable_history
 
     try:
         # Use asyncio.to_thread for file I/O to avoid blocking
         await asyncio.to_thread(
             lambda: session_filename.write_text(
-                json.dumps(serializable_history, indent=2), encoding="utf-8"
+                json.dumps(session_data, indent=2), encoding="utf-8"
             )
         )
         logger.info(f"Session saved to {session_filename}")
@@ -162,66 +166,21 @@ async def reset_session_async():
 
 
 # Sync wrappers for backward compatibility
-def save_session_sync(message_history: List[ChatCompletionMessageParam]):
+def save_session_sync(current_agent_name: str,
+                     all_agent_histories: dict):
     """Sync wrapper for save_session."""
-
-    def _save_sync():
-        # Fallback to synchronous save to avoid blocking
-        global _current_session_file
-        if not message_history:
-            return
-
-        # Check if .Q directory exists before attempting to save
-        if not QX_SESSIONS_DIR.parent.is_dir():
-            logger.info("'.Q' directory not found. Skipping session save.")
-            return
-
-        with _session_lock_sync:
-            if _current_session_file is None:
-                # Only create the sessions directory if the .Q directory exists
-                if not QX_SESSIONS_DIR.parent.is_dir():
-                    logger.info(
-                        "'.Q' directory not found. Cannot create session directory."
-                    )
-                    return  # Indicate that a session file cannot be created
-                QX_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:23]
-                _current_session_file = QX_SESSIONS_DIR / f"qx_session_{timestamp}.json"
-
-            if (
-                _current_session_file is None
-            ):  # If it couldn't be created due to missing .Q
-                return
-
-            # Exclude the system message from the history to be saved
-            history_to_save = [
-                msg for msg in message_history if _get_message_role(msg) != "system"
-            ]
-
-            serializable_history = [
-                msg.model_dump() if hasattr(msg, "model_dump") else msg
-                for msg in history_to_save
-            ]
-
-            try:
-                _current_session_file.write_text(
-                    json.dumps(serializable_history, indent=2), encoding="utf-8"
-                )
-                logger.info(f"Session saved to {_current_session_file}")
-            except Exception as e:
-                logger.error(f"Failed to save session: {e}", exc_info=True)
-
+    
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
             # We're in an async context, create a task
-            asyncio.create_task(save_session_async(message_history))
+            asyncio.create_task(save_session_async(current_agent_name, all_agent_histories))
         else:
-            # Sync context - just do it synchronously
-            _save_sync()
+            # Sync context - run async version
+            loop.run_until_complete(save_session_async(current_agent_name, all_agent_histories))
     except RuntimeError:
-        # No event loop - do it synchronously
-        _save_sync()
+        # No event loop - shouldn't happen in normal qx usage
+        logger.error("No event loop available for session saving")
 
 
 def reset_session_sync():
@@ -321,11 +280,14 @@ def load_latest_session() -> Optional[List[ChatCompletionMessageParam]]:
     return loaded_history
 
 
-def load_session_from_path(
-    session_path: Path,
-) -> Optional[List[ChatCompletionMessageParam]]:
+def load_all_agent_histories_from_session(
+    session_path: Path
+) -> Optional[dict]:
     """
-    Loads a session from a specified JSON file path.
+    Loads all agent histories from a session file (new format only).
+    
+    Returns:
+        Dict mapping agent names to their message histories, or None if not new format
     """
     try:
         if not session_path.is_file():
@@ -333,20 +295,81 @@ def load_session_from_path(
             return None
 
         with open(session_path, "r", encoding="utf-8") as f:
-            raw_messages = json.load(f)
+            session_data = json.load(f)
 
-        message_history: List[ChatCompletionMessageParam] = cast(
-            List[ChatCompletionMessageParam], raw_messages
-        )
+        # Check if this is the new format
+        if isinstance(session_data, dict) and session_data.get("format_version") == "2.0":
+            agents = session_data.get("agents", {})
+            
+            # Add each agent's history without system message (will be added dynamically)
+            all_histories = {}
+            for agent_name, history in agents.items():
+                message_history = cast(List[ChatCompletionMessageParam], history)
+                message_history = _add_system_message_if_missing(message_history)
+                all_histories[agent_name] = message_history
+            
+            return all_histories
+        else:
+            # Old format doesn't support multiple agents
+            return None
 
-        # Add system message as first message if not already present
+    except Exception as e:
+        logger.error(f"Error loading all agent histories from {session_path}: {e}", exc_info=True)
+        return None
+
+
+def load_session_from_path(
+    session_path: Path,
+    agent_name: Optional[str] = None
+) -> Optional[List[ChatCompletionMessageParam]]:
+    """
+    Loads a specific agent's history from a session file.
+    
+    Args:
+        session_path: Path to session file
+        agent_name: Specific agent to load history for
+        
+    Returns:
+        Message history for the specified agent or current/default agent
+    """
+    try:
+        if not session_path.is_file():
+            logger.error(f"Session file not found: {session_path}")
+            return None
+
+        with open(session_path, "r", encoding="utf-8") as f:
+            session_data = json.load(f)
+
+        # Validate format
+        if not isinstance(session_data, dict) or session_data.get("format_version") != "2.0":
+            logger.error(f"Invalid or old session format in {session_path}")
+            return None
+
+        agents = session_data.get("agents", {})
+        if not agents:
+            logger.warning("No agent histories found in session file")
+            return None
+        
+        # Determine which agent to load
+        if agent_name and agent_name in agents:
+            raw_messages = agents[agent_name]
+        elif session_data.get("current_agent") in agents:
+            agent_name = session_data["current_agent"]
+            raw_messages = agents[agent_name]
+        elif "qx" in agents:
+            agent_name = "qx"
+            raw_messages = agents["qx"]
+        else:
+            # Use first available agent
+            agent_name = list(agents.keys())[0]
+            raw_messages = agents[agent_name]
+        
+        message_history = cast(List[ChatCompletionMessageParam], raw_messages)
         message_history = _add_system_message_if_missing(message_history)
-
-        logger.info(f"Loaded session from {session_path}")
-
-        # Set the current session file to the recovered one
+        
+        logger.info(f"Loaded session for agent '{agent_name}' from {session_path}")
         set_current_session_file(session_path)
-
+        
         return message_history
 
     except json.JSONDecodeError as e:

@@ -29,12 +29,11 @@ async def initialize_agent_with_mcp(
     # Determine agent context
     agent_mode = "single"  # Default
     current_agent_name = ""
-    team_context = ""
     
     if agent_config:
         current_agent_name = getattr(agent_config, "name", "")
         
-        # All agents run in single mode for now (team mode removed)
+        # All agents run in single mode
         agent_mode = "single"
     
     # Determine model name from agent config or environment
@@ -76,7 +75,6 @@ async def initialize_agent_with_mcp(
         agent_config=agent_config,  # Pass agent config to initialization
         agent_mode=agent_mode,
         current_agent_name=current_agent_name,
-        team_context=team_context,
     )
 
     if agent is None:

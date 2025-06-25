@@ -243,16 +243,15 @@ def generate_discovered_tools_context(tools: List[Tuple[Any, Dict[str, Any], Typ
     return "\n".join(tool_descriptions)
 
 
-def load_and_format_system_prompt(agent_config: Any, agent_mode: str = "single", current_agent_name: str = "", team_context: str = "", discovered_tools: str = "", discovered_models: str = "", discovered_agents: str = "") -> str:
+def load_and_format_system_prompt(agent_config: Any, agent_mode: str = "single", current_agent_name: str = "", discovered_tools: str = "", discovered_models: str = "", discovered_agents: str = "") -> str:
     """
     Loads the system prompt from agent configuration.
     Formats it with environment variables and runtime information.
 
     Args:
         agent_config: AgentConfig instance for agent-based prompts
-        agent_mode: Type of agent ("single", "supervisor", "team_member")
+        agent_mode: Type of agent (always "single")
         current_agent_name: Name of the current agent
-        team_context: Team composition and context information
         discovered_tools: Pre-generated discovered tools context (if empty, will be loaded automatically)
         discovered_models: Pre-generated discovered models context (if empty, will be loaded automatically)
         discovered_agents: Pre-generated discovered agents context (if empty, will be loaded automatically)
@@ -275,13 +274,13 @@ def load_and_format_system_prompt(agent_config: Any, agent_mode: str = "single",
         if not discovered_agents:
             discovered_agents = get_current_discovered_agents()
             
-        return _load_agent_based_prompt(agent_config, agent_mode, current_agent_name, team_context, discovered_tools, discovered_models, discovered_agents)
+        return _load_agent_based_prompt(agent_config, agent_mode, current_agent_name, discovered_tools, discovered_models, discovered_agents)
     except Exception as e:
         logger.error(f"Failed to load or format system prompt: {e}", exc_info=True)
         return "You are a helpful AI assistant."
 
 
-def _load_agent_based_prompt(agent_config: Any, agent_mode: str = "single", current_agent_name: str = "", team_context: str = "", discovered_tools: str = "", discovered_models: str = "", discovered_agents: str = "") -> str:
+def _load_agent_based_prompt(agent_config: Any, agent_mode: str = "single", current_agent_name: str = "", discovered_tools: str = "", discovered_models: str = "", discovered_agents: str = "") -> str:
     """Load and format prompt from agent configuration with base prompt."""
     # Load base prompt first
     base_prompt = load_base_prompt()
@@ -313,10 +312,10 @@ def _load_agent_based_prompt(agent_config: Any, agent_mode: str = "single", curr
         template = agent_config.context + "\n---\n" + template
 
     # Apply standard context formatting with agent-specific variables
-    return _format_prompt_template(template, agent_mode, current_agent_name, team_context, discovered_tools, discovered_models, discovered_agents)
+    return _format_prompt_template(template, agent_mode, current_agent_name, discovered_tools, discovered_models, discovered_agents)
 
 
-def _format_prompt_template(template: str, agent_mode: str = "single", current_agent_name: str = "", team_context: str = "", discovered_tools: str = "", discovered_models: str = "", discovered_agents: str = "") -> str:
+def _format_prompt_template(template: str, agent_mode: str = "single", current_agent_name: str = "", discovered_tools: str = "", discovered_models: str = "", discovered_agents: str = "") -> str:
     """Apply standard context formatting to a prompt template with agent-specific variables."""
     user_context = os.environ.get("QX_USER_CONTEXT", "")
     project_context = os.environ.get("QX_PROJECT_CONTEXT", "")
@@ -344,7 +343,7 @@ def _format_prompt_template(template: str, agent_mode: str = "single", current_a
     # Apply agent-specific template variables
     formatted_prompt = formatted_prompt.replace("{agent_mode}", agent_mode)
     formatted_prompt = formatted_prompt.replace("{current_agent_name}", current_agent_name)
-    formatted_prompt = formatted_prompt.replace("{team_context}", team_context)
+    formatted_prompt = formatted_prompt.replace("{team_context}", "")
     formatted_prompt = formatted_prompt.replace("{discovered_tools}", discovered_tools)
     formatted_prompt = formatted_prompt.replace("{discovered_models}", discovered_models)
     formatted_prompt = formatted_prompt.replace("{discovered_agents}", discovered_agents)

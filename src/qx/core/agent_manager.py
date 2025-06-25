@@ -54,6 +54,10 @@ class AgentManager:
         self._task_tracker = TaskTracker()
         self._lock = asyncio.Lock()
         self._console_manager = None  # Lazy initialization
+        
+        # Per-agent message history storage
+        self._agent_message_histories: Dict[str, List[Any]] = {}
+        self._current_agent_name: Optional[str] = None
 
         # Callbacks for agent lifecycle events
         self._on_agent_loaded: List[Callable[[AgentConfig], None]] = []
@@ -180,6 +184,9 @@ class AgentManager:
                     created_at=datetime.now(),
                     context=context,
                 )
+                
+                # Update current agent name for message history tracking
+                self._current_agent_name = agent_name
 
                 # Fire switched callbacks
                 for callback in self._on_agent_switched:
@@ -231,6 +238,9 @@ class AgentManager:
             created_at=datetime.now(),
             context={},
         )
+        
+        # Update current agent name for message history tracking
+        self._current_agent_name = agent_name
 
     def set_active_llm_agent(self, llm_agent):
         """Set the active LLM agent instance."""
@@ -240,7 +250,25 @@ class AgentManager:
         """Get the active LLM agent instance."""
         return getattr(self, "_active_llm_agent", None)
     
-    # Message history tracking methods can be added here if needed
+    # Message history tracking methods
+    def get_current_message_history(self) -> Optional[List[Any]]:
+        """Get the message history for the current agent."""
+        if self._current_agent_name:
+            return self._agent_message_histories.get(self._current_agent_name, [])
+        return None
+    
+    def set_current_message_history(self, message_history: List[Any]) -> None:
+        """Set the message history for the current agent."""
+        if self._current_agent_name:
+            self._agent_message_histories[self._current_agent_name] = message_history
+    
+    def save_agent_message_history(self, agent_name: str, message_history: List[Any]) -> None:
+        """Save message history for a specific agent."""
+        self._agent_message_histories[agent_name] = message_history
+    
+    def get_agent_message_history(self, agent_name: str) -> List[Any]:
+        """Get message history for a specific agent."""
+        return self._agent_message_histories.get(agent_name, [])
 
     async def switch_llm_agent(self, agent_name: str, mcp_manager) -> bool:
         """Switch the active LLM agent to a different agent configuration."""
@@ -270,6 +298,8 @@ class AgentManager:
             if new_llm_agent:
                 # Update the agent session
                 self._set_current_agent_session(agent_name, result.agent)
+                
+                # Current agent name is updated in _set_current_agent_session
 
                 # Replace the active LLM agent
                 old_agent = self.get_active_llm_agent()

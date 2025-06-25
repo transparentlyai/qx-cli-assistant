@@ -403,9 +403,8 @@ def initialize_llm_agent(
     mcp_manager: MCPManager,  # New parameter
     enable_streaming: bool = True,
     agent_config: Optional[Any] = None,  # New parameter for agent configuration
-    agent_mode: str = "single",  # Agent mode (single, supervisor, team_member)
+    agent_mode: str = "single",  # Agent mode (always single)
     current_agent_name: str = "",  # Current agent name
-    team_context: str = "",  # Team context information
 ) -> Optional[QXLLMAgent]:
     """
     Initializes the QXLLMAgent with system prompt and discovered tools.
@@ -417,9 +416,8 @@ def initialize_llm_agent(
         mcp_manager: MCP manager instance
         enable_streaming: Whether to enable streaming
         agent_config: Optional agent configuration for agent-based initialization
-        agent_mode: Type of agent (single, supervisor, team_member)
+        agent_mode: Type of agent (always single)
         current_agent_name: Name of the current agent
-        team_context: Team composition and context information
     """
     # Will generate discovered tools context after loading tools
 
@@ -493,7 +491,7 @@ def initialize_llm_agent(
     
     # Load system prompt (agent-based or legacy) with agent context, discovered tools, discovered models, and discovered agents
     system_prompt_content = load_and_format_system_prompt(
-        agent_config, agent_mode, current_agent_name, team_context, discovered_tools_context, discovered_models_context, discovered_agents_context
+        agent_config, agent_mode, current_agent_name, discovered_tools_context, discovered_models_context, discovered_agents_context
     )
 
     try:
