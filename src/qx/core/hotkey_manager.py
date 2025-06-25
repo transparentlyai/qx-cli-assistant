@@ -274,7 +274,7 @@ def _default_toggle_details_handler():
 
             # Update toolbar state if available
             try:
-                from qx.cli.qpromp import _details_active_for_toolbar
+                from qx.cli.qprompt import _details_active_for_toolbar
                 _details_active_for_toolbar[0] = new_status
             except ImportError:
                 pass  # Module not imported yet
@@ -310,7 +310,7 @@ def _default_toggle_stdout_handler():
 
             # Update toolbar state if available
             try:
-                from qx.cli.qpromp import _stdout_active_for_toolbar
+                from qx.cli.qprompt import _stdout_active_for_toolbar
                 _stdout_active_for_toolbar[0] = new_status
             except ImportError:
                 pass  # Module not imported yet

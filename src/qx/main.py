@@ -14,7 +14,7 @@ from openai.types.chat import (
 )
 
 from qx import __version__
-from qx.cli.qpromp import _handle_llm_interaction, _run_inline_mode
+from qx.cli.qprompt import _handle_llm_interaction, _run_inline_mode
 from qx.cli.session_selector import select_session
 from qx.cli.version import display_version_info
 from qx.core.config_manager import ConfigManager

@@ -522,8 +522,12 @@ async def _run_inline_mode(
                 # Pass current message history to command handler
                 result = await _handle_inline_command(user_input, active_llm_agent, config_manager, current_message_history)
                 
-                # Check if we need to update message history after agent switch
-                if user_input.startswith("/agents switch"):
+                # Check if command returned an updated message history
+                if result is not None:
+                    current_message_history = result
+                    logger.debug(f"Updated message history from command: {len(current_message_history)} messages")
+                # Special handling for agent switch to restore agent's history
+                elif user_input.startswith("/agents switch"):
                     # Get the new agent's message history
                     new_agent_name = await agent_manager.get_current_agent_name()
                     if new_agent_name:

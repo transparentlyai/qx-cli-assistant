@@ -82,7 +82,7 @@ QX is built on a modular, plugin-based architecture with 11 core subsystems. The
 
 **Key Components**:
 - `console_manager.py` - Thread-safe console access via producer-consumer pattern
-- `cli/qpromp.py` - Main interactive prompt loop using prompt_toolkit
+- `cli/qprompt.py` - Main interactive prompt loop using prompt_toolkit
 - `cli/commands.py` - Command handling logic (/help, /exit, etc.)
 - `cli/theme.py` - Rich terminal theming
 - `cli/quote_bar_component.py` - Agent message rendering with color coding

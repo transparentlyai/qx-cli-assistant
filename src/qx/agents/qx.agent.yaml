@@ -121,6 +121,10 @@ context: |
   Ignore Paths:
   {ignore_paths}
 
+  Available Agents:
+  {available_agents}
+
+
 output: |
   Provide clear, actionable responses that:
   - State each action being taken (e.g., "Running git status" or "Updating billing.py")

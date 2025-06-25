@@ -400,6 +400,53 @@ class AgentLoader:
                     
         return enabled_agents
 
+    def is_builtin_agent(self, agent_name: str, cwd: Optional[str] = None) -> bool:
+        """
+        Check if an agent is a built-in agent (from the app's agents directory).
+        
+        Args:
+            agent_name: Name of the agent to check
+            cwd: Current working directory for path resolution
+            
+        Returns:
+            True if the agent is built-in, False otherwise
+        """
+        agent_path = self.find_agent_file(agent_name, cwd)
+        if not agent_path:
+            return False
+            
+        # Get the built-in agents path
+        app_root = Path(__file__).parent.parent  # Go up from core/ to qx/
+        builtin_agents_path = app_root / "agents"
+        
+        # Check if the agent path is within the built-in agents directory
+        try:
+            agent_path.relative_to(builtin_agents_path)
+            return True
+        except ValueError:
+            # Not a subdirectory of builtin_agents_path
+            return False
+    
+    def discover_builtin_agents(self) -> List[str]:
+        """
+        Discover only built-in agents from the app's agents directory.
+        
+        Returns:
+            List of built-in agent names
+        """
+        builtin_agents = []
+        
+        # Get the built-in agents path
+        app_root = Path(__file__).parent.parent  # Go up from core/ to qx/
+        builtin_agents_path = app_root / "agents"
+        
+        if builtin_agents_path.exists():
+            for agent_file in builtin_agents_path.glob("*.agent.yaml"):
+                agent_name = agent_file.stem.replace(".agent", "")
+                builtin_agents.append(agent_name)
+                
+        return builtin_agents
+
 
 # Global singleton instance
 _agent_loader = None

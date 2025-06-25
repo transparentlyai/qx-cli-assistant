@@ -9,7 +9,7 @@ files_to_check = [
     "src/qx/cli/completer.py",
     "src/qx/cli/console.py",
     "src/qx/cli/history.py",
-    "src/qx/cli/qpromp.py",
+    "src/qx/cli/qprompt.py",
     "src/qx/cli/quote_bar_component.py",
     "src/qx/cli/session_selector.py",
     "src/qx/cli/theme.py",

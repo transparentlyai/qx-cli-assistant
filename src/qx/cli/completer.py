@@ -26,6 +26,8 @@ class QXCompleter(Completer):
             {"name": "list", "description": "List all available agents"},
             {"name": "switch", "description": "Switch to a different agent"},
             {"name": "info", "description": "Show current agent information"},
+            {"name": "load", "description": "Make project agent available to AI"},
+            {"name": "unload", "description": "Remove project agent from AI knowledge"},
             {"name": "reload", "description": "Reload agent configuration (all agents if no name specified)"},
             {
                 "name": "refresh",
@@ -180,9 +182,9 @@ class QXCompleter(Completer):
                             display_meta=subcommand_info["description"],
                         )
             elif len(parts) >= 1:
-                # Complete agent names for 'switch' and 'reload' commands
+                # Complete agent names for 'switch', 'reload', 'load', and 'unload' commands
                 subcommand = parts[0]
-                if subcommand in ["switch", "reload"]:
+                if subcommand in ["switch", "reload", "load", "unload"]:
                     if len(parts) == 1 or (
                         len(parts) == 2 and not agent_text.endswith(" ")
                     ):
