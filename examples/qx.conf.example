@@ -6,9 +6,19 @@
 
 # === REQUIRED SETTINGS ===
 
-# Model Configuration - Use LiteLLM format
+# Model Configuration - REQUIRED (no default provided)
+# You must explicitly choose your model to ensure awareness of costs and capabilities
 # Format: provider/model-name or provider/organization/model-name
-QX_MODEL_NAME=openrouter/anthropic/claude-3.5-sonnet
+# 
+# Examples:
+#   QX_MODEL_NAME=openrouter/anthropic/claude-3.5-sonnet
+#   QX_MODEL_NAME=openrouter/google/gemini-2.5-pro-preview-06-05
+#   QX_MODEL_NAME=openrouter/openai/gpt-4o
+#   QX_MODEL_NAME=openai/gpt-4o  # Direct from OpenAI
+#   QX_MODEL_NAME=vertex_ai/gemini-1.5-pro  # Google Vertex AI
+#
+# See available models and pricing at: https://openrouter.ai/models
+QX_MODEL_NAME=your_chosen_model_here  # REPLACE THIS WITH YOUR CHOSEN MODEL
 
 # API Keys (choose based on your provider)
 # For OpenRouter
