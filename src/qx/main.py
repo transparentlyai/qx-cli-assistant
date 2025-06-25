@@ -145,7 +145,10 @@ async def _async_main(
                     config_manager=config_manager,
                 )
                 if message_history:
-                    save_session(message_history)
+                    # Save with agent context
+                    current_agent_name = await agent_manager.get_current_agent_name() or "qx"
+                    agent_manager.save_agent_message_history(current_agent_name, message_history)
+                    save_session(current_agent_name, agent_manager._agent_message_histories)
                     clean_old_sessions(keep_sessions)
                 return  # Return instead of sys.exit() to avoid issues with async context
 
@@ -161,26 +164,31 @@ async def _async_main(
                     themed_console.print(
                         f"[info]Attempting to recover session from: {recover_session_path}[/]"
                     )
-                    loaded_history = load_session_from_path(Path(recover_session_path))
-                    if loaded_history:
-                        # Use agent-based system prompt if available, fallback to legacy
-                        current_agent = await agent_manager.get_current_agent()
-                        if current_agent:
-                            system_prompt = load_and_format_system_prompt(current_agent)
+                    
+                    # Load all agent histories
+                    from qx.core.session_manager import load_all_agent_histories_from_session
+                    all_histories = load_all_agent_histories_from_session(Path(recover_session_path))
+                    
+                    if all_histories:
+                        # Restore all agent histories
+                        for agent_name, history in all_histories.items():
+                            agent_manager.save_agent_message_history(agent_name, history)
+                        
+                        # Load current agent's history
+                        current_agent_name = await agent_manager.get_current_agent_name() or "qx"
+                        if current_agent_name in all_histories:
+                            current_message_history = all_histories[current_agent_name]
                         else:
-                            system_prompt = load_and_format_system_prompt()
-
-                        current_message_history = [
-                            ChatCompletionSystemMessageParam(
-                                role="system", content=system_prompt
-                            )
-                        ] + loaded_history
+                            # Fallback to first available agent
+                            current_agent_name = list(all_histories.keys())[0]
+                            current_message_history = all_histories[current_agent_name]
+                        
                         themed_console.print(
-                            "[success]Session recovered successfully![/]"
+                            f"[success]Session recovered successfully! Restored {len(all_histories)} agent(s).[/]"
                         )
-
+                        
                         # Automatically ask for a summary
-                        if llm_agent:
+                        if llm_agent and current_message_history:
                             current_message_history = await _handle_llm_interaction(
                                 llm_agent,
                                 "list a summary of each iteraction we had so far - just the list, with a title 'So far in this session' and a separator at the end of the list - **ONLY the list,title and separator, no other text**",

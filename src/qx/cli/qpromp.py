@@ -36,7 +36,6 @@ pending_text = [""]
 _details_active_for_toolbar = [True]
 _stdout_active_for_toolbar = [True]
 _planning_mode_active = [False]
-_team_mode_active_for_toolbar = [False]
 
 
 class SingleLineNonEmptyValidator(Validator):
@@ -72,10 +71,7 @@ def get_bottom_toolbar():
         else '<style bg="#22c55e" fg="black">IMPLEMENTING</style>'
     )
 
-    # Team mode temporarily disabled
-    team_status = '<style bg="#d75f00" fg="black">SINGLE</style>'
-
-    toolbar_html = f'<style fg="black" bg="white"> {mode_status} | {team_status} | Details: {details_status} | StdOE: {stdout_status} | Approve All: {approve_all_status}</style>'
+    toolbar_html = f'<style fg="black" bg="white"> {mode_status} | Details: {details_status} | StdOE: {stdout_status} | Approve All: {approve_all_status}</style>'
     return HTML(toolbar_html)
 
 
@@ -143,6 +139,18 @@ async def _run_inline_mode(
     qx_completer = QXCompleter()
     _details_active_for_toolbar[0] = await details_manager.is_active()
     _stdout_active_for_toolbar[0] = await output_control_manager.should_show_stdout()
+    
+    # Get the agent manager and check if we need to restore agent's history
+    from qx.core.agent_manager import get_agent_manager
+    agent_manager = get_agent_manager()
+    current_agent_name = await agent_manager.get_current_agent_name()
+    
+    if current_agent_name and current_message_history is None:
+        # Try to restore this agent's previous message history
+        restored_history = agent_manager.get_current_message_history()
+        if restored_history:
+            current_message_history = restored_history
+            logger.debug(f"Restored {len(current_message_history)} messages for agent '{current_agent_name}'")
 
     # Load planning mode from configuration
     planning_mode_config = config_manager.get_config_value("QX_PLANNING_MODE", "false")
@@ -333,14 +341,6 @@ async def _run_inline_mode(
         )
         event.app.invalidate()
 
-    @bindings.add("f2")
-    async def _(event):
-        # Team mode toggle - placeholder for future implementation
-        run_in_terminal(lambda: themed_console.print(
-            "✓ [dim green]Team mode:[/] Feature temporarily disabled - will be reimplemented", 
-            style="warning"
-        ))
-
     @bindings.add("c-e")
     def _(event):
         import tempfile
@@ -519,7 +519,18 @@ async def _run_inline_mode(
                 agent_manager = get_agent_manager()
                 active_llm_agent = agent_manager.get_active_llm_agent() or llm_agent
                 
-                await _handle_inline_command(user_input, active_llm_agent, config_manager)
+                # Pass current message history to command handler
+                result = await _handle_inline_command(user_input, active_llm_agent, config_manager, current_message_history)
+                
+                # Check if we need to update message history after agent switch
+                if user_input.startswith("/agents switch"):
+                    # Get the new agent's message history
+                    new_agent_name = await agent_manager.get_current_agent_name()
+                    if new_agent_name:
+                        new_history = agent_manager.get_current_message_history()
+                        if new_history is not None:
+                            current_message_history = new_history
+                            logger.debug(f"Restored {len(current_message_history)} messages for agent '{new_agent_name}'")
                 continue
 
             # Save user message immediately
@@ -536,7 +547,11 @@ async def _run_inline_mode(
             current_message_history.append(
                 ChatCompletionUserMessageParam(role="user", content=final_user_input)
             )
-            save_session(current_message_history)
+            
+            # Save with all agent histories
+            current_agent_name = await agent_manager.get_current_agent_name() or "qx"
+            agent_manager.save_agent_message_history(current_agent_name, current_message_history)
+            save_session(current_agent_name, agent_manager._agent_message_histories)
 
             # Get the currently active LLM agent (may have been switched)
             from qx.core.agent_manager import get_agent_manager
@@ -578,13 +593,27 @@ async def _run_inline_mode(
                         pass
 
             if current_message_history:
-                # Save session for session management (unified workflow manages its own checkpoints)
-                save_session(current_message_history)
+                # Save current agent's history first
+                current_agent_name = await agent_manager.get_current_agent_name() or "qx"
+                agent_manager.save_agent_message_history(current_agent_name, current_message_history)
+                
+                # Save session with all agent histories
+                save_session(current_agent_name, agent_manager._agent_message_histories)
                 clean_old_sessions(keep_sessions)
 
     except (KeyboardInterrupt, EOFError):
         pass
     finally:
+        # Save all agent histories before exiting
+        try:
+            current_agent_name = await agent_manager.get_current_agent_name() or "qx"
+            if current_message_history:
+                agent_manager.save_agent_message_history(current_agent_name, current_message_history)
+                save_session(current_agent_name, agent_manager._agent_message_histories)
+                logger.debug(f"Saved session with {len(agent_manager._agent_message_histories)} agent(s) on exit")
+        except Exception as e:
+            logger.error(f"Error saving session on exit: {e}")
+        
         qx_history.flush_history()
         # Stop global hotkey system
         try:

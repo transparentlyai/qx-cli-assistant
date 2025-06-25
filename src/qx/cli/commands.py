@@ -14,7 +14,6 @@ from qx.core.constants import QX_VERSION
 from qx.core.models import MODELS
 from qx.core.llm import QXLLMAgent, initialize_llm_agent, query_llm
 from qx.core.session_manager import reset_session
-# Team mode imports removed - to be reimplemented
 
 logger = logging.getLogger("qx")
 
@@ -97,7 +96,8 @@ def _handle_tools_command(agent: QXLLMAgent):
         themed_console.print(text)
 
 
-async def _handle_agents_command(command_args: str, config_manager: ConfigManager):
+async def _handle_agents_command(command_args: str, config_manager: ConfigManager,
+                                current_message_history: Optional[List[ChatCompletionMessageParam]] = None):
     """
     Handle agent management commands.
     """
@@ -226,6 +226,12 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
                     style="error"
                 )
                 return
+            
+            # Save current agent's message history before switching
+            current_agent_name = await agent_manager.get_current_agent_name()
+            if current_agent_name and current_message_history:
+                agent_manager.save_agent_message_history(current_agent_name, current_message_history)
+                logger.debug(f"Saved {len(current_message_history)} messages for agent '{current_agent_name}'")
 
             # Attempt to switch the LLM agent
             success = await agent_manager.switch_llm_agent(
@@ -242,21 +248,10 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
                         style="text.muted",
                     )
                     
-                    # Ensure the new agent gets access to conversation context (for agents without initial_query)
+                    # Get this agent's existing message history (if any)
                     existing_history = agent_manager.get_current_message_history()
-                    if existing_history and not (hasattr(current_agent, 'initial_query') and current_agent.initial_query):
-                        # Agent doesn't have initial_query but we have conversation history
-                        # Update the active LLM agent with conversation context by updating its system prompt
-                        try:
-                            from qx.core.llm_components.prompts import load_and_format_system_prompt
-                            active_llm_agent = agent_manager.get_active_llm_agent()
-                            
-                            if active_llm_agent:
-                                # The agent will get conversation context in subsequent interactions
-                                # No need to send a message now, just ensure context is preserved
-                                logger.info(f"Agent '{agent_name}' now has access to {len(existing_history)} previous messages")
-                        except Exception as e:
-                            logger.warning(f"Could not transfer conversation context to agent '{agent_name}': {e}")
+                    if existing_history:
+                        logger.info(f"Agent '{agent_name}' resumed with {len(existing_history)} previous messages")
                     
                     # Process initial_query if defined in agent config
                     if hasattr(current_agent, 'initial_query') and current_agent.initial_query:
@@ -269,28 +264,14 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
                                 # Import the system prompt loading function
                                 from qx.core.llm_components.prompts import load_and_format_system_prompt
                                 
-                                # Get existing conversation history for context preservation
+                                # Get this agent's existing conversation history
                                 existing_history = agent_manager.get_current_message_history()
                                 system_prompt = load_and_format_system_prompt(current_agent)
                                 
-                                # Create message history that preserves conversation context
-                                if existing_history:
-                                    # Preserve existing conversation but update system prompt for new agent
-                                    initial_message_history = []
-                                    
-                                    # Add new agent's system prompt
-                                    initial_message_history.append(
-                                        ChatCompletionSystemMessageParam(
-                                            role="system", content=system_prompt
-                                        )
-                                    )
-                                    
-                                    # Add existing conversation history (skip old system messages)
-                                    for msg in existing_history:
-                                        if hasattr(msg, 'role') and msg.role != 'system':
-                                            initial_message_history.append(msg)
-                                        elif isinstance(msg, dict) and msg.get('role') != 'system':
-                                            initial_message_history.append(msg)
+                                # Create message history for this agent
+                                if existing_history and len(existing_history) > 0:
+                                    # This agent has existing history - append the initial query
+                                    initial_message_history = list(existing_history)
                                     
                                     # Add initial query at the end
                                     initial_message_history.append(
@@ -470,7 +451,8 @@ def _handle_clear_command(llm_agent: QXLLMAgent):
 
 
 async def _handle_inline_command(
-    command_input: str, llm_agent: QXLLMAgent, config_manager: ConfigManager
+    command_input: str, llm_agent: QXLLMAgent, config_manager: ConfigManager,
+    current_message_history: Optional[List[ChatCompletionMessageParam]] = None
 ):
     """Handle slash commands in inline mode."""
     parts = command_input.strip().split(maxsplit=1)
@@ -482,7 +464,7 @@ async def _handle_inline_command(
     elif command_name == "/tools":
         _handle_tools_command(llm_agent)
     elif command_name == "/agents":
-        await _handle_agents_command(command_args, config_manager)
+        await _handle_agents_command(command_args, config_manager, current_message_history)
     elif command_name == "/reset":
         # Just reset message history in inline mode
         reset_session()
@@ -498,26 +480,6 @@ async def _handle_inline_command(
             themed_console.print(command_args)
         else:
             themed_console.print("Usage: /print <text to print>", style="error")
-    elif command_name == "/team-add-member":
-        await _handle_add_agent_command(command_args, config_manager)
-    elif command_name == "/team-remove-member":
-        await _handle_remove_agent_command(command_args, config_manager)
-    elif command_name == "/team-status":
-        await _handle_team_status_command(config_manager)
-    elif command_name == "/team-clear":
-        await _handle_team_clear_command(config_manager)
-    elif command_name == "/team-enable":
-        await _handle_team_enable_command(config_manager)
-    elif command_name == "/team-disable":
-        await _handle_team_disable_command(config_manager)
-    elif command_name == "/team-mode":
-        await _handle_team_mode_command(config_manager)
-    elif command_name == "/team-save":
-        await _handle_team_save_command(command_args, config_manager)
-    elif command_name == "/team-load":
-        await _handle_team_load_command(command_args, config_manager)
-    elif command_name == "/team-create":
-        await _handle_team_create_command(command_args, config_manager)
     elif command_name == "/help":
         themed_console.print("QX - Multi-Agent AI Assistant", style="app.header")
         
@@ -548,68 +510,11 @@ async def _handle_inline_command(
             style="primary"
         )
         
-        # Team Management
-        themed_console.print("\nTeam Management:", style="app.header")
-        themed_console.print(
-            "  /team-create <name>      - Create a new empty team",
-            style="primary",
-        )
-        themed_console.print(
-            "  /team-add-member <agent> - Add agent(s) to your team",
-            style="primary",
-        )
-        themed_console.print(
-            "  /team-remove-member <agent> - Remove agent from your team",
-            style="primary",
-        )
-        themed_console.print(
-            "  /team-status             - Show current team composition",
-            style="primary",
-        )
-        themed_console.print(
-            "  /team-clear              - Remove all agents from team",
-            style="primary",
-        )
-        themed_console.print(
-            "  /team-save <name>        - Save current team with a name",
-            style="primary",
-        )
-        themed_console.print(
-            "  /team-load <name>        - Load a saved team by name",
-            style="primary",
-        )
-        
-        # Team Mode Control
-        themed_console.print("\nTeam Mode Control:", style="app.header")
-        themed_console.print(
-            "  /team-enable             - Enable team mode (multi-agent coordination)",
-            style="primary",
-        )
-        themed_console.print(
-            "  /team-disable            - Disable team mode (single agent)",
-            style="primary",
-        )
-        themed_console.print(
-            "  /team-mode               - Show current team mode status",
-            style="primary",
-        )
         
         # Help
         themed_console.print("\nHelp:", style="app.header")
         themed_console.print("  /help                    - Show this help message", style="primary")
         
-        # Team Workflow Examples
-        themed_console.print("\nTeam Workflow Examples:", style="app.header")
-        themed_console.print("  Create and build a team:", style="dim white")
-        themed_console.print("    /team-create frontend-team", style="dim cyan")
-        themed_console.print("    /team-add-member react_developer", style="dim cyan")
-        themed_console.print("    /team-add-member ui_designer 2", style="dim cyan")
-        themed_console.print("    /team-save frontend-specialists", style="dim cyan")
-        themed_console.print("\n  Load and use a saved team:", style="dim white")
-        themed_console.print("    /team-load frontend-specialists", style="dim cyan")
-        themed_console.print("    /team-enable", style="dim cyan")
-        themed_console.print("    # Now qx will coordinate multiple agents", style="dim green")
-
         # Agent Management Details
         themed_console.print("\nAgent Management Commands:", style="app.header")
         themed_console.print("  /agents list             - List all available agents", style="primary")
@@ -645,7 +550,6 @@ async def _handle_inline_command(
             "  Ctrl+R      - Fuzzy history search (fzf)", style="primary"
         )
         themed_console.print("  F3          - Toggle 'Details' mode", style="primary")
-        themed_console.print("  F2          - Toggle team mode", style="primary")
         themed_console.print("  F12         - Emergency cancel", style="primary")
         themed_console.print(
             "  Esc+Enter   - Toggle multiline mode (Alt+Enter)", style="primary"
@@ -741,40 +645,11 @@ async def _handle_inline_command(
             style="info",
         )
 
-        themed_console.print("\nTeam Workflows:", style="app.header")
-        themed_console.print(
-            "  Build a team of specialist agents for collaborative problem-solving.",
-            style="warning",
-        )
-        themed_console.print(
-            "  • Use /team-add-member <agent> [count] to add specialists to your team",
-            style="info",
-        )
-        themed_console.print(
-            "  • Use /team-remove-member <agent> to remove members from your team",
-            style="info",
-        )
-        themed_console.print(
-            "  • Use /team-status to see your current team composition",
-            style="info",
-        )
-        themed_console.print(
-            "  • qx automatically routes tasks to appropriate team members",
-            style="info",
-        )
-        themed_console.print(
-            "  • Team composition persists across sessions",
-            style="info",
-        )
-        themed_console.print(
-            "  • Use /team-clear to start fresh with no team members",
-            style="info",
-        )
 
     else:
         themed_console.print(f"Unknown command: {command_name}", style="error")
         themed_console.print(
-            "Available commands: /model, /tools, /agents, /reset, /approve-all, /print, /team-add-member, /team-remove-member, /team-status, /team-clear, /team-save, /team-load, /team-create, /team-enable, /team-disable, /team-mode, /help",
+            "Available commands: /model, /tools, /agents, /reset, /approve-all, /print, /help",
             style="text.muted",
         )
 
@@ -821,82 +696,10 @@ async def handle_command(
             themed_console.print(command_args)
         else:
             themed_console.print("Usage: /print <text to print>", style="error")
-    elif command_name == "/team-add-member":
-        await _handle_add_agent_command(command_args, config_manager)
-    elif command_name == "/team-remove-member":
-        await _handle_remove_agent_command(command_args, config_manager)
-    elif command_name == "/team-status":
-        await _handle_team_status_command(config_manager)
-    elif command_name == "/team-clear":
-        await _handle_team_clear_command(config_manager)
-    elif command_name == "/team-enable":
-        await _handle_team_enable_command(config_manager)
-    elif command_name == "/team-disable":
-        await _handle_team_disable_command(config_manager)
-    elif command_name == "/team-mode":
-        await _handle_team_mode_command(config_manager)
-    elif command_name == "/team-save":
-        await _handle_team_save_command(command_args, config_manager)
-    elif command_name == "/team-load":
-        await _handle_team_load_command(command_args, config_manager)
-    elif command_name == "/team-create":
-        await _handle_team_create_command(command_args, config_manager)
     else:
         themed_console.print(f"Unknown command: {command_name}", style="error")
         themed_console.print(
-            "Available commands: /model, /tools, /reset, /print, /team-add-member, /team-remove-member, /team-status, /team-clear, /team-save, /team-load, /team-create, /team-enable, /team-disable, /team-mode",
+            "Available commands: /model, /tools, /reset, /print",
             style="text.muted",
         )
     return current_message_history
-
-
-async def _handle_add_agent_command(command_args: str, config_manager: ConfigManager):
-    """Handle /team-add-member command - placeholder."""
-    themed_console.print("Team mode is temporarily disabled. This feature will be reimplemented.", style="warning")
-
-
-async def _handle_remove_agent_command(
-    command_args: str, config_manager: ConfigManager
-):
-    """Handle /team-remove-member command - placeholder."""
-    themed_console.print("Team mode is temporarily disabled. This feature will be reimplemented.", style="warning")
-
-
-async def _handle_team_status_command(config_manager: ConfigManager):
-    """Handle /team-status command - placeholder."""
-    themed_console.print("Team mode is temporarily disabled. This feature will be reimplemented.", style="warning")
-
-
-async def _handle_team_clear_command(config_manager: ConfigManager):
-    """Handle /team-clear command - placeholder."""
-    themed_console.print("Team mode is temporarily disabled. This feature will be reimplemented.", style="warning")
-
-
-async def _handle_team_enable_command(config_manager: ConfigManager):
-    """Handle /team-enable command - placeholder."""
-    themed_console.print("Team mode is temporarily disabled. This feature will be reimplemented.", style="warning")
-
-
-async def _handle_team_disable_command(config_manager: ConfigManager):
-    """Handle /team-disable command - placeholder."""
-    themed_console.print("Team mode is temporarily disabled. This feature will be reimplemented.", style="warning")
-
-
-async def _handle_team_mode_command(config_manager: ConfigManager):
-    """Handle /team-mode command - placeholder."""
-    themed_console.print("Team mode is temporarily disabled. This feature will be reimplemented.", style="warning")
-
-
-async def _handle_team_save_command(command_args: str, config_manager: ConfigManager):
-    """Handle /team-save command - placeholder."""
-    themed_console.print("Team mode is temporarily disabled. This feature will be reimplemented.", style="warning")
-
-
-async def _handle_team_load_command(command_args: str, config_manager: ConfigManager):
-    """Handle /team-load command - placeholder."""
-    themed_console.print("Team mode is temporarily disabled. This feature will be reimplemented.", style="warning")
-
-
-async def _handle_team_create_command(command_args: str, config_manager: ConfigManager):
-    """Handle /team-create command - placeholder."""
-    themed_console.print("Team mode is temporarily disabled. This feature will be reimplemented.", style="warning")

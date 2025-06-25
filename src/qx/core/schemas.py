@@ -297,7 +297,7 @@ class AgentConfig(BaseModel):
     color: Optional[str] = Field(default=None, description="Agent display color (hex format)")
     
     # Team coordination
-    can_delegate: Optional[bool] = Field(default=False, description="Whether the agent can delegate tasks to team members")
+    can_delegate: Optional[bool] = Field(default=False, description="Reserved for future use")
     
     # Initial interaction
     initial_query: Optional[str] = Field(default=None, description="Initial question sent to the model when switching to this agent (not shown to console)")
