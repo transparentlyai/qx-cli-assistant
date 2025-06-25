@@ -178,6 +178,53 @@ def generate_discovered_agents_context() -> str:
         return "No agents available."
 
 
+def generate_available_agents_context() -> str:
+    """
+    Generate a detailed list of available built-in agents with their descriptions.
+    Only includes enabled built-in agents, not project-specific agents.
+    
+    Returns:
+        Detailed list of enabled built-in agents with descriptions and type
+    """
+    try:
+        from qx.core.agent_loader import AgentLoader
+        
+        loader = AgentLoader()
+        agents_info = []
+        
+        # Get only built-in agents
+        builtin_agents = loader.discover_builtin_agents()
+        
+        for agent_name in builtin_agents:
+            agent_info = loader.get_agent_info(agent_name)
+            if agent_info and agent_info.get("enabled", True):
+                agents_info.append(agent_info)
+        
+        if not agents_info:
+            return "No built-in agents available."
+        
+        # Sort agents by type (user agents first) and then by name
+        agents_info.sort(key=lambda x: (x.get("type", "user") == "system", x.get("name", "")))
+        
+        agent_descriptions = []
+        
+        for agent in agents_info:
+            agent_name = agent.get("name", "Unknown")
+            agent_description = agent.get("description", "No description available")
+            agent_type = agent.get("type", "user")
+            
+            # Format: agent_name [type] - description
+            type_label = f" [system]" if agent_type == "system" else ""
+            
+            agent_descriptions.append(f"- {agent_name}{type_label}: {agent_description}")
+        
+        return "\n".join(agent_descriptions)
+        
+    except Exception as e:
+        logger.debug(f"Failed to get available agents: {e}")
+        return "No built-in agents available."
+
+
 def generate_discovered_models_context() -> str:
     """
     Generate a simple list of discovered models with descriptions.
@@ -334,6 +381,11 @@ def _format_prompt_template(template: str, agent_mode: str = "single", current_a
         logger.warning(f"Could not read .gitignore file: {e}")
         ignore_paths = "# Error reading .gitignore file."
 
+    # Generate available_agents context if template uses it
+    available_agents = ""
+    if "{available_agents}" in template:
+        available_agents = generate_available_agents_context()
+
     # Apply standard template variables
     formatted_prompt = template.replace("{user_context}", user_context)
     formatted_prompt = formatted_prompt.replace("{project_context}", project_context)
@@ -347,6 +399,7 @@ def _format_prompt_template(template: str, agent_mode: str = "single", current_a
     formatted_prompt = formatted_prompt.replace("{discovered_tools}", discovered_tools)
     formatted_prompt = formatted_prompt.replace("{discovered_models}", discovered_models)
     formatted_prompt = formatted_prompt.replace("{discovered_agents}", discovered_agents)
+    formatted_prompt = formatted_prompt.replace("{available_agents}", available_agents)
 
     logger.debug(f"Final System Prompt Length: {len(formatted_prompt)} characters")
 

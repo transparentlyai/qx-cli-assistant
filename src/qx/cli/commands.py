@@ -97,9 +97,10 @@ def _handle_tools_command(agent: QXLLMAgent):
 
 
 async def _handle_agents_command(command_args: str, config_manager: ConfigManager,
-                                current_message_history: Optional[List[ChatCompletionMessageParam]] = None):
+                                current_message_history: Optional[List[ChatCompletionMessageParam]] = None) -> Optional[List[ChatCompletionMessageParam]]:
     """
     Handle agent management commands.
+    Returns updated message history if it was modified, None otherwise.
     """
     parts = command_args.strip().split() if command_args else []
     subcommand = parts[0] if parts else "list"
@@ -429,12 +430,127 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
                 "No project agents found in .Q/agents/", style="dim white"
             )
 
+    elif subcommand == "load":
+        if len(parts) < 2:
+            themed_console.print("Usage: /agents load <agent_name>", style="error")
+            return
+
+        agent_name = parts[1]
+        
+        # Check if agent exists and is not a system agent
+        agent_info = agent_manager.get_agent_info(agent_name, cwd=os.getcwd())
+        if not agent_info:
+            themed_console.print(f"Agent '{agent_name}' not found", style="error")
+            return
+            
+        if agent_info.get("type") == "system":
+            themed_console.print(
+                f"Cannot load system agent '{agent_name}'. System agents are not available to users.",
+                style="error"
+            )
+            return
+            
+        # Check if it's a built-in agent
+        if agent_manager._agent_loader.is_builtin_agent(agent_name, cwd=os.getcwd()):
+            themed_console.print(
+                f"Agent '{agent_name}' is a built-in agent and is already available.",
+                style="warning"
+            )
+            return
+        
+        # Get the current agent's message history
+        current_agent_name = await agent_manager.get_current_agent_name()
+        if not current_agent_name:
+            themed_console.print("No active agent to load project agent for", style="error")
+            return
+            
+        current_history = agent_manager.get_current_message_history()
+        if current_history is None:
+            current_history = []
+        
+        # Create the system message
+        agent_description = agent_info.get("description", "A project-specific agent")
+        system_message = {
+            "role": "system",
+            "content": f"The '{agent_name}' agent is now available: {agent_description}"
+        }
+        
+        # Check if already loaded
+        if any(msg.get("content") == system_message["content"] for msg in current_history if isinstance(msg, dict)):
+            themed_console.print(f"Agent '{agent_name}' is already loaded", style="warning")
+            return
+        
+        # Inject the system message
+        current_history.append(system_message)
+        agent_manager.set_current_message_history(current_history)
+        
+        themed_console.print(
+            f"Loaded project agent '{agent_name}' - now available to the current agent",
+            style="success"
+        )
+        
+        # Return the updated message history
+        return current_history
+        
+    elif subcommand == "unload":
+        if len(parts) < 2:
+            themed_console.print("Usage: /agents unload <agent_name>", style="error")
+            return
+
+        agent_name = parts[1]
+        
+        # Check if it's a built-in agent
+        if agent_manager._agent_loader.is_builtin_agent(agent_name, cwd=os.getcwd()):
+            themed_console.print(
+                f"Cannot unload built-in agent '{agent_name}'.",
+                style="error"
+            )
+            return
+        
+        # Get the current agent's message history
+        current_agent_name = await agent_manager.get_current_agent_name()
+        if not current_agent_name:
+            themed_console.print("No active agent to unload project agent from", style="error")
+            return
+            
+        current_history = agent_manager.get_current_message_history()
+        if not current_history:
+            themed_console.print(f"Agent '{agent_name}' is not loaded", style="warning")
+            return
+        
+        # Remove the system message for this agent
+        original_length = len(current_history)
+        current_history = [
+            msg for msg in current_history 
+            if not (isinstance(msg, dict) and 
+                    msg.get("role") == "system" and 
+                    f"The '{agent_name}' agent is now available:" in msg.get("content", ""))
+        ]
+        
+        if len(current_history) == original_length:
+            themed_console.print(f"Agent '{agent_name}' is not loaded", style="warning")
+            return
+        
+        # Update the message history
+        agent_manager.set_current_message_history(current_history)
+        
+        themed_console.print(
+            f"Unloaded project agent '{agent_name}' - no longer available to the current agent",
+            style="success"
+        )
+        
+        # Return the updated message history
+        return current_history
+
     else:
         themed_console.print(f"Unknown agents subcommand: {subcommand}", style="error")
         themed_console.print(
-            "Available subcommands: list, switch, info, reload, refresh",
+            "Available subcommands: list, switch, info, reload, refresh, load, unload",
             style="text.muted",
         )
+    
+    # Return None to indicate no changes to message history
+    return None
 
 
 def _show_header(llm_agent: QXLLMAgent):
@@ -464,7 +580,9 @@ async def _handle_inline_command(
     elif command_name == "/tools":
         _handle_tools_command(llm_agent)
     elif command_name == "/agents":
-        await _handle_agents_command(command_args, config_manager, current_message_history)
+        updated_history = await _handle_agents_command(command_args, config_manager, current_message_history)
+        if updated_history is not None:
+            return updated_history
     elif command_name == "/reset":
         # Just reset message history in inline mode
         reset_session()
@@ -520,6 +638,8 @@ async def _handle_inline_command(
         themed_console.print("  /agents list             - List all available agents", style="primary")
         themed_console.print("  /agents switch <name>    - Switch to a different agent", style="primary")
         themed_console.print("  /agents info             - Show current agent details", style="primary")
+        themed_console.print("  /agents load <name>      - Make project agent available to AI", style="primary")
+        themed_console.print("  /agents unload <name>    - Remove project agent from AI knowledge", style="primary")
         themed_console.print("  /agents reload           - Reload ALL agents from disk", style="primary")
         themed_console.print("  /agents reload <name>    - Reload specific agent from disk", style="primary")
         themed_console.print("  /agents refresh          - Refresh agent discovery", style="primary")
