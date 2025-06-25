@@ -190,22 +190,28 @@ class AgentLoader:
             if missing_fields:
                 raise ValueError(f"Missing mandatory fields: {', '.join(missing_fields)}")
 
-            # Ensure model configuration exists with environment variable fallback
+            # Ensure model configuration exists with environment variable
             if "model" not in agent_data:
-                from qx.core.constants import DEFAULT_MODEL
-
+                model_name = os.environ.get("QX_MODEL_NAME")
+                if not model_name:
+                    raise ValueError(
+                        "No model specified in agent configuration and QX_MODEL_NAME environment variable is not set. "
+                        "Please set QX_MODEL_NAME to your preferred model (e.g., openrouter/anthropic/claude-3.5-sonnet)"
+                    )
                 agent_data["model"] = {
-                    "name": os.environ.get("QX_MODEL_NAME", DEFAULT_MODEL)
+                    "name": model_name
                 }
             elif (
                 isinstance(agent_data.get("model"), dict)
                 and "name" not in agent_data["model"]
             ):
-                from qx.core.constants import DEFAULT_MODEL
-
-                agent_data["model"]["name"] = os.environ.get(
-                    "QX_MODEL_NAME", DEFAULT_MODEL
-                )
+                model_name = os.environ.get("QX_MODEL_NAME")
+                if not model_name:
+                    raise ValueError(
+                        "No model name in agent configuration and QX_MODEL_NAME environment variable is not set. "
+                        "Please set QX_MODEL_NAME to your preferred model (e.g., openrouter/anthropic/claude-3.5-sonnet)"
+                    )
+                agent_data["model"]["name"] = model_name
 
             # Create AgentConfig with validation
             return AgentConfig(**agent_data)

@@ -62,7 +62,7 @@ QX uses a **hierarchical configuration system** that loads settings from multipl
 **System-wide** (`/etc/qx/qx.conf`) - Organization defaults:
 ```bash
 # Company-wide defaults
-QX_MODEL_NAME=openrouter/openai/gpt-4o-mini  # Cost-effective default
+QX_MODEL_NAME=openrouter/openai/gpt-4o-mini  # Company chosen model
 QX_NUM_RETRIES=3
 QX_REQUEST_TIMEOUT=60
 ```
@@ -71,7 +71,7 @@ QX_REQUEST_TIMEOUT=60
 ```bash
 # Personal API key and preferences
 OPENROUTER_API_KEY=sk-or-v1-your_personal_key_here
-QX_MODEL_NAME=openrouter/anthropic/claude-3.5-sonnet  # Overrides system default
+QX_MODEL_NAME=openrouter/anthropic/claude-3.5-sonnet  # Personal preference
 QX_ENABLE_STREAMING=true
 ```
 
@@ -88,11 +88,12 @@ QX_PROJECT_CONTEXT="This is a Python web application using FastAPI"
 The only required setting is a valid API key and model. Create any of the above files with:
 
 ```bash
-# Model Configuration (LiteLLM format)
-QX_MODEL_NAME=openrouter/anthropic/claude-3.5-sonnet
+# Model Configuration (REQUIRED - no default provided)
+# Choose your model explicitly to ensure awareness of costs
+QX_MODEL_NAME=your_chosen_model_here  # e.g., openrouter/anthropic/claude-3.5-sonnet
 
 # API Key (choose one based on your provider)
-OPENROUTER_API_KEY=sk-or-v1-your_openrouter_api_key_here
+OPENROUTER_API_KEY=sk-or-v1_your_openrouter_api_key_here
 # OPENAI_API_KEY=sk-your_openai_api_key_here
 # ANTHROPIC_API_KEY=sk-ant-your_anthropic_api_key_here
 

@@ -1,0 +1,27 @@
+# Minimal Agent Configuration
+# This shows the absolute minimum required fields for a working agent
+
+# Required: Human-readable name
+name: "Minimal Agent"
+
+# Required: Must be true for agent to be available
+enabled: true
+
+# Required: Brief description of the agent
+description: "A minimal example agent with only required fields"
+
+# Required: Agent's identity and expertise
+role: You are a helpful assistant.
+
+# Required: Operational guidelines
+instructions: |
+  Help users with their requests.
+  Be helpful and accurate.
+
+# That's it! Everything else has sensible defaults:
+# - model: Uses QX_MODEL_NAME env var or "openrouter/anthropic/claude-3.5-sonnet"
+# - tools: Empty list (no tools)
+# - temperature: 0.73
+# - max_tokens: 4096
+# - execution mode: "interactive"
+# - All other settings use defaults from constants.py

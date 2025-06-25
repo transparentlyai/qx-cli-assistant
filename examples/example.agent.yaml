@@ -1,0 +1,291 @@
+# Example Agent Configuration File
+# This file demonstrates all available fields for QX agent configuration
+# Based on the AgentConfig schema in src/qx/core/schemas.py
+
+# ===== REQUIRED FIELDS =====
+# These fields MUST be present for the agent to load successfully
+
+# Agent display name shown in UI and logs
+name: "Example Agent"
+
+# Whether this agent is available for use
+# Set to false to temporarily disable without deleting
+enabled: true
+
+# Brief description of the agent's purpose and capabilities
+# Shown in agent lists and help text
+description: "A comprehensive example agent demonstrating all configuration options"
+
+# Agent's personality, expertise, and behavioral characteristics
+# This shapes how the agent responds and approaches problems
+role: |
+  You are a helpful AI assistant with expertise in software development.
+  You have deep knowledge of multiple programming languages, best practices,
+  and software architecture. You communicate clearly and provide practical,
+  working solutions.
+
+# Detailed operational guidelines for the agent
+# The most important field for defining agent behavior
+instructions: |
+  ## Your Mission
+  Help users with software development tasks by providing clear, accurate,
+  and practical solutions.
+  
+  ## Core Capabilities
+  - Write clean, efficient code in multiple languages
+  - Debug and troubleshoot issues
+  - Explain complex concepts clearly
+  - Follow best practices and design patterns
+  
+  ## Guidelines
+  - Always provide working code examples
+  - Explain your reasoning and approach
+  - Consider edge cases and error handling
+  - Suggest improvements and alternatives
+  - Be concise but thorough
+
+# ===== OPTIONAL FIELDS =====
+# These fields have defaults and can be omitted
+
+# Agent type: "user" (default) or "system"
+# System agents are hidden from user interfaces
+type: "user"
+
+# Semantic version for tracking agent configuration changes
+version: "1.0.0"
+
+# Template string with runtime variable substitution
+# Variables: {user_context}, {project_context}, {project_files}, {ignore_paths}
+# {discovered_tools}, {discovered_models}, {discovered_agents}
+context: |
+  ## Environment Context
+  
+  **User Context:**
+  {user_context}
+  
+  **Project Context:**
+  {project_context}
+  
+  **Project Files:**
+  {project_files}
+  
+  **Ignored Paths:**
+  {ignore_paths}
+  
+  ## Available Resources
+  
+  **Tools:**
+  {discovered_tools}
+  
+  **Models:**
+  {discovered_models}
+  
+  **Other Agents:**
+  {discovered_agents}
+
+# Response formatting guidelines
+# Defines output style and structure
+output: |
+  Provide clear, structured responses that:
+  - Start with a brief summary
+  - Include working code examples with comments
+  - Explain key concepts and decisions
+  - Suggest next steps or improvements
+  - Use markdown formatting for readability
+
+# List of tools the agent can use
+# Must match exactly with available tool names
+tools: [
+  read_file_tool,        # Read files from the filesystem
+  write_file_tool,       # Create or update files
+  execute_shell_tool,    # Run shell commands
+  web_fetch_tool,        # Fetch content from URLs
+  current_time_tool,     # Get current date/time
+  todo_manager_tool,     # Manage task lists
+]
+
+# LLM model configuration
+model:
+  # Model identifier (required within model block)
+  # Examples: openrouter/anthropic/claude-3.5-sonnet, openrouter/google/gemini-2.5-pro-preview-06-05
+  name: openrouter/anthropic/claude-3.5-sonnet
+  
+  # Model parameters (all optional with defaults)
+  parameters:
+    # Controls randomness/creativity (0.0-2.0, default: 0.73)
+    # Lower = more focused/deterministic, Higher = more creative
+    temperature: 0.7
+    
+    # Maximum response length in tokens (default: 4096)
+    max_tokens: 8192
+    
+    # Nucleus sampling (0.0-1.0, default: 1.0)
+    # Lower values focus on high-probability tokens
+    top_p: 1.0
+    
+    # Reduce repetition by penalizing frequent tokens (-2.0 to 2.0, default: 0.0)
+    frequency_penalty: 0.0
+    
+    # Encourage topic diversity (-2.0 to 2.0, default: 0.0)
+    presence_penalty: 0.0
+    
+    # For reasoning models like o1 (default: "medium")
+    # Options: "low", "medium", "high"
+    reasoning_budget: "medium"
+
+# Maximum time for a single task in seconds (default: 300)
+max_execution_time: 600
+
+# Maximum tool-calling iterations per response (default: 10)
+max_iterations: 20
+
+# Execution configuration
+execution:
+  # Execution mode: "interactive" (default), "autonomous", or "hybrid"
+  mode: "interactive"
+  
+  # Autonomous mode configuration
+  autonomous_config:
+    # Enable autonomous features (default: false)
+    enabled: false
+    
+    # Max parallel tasks (1-10, default: 1)
+    max_concurrent_tasks: 3
+    
+    # Timeout per autonomous task in seconds (default: 600)
+    task_timeout: 1200
+    
+    # Health check frequency in seconds (default: 30)
+    heartbeat_interval: 60
+    
+    # Auto-restart on failure (default: false)
+    auto_restart: true
+    
+    # Task queue check frequency in seconds (default: 5)
+    poll_interval: 10
+  
+  # Security and resource constraints
+  constraints:
+    # Maximum file size for read/write operations (default: "10MB")
+    # Format: number + unit (KB, MB, GB)
+    max_file_size: "50MB"
+    
+    # Allowed filesystem paths (default: ["./"])
+    allowed_paths: [
+      "./src",
+      "./tests",
+      "./docs",
+      "/tmp"
+    ]
+    
+    # Forbidden paths even if within allowed paths (default: ["/etc", "/sys", "/proc"])
+    forbidden_paths: [
+      "/etc",
+      "/sys", 
+      "/proc",
+      "/.git",
+      "/home/*/.ssh"
+    ]
+    
+    # Tools requiring user approval (default: [])
+    approval_required_tools: [
+      "execute_shell_tool",
+      "write_file_tool"
+    ]
+    
+    # Max tool calls per response turn (default: 10)
+    max_tool_calls_per_turn: 15
+  
+  # Console output configuration
+  console:
+    # Use console manager for coordinated output (default: true)
+    use_console_manager: true
+    
+    # Identifier shown in output to distinguish agents (default: agent name)
+    source_identifier: "EXAMPLE"
+    
+    # Enable rich text formatting (default: true)
+    enable_rich_output: true
+    
+    # Log all interactions to file (default: true)
+    log_interactions: true
+
+# Lifecycle event hooks
+lifecycle:
+  # Message shown when agent starts
+  on_start: "Example Agent initialized and ready to help!"
+  
+  # Action when receiving a task (autonomous mode)
+  on_task_received: "Processing new task..."
+  
+  # Response to errors
+  on_error: "An error occurred. Attempting to recover..."
+  
+  # Cleanup message when shutting down
+  on_shutdown: "Example Agent shutting down. Goodbye!"
+
+# Metadata fields
+# ISO timestamp of creation (optional, can be auto-managed)
+created_at: "2024-01-15T10:30:00Z"
+
+# ISO timestamp of last update (optional, can be auto-managed)
+updated_at: "2024-01-15T10:30:00Z"
+
+# Classification tags for organization and filtering
+tags: [
+  "example",
+  "development",
+  "general-purpose",
+  "educational"
+]
+
+# UI configuration
+# Hex color for visual identification (optional)
+color: "#2196f3"
+
+# Advanced features
+# Enable agent to delegate tasks to other agents (default: false)
+can_delegate: false
+
+# Initial message sent to agent when switching
+# The query itself is not shown to user, only the response
+initial_query: "Hello! I'm ready to help with your software development tasks. What would you like to work on today?"
+
+# ===== ENVIRONMENT VARIABLE OVERRIDES =====
+# Most settings can be overridden using environment variables:
+#
+# Model Parameters:
+# - QX_AGENT_TEMPERATURE
+# - QX_AGENT_MAX_TOKENS  
+# - QX_AGENT_TOP_P
+# - QX_AGENT_FREQUENCY_PENALTY
+# - QX_AGENT_PRESENCE_PENALTY
+# - QX_AGENT_REASONING_BUDGET
+#
+# Execution Settings:
+# - QX_AGENT_EXECUTION_MODE
+# - QX_AGENT_MAX_EXECUTION_TIME
+# - QX_AGENT_MAX_ITERATIONS
+# - QX_AGENT_MAX_TOOL_CALLS
+#
+# Autonomous Configuration:
+# - QX_AGENT_AUTONOMOUS_ENABLED
+# - QX_AGENT_MAX_CONCURRENT_TASKS
+# - QX_AGENT_TASK_TIMEOUT
+# - QX_AGENT_HEARTBEAT_INTERVAL
+# - QX_AGENT_AUTO_RESTART
+# - QX_AGENT_POLL_INTERVAL
+#
+# Security Constraints:
+# - QX_AGENT_MAX_FILE_SIZE
+# - QX_AGENT_ALLOWED_PATHS (comma-separated)
+# - QX_AGENT_FORBIDDEN_PATHS (comma-separated)
+# - QX_AGENT_APPROVAL_REQUIRED_TOOLS (comma-separated)
+#
+# Console Configuration:
+# - QX_AGENT_USE_CONSOLE_MANAGER
+# - QX_AGENT_SOURCE_IDENTIFIER
+# - QX_AGENT_ENABLE_RICH_OUTPUT
+# - QX_AGENT_LOG_INTERACTIONS
+#
+# Example: QX_AGENT_TEMPERATURE=0.3 qx

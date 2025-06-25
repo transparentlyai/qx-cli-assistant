@@ -4,9 +4,8 @@ from qx import __version__
 
 QX_VERSION = __version__
 
-# Default model name if not specified by the user
-# Using LiteLLM format for OpenRouter
-DEFAULT_MODEL = "openrouter/anthropic/claude-3.5-sonnet"
+# Model configuration - must be explicitly set via QX_MODEL_NAME
+# No default model is provided to ensure users make an informed choice about model selection and costs
 
 # === AGENT SYSTEM DEFAULTS ===
 # Simple constant values used as fallbacks for environment variables

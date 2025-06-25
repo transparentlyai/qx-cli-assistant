@@ -25,8 +25,14 @@ MINIMAL_CONFIG_EXAMPLE = """
 # 2. ~/.config/qx/qx.conf (user-level)
 # 3. <project-directory>/.Q/config/qx.conf (highest priority)
 
-# Model Configuration (LiteLLM format)
-QX_MODEL_NAME=openrouter/anthropic/claude-3.5-sonnet
+# Model Configuration (REQUIRED - no default provided)
+# Choose your preferred model and associated costs:
+# Examples:
+#   QX_MODEL_NAME=openrouter/anthropic/claude-3.5-sonnet
+#   QX_MODEL_NAME=openrouter/google/gemini-2.5-pro-preview-06-05
+#   QX_MODEL_NAME=openai/gpt-4
+# See available models at: https://openrouter.ai/models
+QX_MODEL_NAME=your_chosen_model_here
 
 # API Key (choose one based on your provider)
 OPENROUTER_API_KEY=sk-or-v1-your_openrouter_api_key_here

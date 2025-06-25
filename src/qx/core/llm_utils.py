@@ -7,7 +7,6 @@ from qx.cli.theme import themed_console
 
 from qx.core.llm import QXLLMAgent, initialize_llm_agent
 from qx.core.mcp_manager import MCPManager
-from qx.core.constants import DEFAULT_MODEL
 
 logger = logging.getLogger("qx")
 
@@ -41,22 +40,43 @@ async def initialize_agent_with_mcp(
         try:
             model_name = getattr(agent_config.model, "name", None)
             if not model_name:
-                model_name = os.environ.get("QX_MODEL_NAME", DEFAULT_MODEL)
+                model_name = os.environ.get("QX_MODEL_NAME")
+                if not model_name:
+                    themed_console.print(
+                        "[critical]Critical Error:[/] No model specified in agent configuration and QX_MODEL_NAME environment variable is not set.\n"
+                        "[info]Please set QX_MODEL_NAME to your preferred model, for example:[/]\n"
+                        "  export QX_MODEL_NAME=openrouter/anthropic/claude-3.5-sonnet\n"
+                        "  export QX_MODEL_NAME=openrouter/google/gemini-2.5-pro-preview-06-05\n"
+                        "[info]See available models at: https://openrouter.ai/models[/]"
+                    )
+                    sys.exit(1)
             logger.debug(f"Using agent-based model: {model_name}")
         except AttributeError:
-            model_name = os.environ.get("QX_MODEL_NAME", DEFAULT_MODEL)
+            model_name = os.environ.get("QX_MODEL_NAME")
+            if not model_name:
+                themed_console.print(
+                    "[critical]Critical Error:[/] Agent configuration incomplete and QX_MODEL_NAME environment variable is not set.\n"
+                    "[info]Please set QX_MODEL_NAME to your preferred model, for example:[/]\n"
+                    "  export QX_MODEL_NAME=openrouter/anthropic/claude-3.5-sonnet\n"
+                    "  export QX_MODEL_NAME=openrouter/google/gemini-2.5-pro-preview-06-05\n"
+                    "[info]See available models at: https://openrouter.ai/models[/]"
+                )
+                sys.exit(1)
             logger.debug(
                 f"Agent config incomplete, using environment model: {model_name}"
             )
     else:
-        model_name = os.environ.get("QX_MODEL_NAME", DEFAULT_MODEL)
+        model_name = os.environ.get("QX_MODEL_NAME")
+        if not model_name:
+            themed_console.print(
+                "[critical]Critical Error:[/] QX_MODEL_NAME environment variable is not set.\n"
+                "[info]Please set QX_MODEL_NAME to your preferred model, for example:[/]\n"
+                "  export QX_MODEL_NAME=openrouter/anthropic/claude-3.5-sonnet\n" 
+                "  export QX_MODEL_NAME=openrouter/google/gemini-2.5-pro-preview-06-05\n"
+                "[info]See available models at: https://openrouter.ai/models[/]"
+            )
+            sys.exit(1)
         logger.debug(f"Using environment-based model: {model_name}")
-
-    if not model_name:
-        themed_console.print(
-            "[critical]Critical Error:[/] Model name not available from agent config or QX_MODEL_NAME environment variable."
-        )
-        sys.exit(1)
 
     logger.debug("Initializing LLM agent with parameters:")
     logger.debug(f"  Model Name: {model_name}")
