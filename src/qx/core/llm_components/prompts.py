@@ -305,11 +305,11 @@ def _load_agent_based_prompt(agent_config: Any, agent_mode: str = "single", curr
         system_prompt_parts.append(agent_config.output)
 
     # Join parts with triple dashes
-    template = "\n---\n".join(system_prompt_parts)
+    template = "\n\n---\n\n".join(system_prompt_parts)
 
     # Format with context if available
     if hasattr(agent_config, "context") and agent_config.context:
-        template = agent_config.context + "\n---\n" + template
+        template = agent_config.context + "\n\n---\n\n" + template
 
     # Apply standard context formatting with agent-specific variables
     return _format_prompt_template(template, agent_mode, current_agent_name, discovered_tools, discovered_models, discovered_agents)
