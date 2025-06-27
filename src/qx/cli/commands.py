@@ -1,5 +1,6 @@
 import logging
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
@@ -13,7 +14,8 @@ from qx.core.config_manager import ConfigManager
 from qx.core.constants import QX_VERSION
 from qx.core.models import MODELS
 from qx.core.llm import QXLLMAgent, initialize_llm_agent, query_llm
-from qx.core.session_manager import reset_session
+from qx.core.session_manager import reset_session, save_session_async, get_or_create_session_filename
+from qx.core.paths import QX_SESSIONS_DIR
 
 logger = logging.getLogger("qx")
 
@@ -94,6 +96,96 @@ def _handle_tools_command(agent: QXLLMAgent):
         text.append(f"  - {tool_name}: ", style="primary")
         text.append(description, style="dim white")
         themed_console.print(text)
+
+
+async def _handle_save_session_command(
+    session_name: str,
+    config_manager: ConfigManager,
+    current_message_history: Optional[List[ChatCompletionMessageParam]] = None
+):
+    """
+    Handle /save-session command to save the current session with a custom name.
+    """
+    if not session_name:
+        themed_console.print("Usage: /save-session <session-name>", style="error")
+        return
+    
+    # Sanitize the session name
+    session_name = session_name.strip()
+    # Replace spaces with underscores and remove invalid filename characters
+    safe_session_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in session_name)
+    
+    # Check if .Q directory exists
+    if not QX_SESSIONS_DIR.parent.is_dir():
+        themed_console.print("'.Q' directory not found. Cannot save session.", style="error")
+        return
+    
+    # Create sessions directory if it doesn't exist
+    QX_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # Get current agent manager
+    agent_manager = get_agent_manager()
+    current_agent_name = await agent_manager.get_current_agent_name()
+    
+    # Get all agent histories
+    all_agent_histories = agent_manager.get_all_agent_histories()
+    
+    # Make sure current agent's history is up to date
+    if current_agent_name and current_message_history:
+        all_agent_histories[current_agent_name] = current_message_history
+    
+    if not all_agent_histories:
+        themed_console.print("No conversation history to save.", style="warning")
+        return
+    
+    # Create filename with timestamp and custom name
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    session_filename = QX_SESSIONS_DIR / f"qx_session_{timestamp}_{safe_session_name}.json"
+    
+    try:
+        # Prepare session data
+        import json
+        session_data = {
+            "format_version": "2.0",
+            "current_agent": current_agent_name,
+            "session_name": session_name,
+            "saved_at": datetime.now().isoformat(),
+            "agents": {}
+        }
+        
+        for agent_name, history in all_agent_histories.items():
+            # Exclude system messages and serialize
+            agent_history = [
+                msg for msg in history if (
+                    (hasattr(msg, "role") and msg.role != "system") or
+                    (isinstance(msg, dict) and msg.get("role") != "system")
+                )
+            ]
+            serializable_history = []
+            for msg in agent_history:
+                if hasattr(msg, "model_dump") and callable(getattr(msg, "model_dump")):
+                    serializable_history.append(msg.model_dump())
+                elif hasattr(msg, "__dict__"):
+                    serializable_history.append(msg.__dict__)
+                elif hasattr(msg, "items"):
+                    serializable_history.append(dict(msg))
+                else:
+                    serializable_history.append(msg)
+            session_data["agents"][agent_name] = serializable_history
+        
+        # Write the session file
+        session_filename.write_text(
+            json.dumps(session_data, indent=2), encoding="utf-8"
+        )
+        
+        themed_console.print(
+            f"✓ Session saved as '{session_name}' to:\n  {session_filename}",
+            style="success"
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to save session: {e}", exc_info=True)
+        themed_console.print(f"Failed to save session: {e}", style="error")
 
 
 async def _handle_agents_command(command_args: str, config_manager: ConfigManager,
@@ -598,6 +690,8 @@ async def _handle_inline_command(
             themed_console.print(command_args)
         else:
             themed_console.print("Usage: /print <text to print>", style="error")
+    elif command_name == "/save-session":
+        await _handle_save_session_command(command_args, config_manager, current_message_history)
     elif command_name == "/help":
         themed_console.print("QX - Multi-Agent AI Assistant", style="app.header")
         
@@ -625,6 +719,10 @@ async def _handle_inline_command(
         )
         themed_console.print(
             "  /print <text>    - Print text to the console", 
+            style="primary"
+        )
+        themed_console.print(
+            "  /save-session <name> - Save current session with a custom name",
             style="primary"
         )
         
@@ -660,20 +758,38 @@ async def _handle_inline_command(
             style="primary",
         )
         themed_console.print(
-            "  F4          - Toggle stdout and stderr visibility", style="primary"
-        )
-        themed_console.print(
             "  F1          - Toggle between PLANNING and IMPLEMENTING modes",
             style="primary",
         )
         themed_console.print(
-            "  Ctrl+R      - Fuzzy history search (fzf)", style="primary"
+            "  F2          - Toggle between MULTI and SINGLE agent modes", style="primary"
         )
         themed_console.print("  F3          - Toggle 'Details' mode", style="primary")
+        themed_console.print(
+            "  F4          - Toggle stdout and stderr visibility", style="primary"
+        )
+        themed_console.print(
+            "  Ctrl+R      - Fuzzy history search (fzf)", style="primary"
+        )
         themed_console.print("  F12         - Emergency cancel", style="primary")
         themed_console.print(
             "  Esc+Enter   - Toggle multiline mode (Alt+Enter)", style="primary"
         )
+
+        themed_console.print("\nAgent Operation Modes:", style="app.header")
+        themed_console.print("  • MULTI Mode (default):", style="warning")
+        themed_console.print(
+            "    - Agents can delegate tasks to other specialized agents", style="info"
+        )
+        themed_console.print("    - Enable complex multi-agent workflows", style="info")
+        themed_console.print("    - Blue 'MULTI' indicator in footer toolbar", style="info")
+        themed_console.print("  • SINGLE Mode:", style="warning")
+        themed_console.print(
+            "    - Only the current agent operates, no delegation", style="info"
+        )
+        themed_console.print("    - Simpler, focused single-agent operation", style="info")
+        themed_console.print("    - Blue 'SINGLE' indicator in footer toolbar", style="info")
+        themed_console.print("    - Toggle with F2", style="info")
 
         themed_console.print("\nInteraction Modes:", style="app.header")
         themed_console.print("  • IMPLEMENTING Mode (default):", style="warning")
@@ -686,7 +802,7 @@ async def _handle_inline_command(
             "    - Focus on analysis, planning, and strategic thinking", style="info"
         )
         themed_console.print("    - Blue indicator in footer toolbar", style="info")
-        themed_console.print("    - Toggle with Ctrl+P", style="info")
+        themed_console.print("    - Toggle with F1", style="info")
 
         themed_console.print("\nInput Modes:", style="app.header")
         themed_console.print(
@@ -712,7 +828,10 @@ async def _handle_inline_command(
             "  • Details: Shows if AI reasoning is visible (ON/OFF)", style="info"
         )
         themed_console.print(
-            "  • Stdout: Shows if command output is visible (ON/OFF)", style="info"
+            "  • Agent Mode: Shows MULTI or SINGLE agent operation mode", style="info"
+        )
+        themed_console.print(
+            "  • StdOE: Shows if command output is visible (ON/OFF)", style="info"
         )
         themed_console.print(
             "  • Approve All: Shows automatic approval status (ON/OFF)", style="info"
@@ -765,11 +884,41 @@ async def _handle_inline_command(
             style="info",
         )
 
+        themed_console.print("\nDirectives System:", style="app.header")
+        themed_console.print(
+            "  Use @directive syntax to inject reusable prompts into your messages.",
+            style="warning",
+        )
+        themed_console.print(
+            "  • Usage: Type @<directive-name> in your message (e.g., @reviewer, @planner)",
+            style="info",
+        )
+        themed_console.print(
+            "  • Built-in directives: @worklogger, @reviewer, @planner",
+            style="info",
+        )
+        themed_console.print(
+            "  • Create custom directives: Place .md files in .Q/directives/ in your project",
+            style="info",
+        )
+        themed_console.print(
+            "  • Tab completion: Type @ and press Tab to see available directives",
+            style="info",
+        )
+        themed_console.print(
+            "  • Project directives override built-in ones with the same name",
+            style="info",
+        )
+        themed_console.print(
+            "  • Full documentation: docs/DIRECTIVES.md",
+            style="info",
+        )
+
 
     else:
         themed_console.print(f"Unknown command: {command_name}", style="error")
         themed_console.print(
-            "Available commands: /model, /tools, /agents, /reset, /approve-all, /print, /help",
+            "Available commands: /model, /tools, /agents, /reset, /approve-all, /print, /save-session, /help",
             style="text.muted",
         )
 

@@ -20,6 +20,7 @@ class QXCompleter(Completer):
             "/print",
             "/tools",
             "/agents",
+            "/save-session",
         ]
         self.models = MODELS
         self.agent_subcommands = [
@@ -210,6 +211,29 @@ class QXCompleter(Completer):
             current_word_start -= 1
 
         current_word = text[current_word_start:cursor_position]
+        
+        # Directive completion for @ directives
+        if current_word.startswith("@"):
+            from qx.core.directive_manager import get_directive_manager
+            directive_manager = get_directive_manager()
+            directive_prefix = current_word[1:]  # Remove @ prefix
+            
+            for directive_name in directive_manager.get_directive_names():
+                if directive_name.startswith(directive_prefix):
+                    directive = directive_manager.get_directive(directive_name)
+                    if directive:
+                        # Show first line of directive as description
+                        first_line = directive.content.strip().split('\n')[0]
+                        if len(first_line) > 50:
+                            first_line = first_line[:47] + "..."
+                        
+                        yield Completion(
+                            f"@{directive_name}",
+                            start_position=-len(current_word),
+                            display=f"@{directive_name}",
+                            display_meta=first_line,
+                        )
+            return
 
         # Command completion for slash commands
         if current_word.startswith("/"):
