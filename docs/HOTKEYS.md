@@ -12,7 +12,7 @@ QX implements a sophisticated global hotkey system that allows users to trigger 
 
 | Hotkey | Action | Description |
 |--------|--------|-------------|
-| **F2** | Toggle Team Mode | Enable/disable multi-agent team coordination |
+| **F2** | Toggle Agent Mode | Switch between MULTI and SINGLE agent modes |
 | **F3** | Toggle Details | Show/hide AI reasoning process during responses |
 | **Ctrl+A / F5** | Toggle Approve All | Enable/disable automatic approval for tool operations |
 | **F4** | Toggle StdOE | Show/hide stdout and stderr during tool execution |
@@ -29,6 +29,24 @@ QX implements a sophisticated global hotkey system that allows users to trigger 
 - **Visual Feedback**: Each hotkey action provides immediate visual confirmation
 - **Session Persistence**: Settings persist for the current session only
 - **Safe Interruption**: Operations can be safely cancelled without data corruption
+
+### Agent Mode System
+
+QX supports two agent operation modes that control whether multiple agents can work together:
+
+#### MULTI Mode (Default)
+- **Purpose**: Enable collaboration between multiple specialized agents
+- **Behavior**: Agents can delegate tasks to other agents via the invoke_agent tool
+- **Use Cases**: Complex tasks requiring specialized expertise from different agents
+- **Visual Indicator**: Blue "MULTI" badge in footer toolbar
+
+#### SINGLE Mode
+- **Purpose**: Restrict operation to a single agent only
+- **Behavior**: Agent invocation is disabled, only the main agent operates
+- **Use Cases**: Simple tasks, reduced complexity, focused single-agent operation
+- **Visual Indicator**: Blue "SINGLE" badge in footer toolbar
+
+**Mode Toggle**: Press **F2** to switch between MULTI and SINGLE agent modes at any time.
 
 ### Mode System
 

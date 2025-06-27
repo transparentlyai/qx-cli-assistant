@@ -48,6 +48,13 @@ class SingleLineNonEmptyValidator(Validator):
 
 def get_bottom_toolbar():
     import qx.core.user_prompts as user_prompts
+    from qx.core.agent_mode_manager import get_agent_mode_manager
+
+    agent_mode_manager = get_agent_mode_manager()
+    agent_mode_text = agent_mode_manager.get_display_text()
+    agent_mode_status = (
+        f'<style bg="#3b82f6" fg="black">{agent_mode_text}</style>'
+    )
 
     approve_all_status = (
         '<style bg="#22c55e" fg="black">ON</style>'
@@ -71,7 +78,7 @@ def get_bottom_toolbar():
         else '<style bg="#22c55e" fg="black">IMPLEMENTING</style>'
     )
 
-    toolbar_html = f'<style fg="black" bg="white"> {mode_status} | Details: {details_status} | StdOE: {stdout_status} | Approve All: {approve_all_status}</style>'
+    toolbar_html = f'<style fg="black" bg="white"> {mode_status} | {agent_mode_status} | Details: {details_status} | StdOE: {stdout_status} | Approve All: {approve_all_status}</style>'
     return HTML(toolbar_html)
 
 
@@ -156,6 +163,15 @@ async def _run_inline_mode(
     planning_mode_config = config_manager.get_config_value("QX_PLANNING_MODE", "false")
     _planning_mode_active[0] = planning_mode_config.lower() == "true"
     
+    # Load agent mode from configuration
+    from qx.core.agent_mode_manager import get_agent_mode_manager, AgentMode
+    agent_mode_manager = get_agent_mode_manager()
+    agent_mode_config = config_manager.get_config_value("QX_AGENT_MODE", "multi")
+    if agent_mode_config.lower() == "single":
+        agent_mode_manager.set_mode(AgentMode.SINGLE)
+    else:
+        agent_mode_manager.set_mode(AgentMode.MULTI)
+    
     # Track the current agent to detect switches
     current_active_agent = llm_agent
 
@@ -177,6 +193,7 @@ async def _run_inline_mode(
         register_global_hotkey("ctrl+r", "history")  # Same as prompt_toolkit
         register_global_hotkey("ctrl+a", "approve_all")  # Same as prompt_toolkit
         register_global_hotkey("f5", "approve_all")  # Alternative to Ctrl+A
+        register_global_hotkey("f2", "toggle_agent_mode")  # Toggle multi/single agent
         register_global_hotkey("f3", "toggle_details")  # Same as prompt_toolkit
         register_global_hotkey("f4", "toggle_stdout")  # Re-enabled with fix
         register_global_hotkey("f12", "cancel")  # Additional emergency key
@@ -337,6 +354,27 @@ async def _run_inline_mode(
         run_in_terminal(
             lambda: themed_console.print(
                 f"✓ [dim green]Mode:[/] {mode_text}.", style=style
+            )
+        )
+        event.app.invalidate()
+
+    @bindings.add("f2")
+    def _(event):
+        from qx.core.agent_mode_manager import get_agent_mode_manager
+        
+        agent_mode_manager = get_agent_mode_manager()
+        new_mode = agent_mode_manager.toggle()
+        mode_text = agent_mode_manager.get_display_text()
+        
+        # Save the agent mode state to configuration
+        config_manager.set_config_value(
+            "QX_AGENT_MODE", mode_text.lower()
+        )
+        
+        style = "warning"
+        run_in_terminal(
+            lambda: themed_console.print(
+                f"✓ [dim green]Agent Mode:[/] {mode_text}.", style=style
             )
         )
         event.app.invalidate()
@@ -541,12 +579,39 @@ async def _run_inline_mode(
             if current_message_history is None:
                 current_message_history = []
 
+            # Process directives if input contains @
+            processed_input = user_input
+            if "@" in user_input:
+                from qx.core.directive_manager import get_directive_manager
+                directive_manager = get_directive_manager()
+                
+                # Find all @directive references in the input
+                import re
+                directive_pattern = r'@(\w+)'
+                matches = re.findall(directive_pattern, user_input)
+                
+                for directive_name in matches:
+                    directive = directive_manager.get_directive(directive_name)
+                    if directive:
+                        # Replace @directive with the directive content
+                        processed_input = processed_input.replace(
+                            f"@{directive_name}", 
+                            f"\n\n{directive.content}\n\n"
+                        )
+                        themed_console.print(
+                            f"[dim cyan]Loaded directive: @{directive_name}[/dim cyan]"
+                        )
+                    else:
+                        themed_console.print(
+                            f"[yellow]Warning: Unknown directive @{directive_name}[/yellow]"
+                        )
+
             # Inject mode indicator if active
-            final_user_input = user_input
+            final_user_input = processed_input
             if _planning_mode_active[0]:
-                final_user_input = user_input + "\n\n---\nPLANNING mode activated"
+                final_user_input = processed_input + "\n\n---\nPLANNING mode activated"
             else:
-                final_user_input = user_input + "\n\n---\nIMPLEMENTING mode activated"
+                final_user_input = processed_input + "\n\n---\nIMPLEMENTING mode activated"
 
             current_message_history.append(
                 ChatCompletionUserMessageParam(role="user", content=final_user_input)

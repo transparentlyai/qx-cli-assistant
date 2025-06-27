@@ -2,10 +2,11 @@ import asyncio  # noqa: F401
 import json
 import logging
 import os
+import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, Type, cast
 
-from litellm import acompletion
+from litellm import acompletion, RateLimitError
 from openai.types.chat import (
     ChatCompletionMessageParam,
     ChatCompletionSystemMessageParam,
@@ -130,7 +131,7 @@ class QXLLMAgent:
             logger.debug(f"Agent Context: name={self.agent_name}, color={self.agent_color}, tools={len(self._tool_functions)}")
 
     async def _make_litellm_call(self, chat_params: Dict[str, Any]) -> Any:
-        """Make LiteLLM API call."""
+        """Make LiteLLM API call with custom retry logic for rate limit errors."""
         # Remove None values to clean up parameters
         clean_params = {k: v for k, v in chat_params.items() if v is not None}
         
@@ -140,7 +141,34 @@ class QXLLMAgent:
             logger.debug(f"Retries: {clean_params.get('num_retries', 0)}")
             logger.debug(f"Timeout: {clean_params.get('timeout', 'default')}")
         
-        return await acompletion(**clean_params)
+        # Custom retry logic for rate limit errors
+        max_retries = 3
+        base_delay = 2.0  # Starting with 2 seconds as requested
+        
+        for attempt in range(max_retries + 1):
+            try:
+                return await acompletion(**clean_params)
+            except RateLimitError as e:
+                if attempt < max_retries:
+                    # Calculate delay with exponential backoff
+                    delay = base_delay * (attempt + 1)  # 2s, 4s, 6s
+                    
+                    logger.warning(f"Rate limit error encountered: {e}")
+                    logger.info(f"Retrying in {delay} seconds... (Attempt {attempt + 1}/{max_retries})")
+                    
+                    # Show user-friendly message
+                    themed_console.print(f"[yellow]Rate limit reached. Retrying in {delay} seconds... (Attempt {attempt + 1}/{max_retries})[/yellow]")
+                    
+                    # Wait before retrying
+                    await asyncio.sleep(delay)
+                else:
+                    # All retries exhausted
+                    logger.error(f"Rate limit error after {max_retries} retries: {e}")
+                    themed_console.print(f"[error]Rate limit error after {max_retries} retries. Please try again later.[/error]")
+                    raise
+            except Exception as e:
+                # Let other exceptions bubble up (they'll be handled by litellm's built-in retry)
+                raise
 
 
     async def _process_tool_calls_and_continue(

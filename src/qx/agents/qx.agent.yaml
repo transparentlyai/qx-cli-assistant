@@ -1,6 +1,6 @@
 name: Qx
 enabled: true
-can_delegate: false
+can_delegate: true
 
 description: Main agent
 
@@ -143,5 +143,7 @@ tools: [
   web_fetch_tool,
   current_time_tool,
   execute_shell_tool,
+  invoke_agent_tool,
 ]
 
+can_delegate: true
