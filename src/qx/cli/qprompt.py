@@ -36,6 +36,19 @@ pending_text = [""]
 _details_active_for_toolbar = [True]
 _stdout_active_for_toolbar = [True]
 _planning_mode_active = [False]
+_thinking_budget = ["low"]  # Always starts at LOW
+_thinking_budget_levels = ["low", "medium", "high"]
+_current_agent_for_toolbar = [None]  # Store current agent reference
+
+
+def _model_supports_thinking(model_name: str) -> bool:
+    """Check if the model supports thinking budget parameter."""
+    from qx.core.models import MODELS
+    
+    for model_config in MODELS:
+        if model_config["model"] == model_name:
+            return "thinking" in model_config.get("accepts", ())
+    return False
 
 
 class SingleLineNonEmptyValidator(Validator):
@@ -78,7 +91,16 @@ def get_bottom_toolbar():
         else '<style bg="#22c55e" fg="black">IMPLEMENTING</style>'
     )
 
-    toolbar_html = f'<style fg="black" bg="white"> {mode_status} | {agent_mode_status} | Details: {details_status} | StdOE: {stdout_status} | Approve All: {approve_all_status}</style>'
+    # Add thinking budget status
+    current_agent = _current_agent_for_toolbar[0]
+    
+    if current_agent and _model_supports_thinking(current_agent.model_name):
+        thinking_level = _thinking_budget[0].upper()
+        thinking_status = f'<style bg="#3b82f6" fg="black">{thinking_level}</style>'
+    else:
+        thinking_status = '<style fg="#6b7280">DISABLED</style>'
+    
+    toolbar_html = f'<style fg="black" bg="white"> <style fg="black" bg="#6b7280">F1</style> {mode_status} | <style fg="black" bg="#6b7280">F2</style> {agent_mode_status} | <style fg="black" bg="#6b7280">F3</style> Details: {details_status} | <style fg="black" bg="#6b7280">F4</style> StdOE: {stdout_status} | <style fg="black" bg="#6b7280">F5</style> Approve All: {approve_all_status} | <style fg="black" bg="#6b7280">F6</style> Think: {thinking_status}</style>'
     return HTML(toolbar_html)
 
 
@@ -93,6 +115,10 @@ async def _handle_llm_interaction(
 ) -> Optional[List[ChatCompletionMessageParam]]:
     run_result: Optional[Any] = None
     try:
+        # Update agent's reasoning effort if model supports thinking
+        if _model_supports_thinking(agent.model_name):
+            agent.reasoning_effort = _thinking_budget[0]
+        
         run_result = await query_llm(
             agent,
             user_input,
@@ -174,6 +200,7 @@ async def _run_inline_mode(
     
     # Track the current agent to detect switches
     current_active_agent = llm_agent
+    _current_agent_for_toolbar[0] = llm_agent
 
     # Initialize global hotkey system but don't start it yet
     # We'll use suspend/resume pattern around prompt_toolkit usage
@@ -193,6 +220,7 @@ async def _run_inline_mode(
         register_global_hotkey("ctrl+r", "history")  # Same as prompt_toolkit
         register_global_hotkey("ctrl+a", "approve_all")  # Same as prompt_toolkit
         register_global_hotkey("f5", "approve_all")  # Alternative to Ctrl+A
+        register_global_hotkey("f1", "toggle_planning_mode")  # Toggle planning/implementing
         register_global_hotkey("f2", "toggle_agent_mode")  # Toggle multi/single agent
         register_global_hotkey("f3", "toggle_details")  # Same as prompt_toolkit
         register_global_hotkey("f4", "toggle_stdout")  # Re-enabled with fix
@@ -377,6 +405,35 @@ async def _run_inline_mode(
                 f"✓ [dim green]Agent Mode:[/] {mode_text}.", style=style
             )
         )
+        event.app.invalidate()
+
+    @bindings.add("f6")
+    def _(event):
+        current_agent = _current_agent_for_toolbar[0]
+        
+        # Check if current model supports thinking
+        if current_agent and _model_supports_thinking(current_agent.model_name):
+            # Cycle through thinking budget levels
+            current_index = _thinking_budget_levels.index(_thinking_budget[0])
+            next_index = (current_index + 1) % len(_thinking_budget_levels)
+            _thinking_budget[0] = _thinking_budget_levels[next_index]
+            
+            thinking_text = _thinking_budget[0].upper()
+            style = "warning"
+            run_in_terminal(
+                lambda: themed_console.print(
+                    f"✓ [dim green]Thinking Budget:[/] {thinking_text}.", style=style
+                )
+            )
+        else:
+            # Model doesn't support thinking
+            style = "error"
+            run_in_terminal(
+                lambda: themed_console.print(
+                    f"✗ [red]Thinking Budget:[/] Not supported by current model.", style=style
+                )
+            )
+        
         event.app.invalidate()
 
     @bindings.add("c-e")
@@ -636,6 +693,7 @@ async def _run_inline_mode(
             # Update current agent tracker for display purposes
             if active_llm_agent != current_active_agent:
                 current_active_agent = active_llm_agent
+                _current_agent_for_toolbar[0] = active_llm_agent
                 logger.info(f"🔄 Agent switched, now using: {getattr(active_llm_agent, 'agent_name', 'unknown')}")
                 # Conversation history is managed per agent
 

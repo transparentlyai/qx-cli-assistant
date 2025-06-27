@@ -769,6 +769,10 @@ async def _handle_inline_command(
             "  F4          - Toggle stdout and stderr visibility", style="primary"
         )
         themed_console.print(
+            "  F6          - Toggle thinking budget (LOW/MEDIUM/HIGH) for supported models",
+            style="primary",
+        )
+        themed_console.print(
             "  Ctrl+R      - Fuzzy history search (fzf)", style="primary"
         )
         themed_console.print("  F12         - Emergency cancel", style="primary")
@@ -825,16 +829,19 @@ async def _handle_inline_command(
             style="info",
         )
         themed_console.print(
-            "  • Details: Shows if AI reasoning is visible (ON/OFF)", style="info"
+            "  • Agent Mode: Shows MULTI or SINGLE agent operation mode", style="info"
         )
         themed_console.print(
-            "  • Agent Mode: Shows MULTI or SINGLE agent operation mode", style="info"
+            "  • Details: Shows if AI reasoning is visible (ON/OFF)", style="info"
         )
         themed_console.print(
             "  • StdOE: Shows if command output is visible (ON/OFF)", style="info"
         )
         themed_console.print(
             "  • Approve All: Shows automatic approval status (ON/OFF)", style="info"
+        )
+        themed_console.print(
+            "  • Thinking: Shows thinking budget (LOW/MEDIUM/HIGH/DISABLED)", style="info"
         )
 
         themed_console.print("\nEditor Configuration:", style="app.header")

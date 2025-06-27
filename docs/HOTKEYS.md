@@ -16,6 +16,7 @@ QX implements a sophisticated global hotkey system that allows users to trigger 
 | **F3** | Toggle Details | Show/hide AI reasoning process during responses |
 | **Ctrl+A / F5** | Toggle Approve All | Enable/disable automatic approval for tool operations |
 | **F4** | Toggle StdOE | Show/hide stdout and stderr during tool execution |
+| **F6** | Toggle Thinking Budget | Cycle through LOW/MEDIUM/HIGH thinking levels for supported models |
 | **F1** | Toggle Mode | Switch between PLANNING and IMPLEMENTING modes |
 | **Ctrl+R** | History Search | Search command history (available during input only) |
 | **Ctrl+E** | Edit in External Editor | Open current input in text editor (vi by default, configurable via QX_DEFAULT_EDITOR). Supports: vi, vim, nvim, nano, code/vscode |
@@ -65,6 +66,23 @@ QX supports two distinct interaction modes that influence how the AI processes y
 - **Visual Indicator**: Green background in footer toolbar
 
 **Mode Toggle**: Press **F1** to switch between modes at any time. The current mode is always visible in the bottom toolbar and affects how the AI interprets and responds to your requests.
+
+### Thinking Budget System
+
+QX supports configurable thinking budget for models that accept the "thinking" parameter (e.g., Gemini 2.5 models):
+
+#### Budget Levels
+- **LOW (Default)**: Minimal thinking effort - faster responses, suitable for simple tasks
+- **MEDIUM**: Balanced thinking effort - good for most use cases
+- **HIGH**: Maximum thinking effort - best for complex reasoning tasks
+
+#### Key Features
+- **Model Support**: Only enabled for models that accept the "thinking" parameter
+- **Session Scope**: Always starts at LOW for each new session (not persistent)
+- **Visual Indicator**: Shows current level (LOW/MEDIUM/HIGH) in blue or DISABLED in grey
+- **Dynamic Toggle**: Press **F6** to cycle through LOW → MEDIUM → HIGH → LOW
+
+**Thinking Toggle**: Press **F6** to adjust the thinking budget. The current level is displayed in the footer toolbar and only works with supported models.
 
 ## Technical Architecture
 

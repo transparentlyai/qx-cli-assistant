@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, Type, cast
 
 from litellm import acompletion, RateLimitError
+import litellm
 from openai.types.chat import (
     ChatCompletionMessageParam,
     ChatCompletionSystemMessageParam,
@@ -167,8 +168,38 @@ class QXLLMAgent:
                     themed_console.print(f"[error]Rate limit error after {max_retries} retries. Please try again later.[/error]")
                     raise
             except Exception as e:
-                # Let other exceptions bubble up (they'll be handled by litellm's built-in retry)
-                raise
+                # Check if this is a rate limit error that wasn't caught properly
+                error_str = str(e)
+                error_type = type(e).__name__
+                
+                # Log the actual exception type for debugging
+                logger.debug(f"Caught exception type: {error_type}, message: {error_str}")
+                
+                # Check for various rate limit indicators
+                is_rate_limit = any([
+                    "429" in error_str,
+                    "RESOURCE_EXHAUSTED" in error_str,
+                    "rate limit" in error_str.lower(),
+                    "quota" in error_str.lower() and "exceeded" in error_str.lower(),
+                    # Check if it's a litellm wrapped exception
+                    hasattr(litellm, error_type) and "RateLimit" in error_type
+                ])
+                
+                if is_rate_limit and attempt < max_retries:
+                    # This is likely a rate limit error
+                    delay = base_delay * (attempt + 1)  # 2s, 4s, 6s
+                    
+                    logger.warning(f"Rate limit error detected (type: {error_type}): {e}")
+                    logger.info(f"Retrying in {delay} seconds... (Attempt {attempt + 1}/{max_retries})")
+                    
+                    # Show user-friendly message
+                    themed_console.print(f"[yellow]Rate limit reached. Retrying in {delay} seconds... (Attempt {attempt + 1}/{max_retries})[/yellow]")
+                    
+                    # Wait before retrying
+                    await asyncio.sleep(delay)
+                else:
+                    # Let other exceptions bubble up (they'll be handled by litellm's built-in retry)
+                    raise
 
 
     async def _process_tool_calls_and_continue(
