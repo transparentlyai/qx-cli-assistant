@@ -1,0 +1,34 @@
+{
+  "format_version": "2.0",
+  "current_agent": "qx",
+  "agents": {
+    "qx": [
+      {
+        "role": "user",
+        "content": "hello\n\n---\nIMPLEMENTING mode activated"
+      },
+      {
+        "content": "Hello Mauro, I'm Qx, a Principal Software Engineer from Transparently.AI. How can I help you today?",
+        "refusal": null,
+        "role": "assistant",
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": null
+      },
+      {
+        "role": "user",
+        "content": "hi\n\n---\nIMPLEMENTING mode activated"
+      },
+      {
+        "content": "Hello Mauro, how can I help you today?",
+        "refusal": null,
+        "role": "assistant",
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": null
+      }
+    ]
+  }
+}
