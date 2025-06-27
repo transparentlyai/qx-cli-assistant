@@ -6,6 +6,383 @@
       {
         "role": "user",
         "content": "commit\n\n---\nIMPLEMENTING mode activated"
+      },
+      {
+        "content": null,
+        "refusal": null,
+        "role": "assistant",
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": [
+          {
+            "id": "call_ce3cf369-f468-40c3-953a-10e5806593fe",
+            "function": {
+              "arguments": "{\"command\": \"git status\"}",
+              "name": "execute_shell_tool"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_ce3cf369-f468-40c3-953a-10e5806593fe",
+        "content": "{\"command\":\"git status\",\"stdout\":\"On branch main\\nYour branch is up to date with 'origin/main'.\\n\\nChanges not staged for commit:\\n  (use \\\"git add/rm <file>...\\\" to update what will be committed)\\n  (use \\\"git restore <file>...\\\" to discard changes in working directory)\\n\\tmodified:   ../../../README.md\\n\\tmodified:   ../../../docs/HOTKEYS.md\\n\\tmodified:   ../cli/commands.py\\n\\tmodified:   ../cli/qprompt.py\\n\\tmodified:   ../core/llm.py\\n\\tmodified:   ../core/llm_components/streaming.py\\n\\tmodified:   ../core/models.py\\n\\tdeleted:    ../../../test_agent_invocation_plugin.py\\n\\nUntracked files:\\n  (use \\\"git add <file>...\\\" to include in what will be committed)\\n\\t.Q/\\n\\t../../../test_vertex_retry.py\\n\\nno changes added to commit (use \\\"git add\\\" and/or \\\"git commit -a\\\")\",\"stderr\":null,\"return_code\":0,\"error\":null}"
+      },
+      {
+        "content": "Okay, I see a number of modified, deleted, and untracked files. I will now stage all changes, generate a commit message based on the diff, and then commit.\n\nFirst, I'll stage all the changes.",
+        "refusal": null,
+        "role": "assistant",
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": [
+          {
+            "id": "call_22b1969d-1295-48dc-97fb-43e59d000238",
+            "function": {
+              "arguments": "{\"command\": \"git add .\"}",
+              "name": "execute_shell_tool"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_22b1969d-1295-48dc-97fb-43e59d000238",
+        "content": "{\"command\":\"git add .\",\"stdout\":null,\"stderr\":null,\"return_code\":0,\"error\":null}"
+      },
+      {
+        "content": "Now that the changes are staged, I will view the diff to create a commit message.",
+        "refusal": null,
+        "role": "assistant",
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": [
+          {
+            "id": "call_3a8f07e9-5d25-4b37-b06d-cc85705a6d14",
+            "function": {
+              "arguments": "{\"command\": \"git diff --staged\"}",
+              "name": "execute_shell_tool"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_3a8f07e9-5d25-4b37-b06d-cc85705a6d14",
+        "content": "{\"command\":\"git diff --staged\",\"stdout\":\"diff --git a/src/qx/directives/.Q/sessions/qx_session_20250627_202100_423022.json b/src/qx/directives/.Q/sessions/qx_session_20250627_202100_423022.json\\nnew file mode 100644\\nindex 0000000..dc75dac\\n--- /dev/null\\n+++ b/src/qx/directives/.Q/sessions/qx_session_20250627_202100_423022.json\\n@@ -0,0 +1,34 @@\\n+{\\n+  \\\"format_version\\\": \\\"2.0\\\",\\n+  \\\"current_agent\\\": \\\"qx\\\",\\n+  \\\"agents\\\": {\\n+    \\\"qx\\\": [\\n+      {\\n+        \\\"role\\\": \\\"user\\\",\\n+        \\\"content\\\": \\\"hello\\\\n\\\\n---\\\\nIMPLEMENTING mode activated\\\"\\n+      },\\n+      {\\n+        \\\"content\\\": \\\"Hello Mauro, I'm Qx, a Principal Software Engineer from Transparently.AI. How can I help you today?\\\",\\n+        \\\"refusal\\\": null,\\n+        \\\"role\\\": \\\"assistant\\\",\\n+        \\\"annotations\\\": null,\\n+        \\\"audio\\\": null,\\n+        \\\"function_call\\\": null,\\n+        \\\"tool_calls\\\": null\\n+      },\\n+      {\\n+        \\\"role\\\": \\\"user\\\",\\n+        \\\"content\\\": \\\"hi\\\\n\\\\n---\\\\nIMPLEMENTING mode activated\\\"\\n+      },\\n+      {\\n+        \\\"content\\\": \\\"Hello Mauro, how can I help you today?\\\",\\n+        \\\"refusal\\\": null,\\n+        \\\"role\\\": \\\"assistant\\\",\\n+        \\\"annotations\\\": null,\\n+        \\\"audio\\\": null,\\n+        \\\"function_call\\\": null,\\n+        \\\"tool_calls\\\": null\\n+      }\\n+    ]\\n+  }\\n+}\\n\\\\ No newline at end of file\\ndiff --git a/src/qx/directives/.Q/sessions/qx_session_20250627_203918_687267.json b/src/qx/directives/.Q/sessions/qx_session_20250627_203918_687267.json\\nnew file mode 100644\\nindex 0000000..fc51c3f\\n--- /dev/null\\n+++ b/src/qx/directives/.Q/sessions/qx_session_20250627_203918_687267.json\\n@@ -0,0 +1,12 @@\\n+{\\n+  \\\"format_version\\\": \\\"2.0\\\",\\n+  \\\"current_agent\\\": \\\"qx\\\",\\n+  \\\"agents\\\": {\\n+    \\\"qx\\\": [\\n+      {\\n+        \\\"role\\\": \\\"user\\\",\\n+        \\\"content\\\": \\\"commit and push\\\\n\\\\n---\\\\nIMPLEMENTING mode activated\\\"\\n+      }\\n+    ]\\n+  }\\n+}\\n\\\\ No newline at end of file\\ndiff --git a/src/qx/directives/.Q/sessions/qx_session_20250627_204557_199107.json b/src/qx/directives/.Q/sessions/qx_session_20250627_204557_199107.json\\nnew file mode 100644\\nindex 0000000..1baf0d1\\n--- /dev/null\\n+++ b/src/qx/directives/.Q/sessions/qx_session_20250627_204557_199107.json\\n@@ -0,0 +1,12 @@\\n+{\\n+  \\\"format_version\\\": \\\"2.0\\\",\\n+  \\\"current_agent\\\": \\\"qx\\\",\\n+  \\\"agents\\\": {\\n+    \\\"qx\\\": [\\n+      {\\n+        \\\"role\\\": \\\"user\\\",\\n+        \\\"content\\\": \\\"commit\\\\n\\\\n---\\\\nIMPLEMENTING mode activated\\\"\\n+      }\\n+    ]\\n+  }\\n+}\\n\\\\ No newline at end of file\",\"stderr\":null,\"return_code\":0,\"error\":null}"
+      },
+      {
+        "content": "I have reviewed the staged changes. It appears that only new session files for the `.Q` directory have been added. Based on this, I will now commit the changes with an appropriate message.",
+        "refusal": null,
+        "role": "assistant",
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": [
+          {
+            "id": "call_00bc7162-93ea-49b8-86a5-a98d8802ee06",
+            "function": {
+              "arguments": "{\"command\": \"git commit -m 'feat: Add new Qx session files'\"}",
+              "name": "execute_shell_tool"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_00bc7162-93ea-49b8-86a5-a98d8802ee06",
+        "content": "{\"command\":\"git commit -m 'feat: Add new Qx session files'\",\"stdout\":\"[main 6083738] feat: Add new Qx session files\\n 3 files changed, 58 insertions(+)\\n create mode 100644 src/qx/directives/.Q/sessions/qx_session_20250627_202100_423022.json\\n create mode 100644 src/qx/directives/.Q/sessions/qx_session_20250627_203918_687267.json\\n create mode 100644 src/qx/directives/.Q/sessions/qx_session_20250627_204557_199107.json\",\"stderr\":null,\"return_code\":0,\"error\":null}"
+      },
+      {
+        "content": "The commit was successful. I will now check the status of the repository to ensure everything is clean.",
+        "refusal": null,
+        "role": "assistant",
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": [
+          {
+            "id": "call_86c81137-3def-4b98-a65d-e2682bc974f0",
+            "function": {
+              "arguments": "{\"command\": \"git status\"}",
+              "name": "execute_shell_tool"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_86c81137-3def-4b98-a65d-e2682bc974f0",
+        "content": "{\"command\":\"git status\",\"stdout\":\"On branch main\\nYour branch is ahead of 'origin/main' by 1 commit.\\n  (use \\\"git push\\\" to publish your local commits)\\n\\nChanges not staged for commit:\\n  (use \\\"git add/rm <file>...\\\" to update what will be committed)\\n  (use \\\"git restore <file>...\\\" to discard changes in working directory)\\n\\tmodified:   ../../../README.md\\n\\tmodified:   ../../../docs/HOTKEYS.md\\n\\tmodified:   ../cli/commands.py\\n\\tmodified:   ../cli/qprompt.py\\n\\tmodified:   ../core/llm.py\\n\\tmodified:   ../core/llm_components/streaming.py\\n\\tmodified:   ../core/models.py\\n\\tdeleted:    ../../../test_agent_invocation_plugin.py\\n\\nUntracked files:\\n  (use \\\"git add <file>...\\\" to include in what will be committed)\\n\\t../../../test_vertex_retry.py\\n\\nno changes added to commit (use \\\"git add\\\" and/or \\\"git commit -a\\\")\",\"stderr\":null,\"return_code\":0,\"error\":null}"
+      },
+      {
+        "content": "It appears I only committed the new session files, and there are still a number of modified files. I will now stage and commit the rest of the changes.",
+        "refusal": null,
+        "role": "assistant",
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": [
+          {
+            "id": "call_c3979ecd-65bd-40de-a656-444540c50adc",
+            "function": {
+              "arguments": "{\"command\": \"git add .\"}",
+              "name": "execute_shell_tool"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_c3979ecd-65bd-40de-a656-444540c50adc",
+        "content": "{\"command\":\"git add .\",\"stdout\":null,\"stderr\":null,\"return_code\":0,\"error\":null}"
+      },
+      {
+        "content": "I have staged the remaining changes. Now I will inspect the diff to create a commit message.",
+        "refusal": null,
+        "role": "assistant",
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": [
+          {
+            "id": "call_bd47fbce-6965-4468-ba23-c6a7f7756cbe",
+            "function": {
+              "arguments": "{\"command\": \"git diff --staged\"}",
+              "name": "execute_shell_tool"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_bd47fbce-6965-4468-ba23-c6a7f7756cbe",
+        "content": "{\"command\":\"git diff --staged\",\"stdout\":null,\"stderr\":null,\"return_code\":0,\"error\":null}"
+      },
+      {
+        "content": "I've encountered an unexpected situation. After staging the files, the diff appears to be empty. I'll re-examine the git status to understand what's going on.",
+        "refusal": null,
+        "role": "assistant",
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": [
+          {
+            "id": "call_96392544-e9de-4409-a242-c5ce4a105a76",
+            "function": {
+              "arguments": "{\"command\": \"git status\"}",
+              "name": "execute_shell_tool"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_96392544-e9de-4409-a242-c5ce4a105a76",
+        "content": "{\"command\":\"git status\",\"stdout\":\"On branch main\\nYour branch is ahead of 'origin/main' by 1 commit.\\n  (use \\\"git push\\\" to publish your local commits)\\n\\nChanges not staged for commit:\\n  (use \\\"git add/rm <file>...\\\" to update what will be committed)\\n  (use \\\"git restore <file>...\\\" to discard changes in working directory)\\n\\tmodified:   ../../../README.md\\n\\tmodified:   ../../../docs/HOTKEYS.md\\n\\tmodified:   ../cli/commands.py\\n\\tmodified:   ../cli/qprompt.py\\n\\tmodified:   ../core/llm.py\\n\\tmodified:   ../core/llm_components/streaming.py\\n\\tmodified:   ../core/models.py\\n\\tdeleted:    ../../../test_agent_invocation_plugin.py\\n\\nUntracked files:\\n  (use \\\"git add <file>...\\\" to include in what will be committed)\\n\\t../../../test_vertex_retry.py\\n\\nno changes added to commit (use \\\"git add\\\" and/or \\\"git commit -a\\\")\",\"stderr\":null,\"return_code\":0,\"error\":null}"
+      },
+      {
+        "content": "It seems I'm in a loop where `git add .` is not staging the files as expected. I will try one more time to stage the files, and if that fails, I will inform you of the issue.",
+        "refusal": null,
+        "role": "assistant",
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": [
+          {
+            "id": "call_603d55f0-53b2-490e-a672-4699fd6562a2",
+            "function": {
+              "arguments": "{\"command\": \"git add .\"}",
+              "name": "execute_shell_tool"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_603d55f0-53b2-490e-a672-4699fd6562a2",
+        "content": "{\"command\":\"git add .\",\"stdout\":null,\"stderr\":null,\"return_code\":0,\"error\":null}"
+      },
+      {
+        "content": "I've attempted to stage the files again. I'll now check the diff to see if the changes have been staged.",
+        "refusal": null,
+        "role": "assistant",
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": [
+          {
+            "id": "call_21ebbb8f-8855-4fc7-85c0-56164c68ba7f",
+            "function": {
+              "arguments": "{\"command\": \"git diff --staged\"}",
+              "name": "execute_shell_tool"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_21ebbb8f-8855-4fc7-85c0-56164c68ba7f",
+        "content": "{\"command\":\"git diff --staged\",\"stdout\":null,\"stderr\":null,\"return_code\":0,\"error\":null}"
+      },
+      {
+        "content": "I am still unable to stage the changes. It seems I am in a loop. After running `git add .` the output of `git diff --staged` is still empty.\n\nHere is the current status of the repository:\n",
+        "refusal": null,
+        "role": "assistant",
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": [
+          {
+            "id": "call_657b3877-e061-4031-b75d-331769854251",
+            "function": {
+              "arguments": "{\"command\": \"git status\"}",
+              "name": "execute_shell_tool"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_657b3877-e061-4031-b75d-331769854251",
+        "content": "{\"command\":\"git status\",\"stdout\":\"On branch main\\nYour branch is ahead of 'origin/main' by 1 commit.\\n  (use \\\"git push\\\" to publish your local commits)\\n\\nChanges not staged for commit:\\n  (use \\\"git add/rm <file>...\\\" to update what will be committed)\\n  (use \\\"git restore <file>...\\\" to discard changes in working directory)\\n\\tmodified:   ../../../README.md\\n\\tmodified:   ../../../docs/HOTKEYS.md\\n\\tmodified:   ../cli/commands.py\\n\\tmodified:   ../cli/qprompt.py\\n\\tmodified:   ../core/llm.py\\n\\tmodified:   ../core/llm_components/streaming.py\\n\\tmodified:   ../core/models.py\\n\\tdeleted:    ../../../test_agent_invocation_plugin.py\\n\\nUntracked files:\\n  (use \\\"git add <file>...\\\" to include in what will be committed)\\n\\t../../../test_vertex_retry.py\\n\\nno changes added to commit (use \\\"git add\\\" and/or \\\"git commit -a\\\")\",\"stderr\":null,\"return_code\":0,\"error\":null}"
+      },
+      {
+        "content": "It appears that `git add .` is not working as expected. I will now try to add the files individually to the staging area.",
+        "refusal": null,
+        "role": "assistant",
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": [
+          {
+            "id": "call_c094f850-96cb-457a-b208-85a359711b7c",
+            "function": {
+              "arguments": "{\"command\": \"git add ../../../README.md ../../../docs/HOTKEYS.md ../cli/commands.py ../cli/qprompt.py ../core/llm.py ../core/llm_components/streaming.py ../core/models.py ../../../test_agent_invocation_plugin.py ../../../test_vertex_retry.py\"}",
+              "name": "execute_shell_tool"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_c094f850-96cb-457a-b208-85a359711b7c",
+        "content": "{\"command\":\"git add ../../../README.md ../../../docs/HOTKEYS.md ../cli/commands.py ../cli/qprompt.py ../core/llm.py ../core/llm_components/streaming.py ../core/models.py ../../../test_agent_invocation_plugin.py ../../../test_vertex_retry.py\",\"stdout\":null,\"stderr\":null,\"return_code\":0,\"error\":null}"
+      },
+      {
+        "content": "I have individually added the files. I will now check the status to see if they are staged.",
+        "refusal": null,
+        "role": "assistant",
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": [
+          {
+            "id": "call_916770d2-4adc-4248-8566-78b0731e92e1",
+            "function": {
+              "arguments": "{\"command\": \"git status\"}",
+              "name": "execute_shell_tool"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_916770d2-4adc-4248-8566-78b0731e92e1",
+        "content": "{\"command\":\"git status\",\"stdout\":\"On branch main\\nYour branch is ahead of 'origin/main' by 1 commit.\\n  (use \\\"git push\\\" to publish your local commits)\\n\\nChanges to be committed:\\n  (use \\\"git restore --staged <file>...\\\" to unstage)\\n\\tmodified:   ../../../README.md\\n\\tmodified:   ../../../docs/HOTKEYS.md\\n\\tmodified:   ../cli/commands.py\\n\\tmodified:   ../cli/qprompt.py\\n\\tmodified:   ../core/llm.py\\n\\tmodified:   ../core/llm_components/streaming.py\\n\\tmodified:   ../core/models.py\\n\\tdeleted:    ../../../test_agent_invocation_plugin.py\\n\\tnew file:   ../../../test_vertex_retry.py\",\"stderr\":null,\"return_code\":0,\"error\":null}"
+      },
+      {
+        "content": "Great, the files are now staged. I will now review the diff of the staged files to create a detailed commit message.",
+        "refusal": null,
+        "role": "assistant",
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": [
+          {
+            "id": "call_285caafe-fe37-418a-8c8d-4fa3c3074b20",
+            "function": {
+              "arguments": "{\"command\": \"git diff --staged\"}",
+              "name": "execute_shell_tool"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_285caafe-fe37-418a-8c8d-4fa3c3074b20",
+        "content": "{\"command\":\"git diff --staged\",\"stdout\":\"diff --git a/README.md b/README.md\\nindex 2000ddd..ded7baf 100644\\n--- a/README.md\\n+++ b/README.md\\n@@ -154,10 +154,12 @@ QX supports global hotkeys that work at any time during operation, including whi\\n \\n | Hotkey | Action | Description |\\n |--------|--------|-------------|\\n+| **F1** | Toggle Mode | Switch between PLANNING and IMPLEMENTING modes |\\n+| **F2** | Toggle Agent Mode | Switch between MULTI and SINGLE agent modes |\\n | **F3** | Toggle Details | Show/hide AI reasoning process |\\n-| **Ctrl+A / F5** | Toggle Approve All | Enable/disable automatic approval for tool operations |\\n | **F4** | Toggle StdOE | Show/hide stdout and stderr during tool execution |\\n-| **F1** | Toggle Mode | Switch between PLANNING and IMPLEMENTING modes |\\n+| **Ctrl+A / F5** | Toggle Approve All | Enable/disable automatic approval for tool operations |\\n+| **F6** | Toggle Thinking Budget | Cycle through LOW/MEDIUM/HIGH thinking levels (supported models only) |\\n | **Ctrl+R** | History Search | Search command history (available during input) |\\n | **Ctrl+E** | External Editor | Edit current input in external text editor |\\n | **Ctrl+C** | Cancel Operation | Interrupt current operation |\\ndiff --git a/docs/HOTKEYS.md b/docs/HOTKEYS.md\\nindex 8b2de38..7707922 100644\\n--- a/docs/HOTKEYS.md\\n+++ b/docs/HOTKEYS.md\\n@@ -16,6 +16,7 @@ QX implements a sophisticated global hotkey system that allows users to trigger\\n | **F3** | Toggle Details | Show/hide AI reasoning process during responses |\\n | **Ctrl+A / F5** | Toggle Approve All | Enable/disable automatic approval for tool operations |\\n | **F4** | Toggle StdOE | Show/hide stdout and stderr during tool execution |\\n+| **F6** | Toggle Thinking Budget | Cycle through LOW/MEDIUM/HIGH thinking levels for supported models |\\n | **F1** | Toggle Mode | Switch between PLANNING and IMPLEMENTING modes |\\n | **Ctrl+R** | History Search | Search command history (available during input only) |\\n | **Ctrl+E** | Edit in External Editor | Open current input in text editor (vi by default, configurable via QX_DEFAULT_EDITOR). Supports: vi, vim, nvim, nano, code/vscode |\\n@@ -66,6 +67,23 @@ QX supports two distinct interaction modes that influence how the AI processes y\\n \\n **Mode Toggle**: Press **F1** to switch between modes at any time. The current mode is always visible in the bottom toolbar and affects how the AI interprets and responds to your requests.\\n \\n+### Thinking Budget System\\n+\\n+QX supports configurable thinking budget for models that accept the \\\"thinking\\\" parameter (e.g., Gemini 2.5 models):\\n+\\n+#### Budget Levels\\n+- **LOW (Default)**: Minimal thinking effort - faster responses, suitable for simple tasks\\n+- **MEDIUM**: Balanced thinking effort - good for most use cases\\n+- **HIGH**: Maximum thinking effort - best for complex reasoning tasks\\n+\\n+#### Key Features\\n+- **Model Support**: Only enabled for models that accept the \\\"thinking\\\" parameter\\n+- **Session Scope**: Always starts at LOW for each new session (not persistent)\\n+- **Visual Indicator**: Shows current level (LOW/MEDIUM/HIGH) in blue or DISABLED in grey\\n+- **Dynamic Toggle**: Press **F6** to cycle through LOW \u2192 MEDIUM \u2192 HIGH \u2192 LOW\\n+\\n+**Thinking Toggle**: Press **F6** to adjust the thinking budget. The current level is displayed in the footer toolbar and only works with supported models.\\n+\\n ## Technical Architecture\\n \\n ### Core Components\\ndiff --git a/src/qx/cli/commands.py b/src/qx/cli/commands.py\\nindex 6e64929..0b0a73a 100644\\n--- a/src/qx/cli/commands.py\\n+++ b/src/qx/cli/commands.py\\n@@ -768,6 +768,10 @@ async def _handle_inline_command(\\n         themed_console.print(\\n             \\\"  F4          - Toggle stdout and stderr visibility\\\", style=\\\"primary\\\"\\n         )\\n+        themed_console.print(\\n+            \\\"  F6          - Toggle thinking budget (LOW/MEDIUM/HIGH) for supported models\\\",\\n+            style=\\\"primary\\\",\\n+        )\\n         themed_console.print(\\n             \\\"  Ctrl+R      - Fuzzy history search (fzf)\\\", style=\\\"primary\\\"\\n         )\\n@@ -825,10 +829,10 @@ async def _handle_inline_command(\\n             style=\\\"info\\\",\\n         )\\n         themed_console.print(\\n-            \\\"  \u2022 Details: Shows if AI reasoning is visible (ON/OFF)\\\", style=\\\"info\\\"\\n+            \\\"  \u2022 Agent Mode: Shows MULTI or SINGLE agent operation mode\\\", style=\\\"info\\\"\\n         )\\n         themed_console.print(\\n-            \\\"  \u2022 Agent Mode: Shows MULTI or SINGLE agent operation mode\\\", style=\\\"info\\\"\\n+            \\\"  \u2022 Details: Shows if AI reasoning is visible (ON/OFF)\\\", style=\\\"info\\\"\\n         )\\n         themed_console.print(\\n             \\\"  \u2022 StdOE: Shows if command output is visible (ON/OFF)\\\", style=\\\"info\\\"\\n@@ -836,6 +840,9 @@ async def _handle_inline_command(\\n         themed_console.print(\\n             \\\"  \u2022 Approve All: Shows automatic approval status (ON/OFF)\\\", style=\\\"info\\\"\\n         )\\n+        themed_console.print(\\n+            \\\"  \u2022 Thinking: Shows thinking budget (LOW/MEDIUM/HIGH/DISABLED)\\\", style=\\\"info\\\"\\n+        )\\n \\n         themed_console.print(\\\"\\\\nEditor Configuration:\\\", style=\\\"app.header\\\")\\n         themed_console.print(\\ndiff --git a/src/qx/cli/qprompt.py b/src/qx/cli/qprompt.py\\nindex c0f8248..692c2a4 100644\\n--- a/src/qx/cli/qprompt.py\\n+++ b/src/qx/cli/qprompt.py\\n@@ -36,6 +36,19 @@ pending_text = [\\\"\\\"]\\n _details_active_for_toolbar = [True]\\n _stdout_active_for_toolbar = [True]\\n _planning_mode_active = [False]\\n+_thinking_budget = [\\\"low\\\"]  # Always starts at LOW\\n+_thinking_budget_levels = [\\\"low\\\", \\\"medium\\\", \\\"high\\\"]\\n+_current_agent_for_toolbar = [None]  # Store current agent reference\\n+\\n+\\n+def _model_supports_thinking(model_name: str) -> bool:\\n+    \\\"\\\"\\\"Check if the model supports thinking budget parameter.\\\"\\\"\\\"\\n+    from qx.core.models import MODELS\\n+    \\n+    for model_config in MODELS:\\n+        if model_config[\\\"model\\\"] == model_name:\\n+            return \\\"thinking\\\" in model_config.get(\\\"accepts\\\", ())\\n+    return False\\n \\n \\n class SingleLineNonEmptyValidator(Validator):\\n@@ -78,7 +91,16 @@ def get_bottom_toolbar():\\n         else '<style bg=\\\"#22c55e\\\" fg=\\\"black\\\">IMPLEMENTING</style>'\\n     )\\n \\n-    toolbar_html = f'<style fg=\\\"black\\\" bg=\\\"white\\\"> {mode_status} | {agent_mode_status} | Details: {details_status} | StdOE: {stdout_status} | Approve All: {approve_all_status}</style>'\\n+    # Add thinking budget status\\n+    current_agent = _current_agent_for_toolbar[0]\\n+    \\n+    if current_agent and _model_supports_thinking(current_agent.model_name):\\n+        thinking_level = _thinking_budget[0].upper()\\n+        thinking_status = f'<style bg=\\\"#3b82f6\\\" fg=\\\"black\\\">{thinking_level}</style>'\\n+    else:\\n+        thinking_status = '<style fg=\\\"#6b7280\\\">DISABLED</style>'\\n+    \\n+    toolbar_html = f'<style fg=\\\"black\\\" bg=\\\"white\\\"> <style fg=\\\"black\\\" bg=\\\"#6b7280\\\">F1</style> {mode_status} | <style fg=\\\"black\\\" bg=\\\"#6b7280\\\">F2</style> {agent_mode_status} | <style fg=\\\"black\\\" bg=\\\"#6b7280\\\">F3</style> Details: {details_status} | <style fg=\\\"black\\\" bg=\\\"#6b7280\\\">F4</style> StdOE: {stdout_status} | <style fg=\\\"black\\\" bg=\\\"#6b7280\\\">F5</style> Approve All: {approve_all_status} | <style fg=\\\"black\\\" bg=\\\"#6b7280\\\">F6</style> Think: {thinking_status}</style>'\\n     return HTML(toolbar_html)\\n \\n \\n@@ -93,6 +115,10 @@ async def _handle_llm_interaction(\\n ) -> Optional[List[ChatCompletionMessageParam]]:\\n     run_result: Optional[Any] = None\\n     try:\\n+        # Update agent's reasoning effort if model supports thinking\\n+        if _model_supports_thinking(agent.model_name):\\n+            agent.reasoning_effort = _thinking_budget[0]\\n+        \\n         run_result = await query_llm(\\n             agent,\\n             user_input,\\n@@ -174,6 +200,7 @@ async def _run_inline_mode(\\n     \\n     # Track the current agent to detect switches\\n     current_active_agent = llm_agent\\n+    _current_agent_for_toolbar[0] = llm_agent\\n \\n     # Initialize global hotkey system but don't start it yet\\n     # We'll use suspend/resume pattern around prompt_toolkit usage\\n@@ -193,6 +220,7 @@ async def _run_inline_mode(\\n         register_global_hotkey(\\\"ctrl+r\\\", \\\"history\\\")  # Same as prompt_toolkit\\n         register_global_hotkey(\\\"ctrl+a\\\", \\\"approve_all\\\")  # Same as prompt_toolkit\\n         register_global_hotkey(\\\"f5\\\", \\\"approve_all\\\")  # Alternative to Ctrl+A\\n+        register_global_hotkey(\\\"f1\\\", \\\"toggle_planning_mode\\\")  # Toggle planning/implementing\\n         register_global_hotkey(\\\"f2\\\", \\\"toggle_agent_mode\\\")  # Toggle multi/single agent\\n         register_global_hotkey(\\\"f3\\\", \\\"toggle_details\\\")  # Same as prompt_toolkit\\n         register_global_hotkey(\\\"f4\\\", \\\"toggle_stdout\\\")  # Re-enabled with fix\\n@@ -379,6 +407,35 @@ async def _run_inline_mode(\\n         )\\n         event.app.invalidate()\\n \\n+    @bindings.add(\\\"f6\\\")\\n+    def _(event):\\n+        current_agent = _current_agent_for_toolbar[0]\\n+        \\n+        # Check if current model supports thinking\\n+        if current_agent and _model_supports_thinking(current_agent.model_name):\\n+            # Cycle through thinking budget levels\\n+            current_index = _thinking_budget_levels.index(_thinking_budget[0])\\n+            next_index = (current_index + 1) % len(_thinking_budget_levels)\\n+            _thinking_budget[0] = _thinking_budget_levels[next_index]\\n+            \\n+            thinking_text = _thinking_budget[0].upper()\\n+            style = \\\"warning\\\"\\n+            run_in_terminal(\\n+                lambda: themed_console.print(\\n+                    f\\\"\u2713 [dim green]Thinking Budget:[/] {thinking_text}.\\\", style=style\\n+                )\\n+            )\\n+        else:\\n+            # Model doesn't support thinking\\n+            style = \\\"error\\\"\\n+            run_in_terminal(\\n+                lambda: themed_console.print(\\n+                    f\\\"\u2717 [red]Thinking Budget:[/] Not supported by current model.\\\", style=style\\n+                )\\n+            )\\n+        \\n+        event.app.invalidate()\\n+\\n     @bindings.add(\\\"c-e\\\")\\n     def _(event):\\n         import tempfile\\n@@ -636,6 +693,7 @@ async def _run_inline_mode(\\n             # Update current agent tracker for display purposes\\n             if active_llm_agent != current_active_agent:\\n                 current_active_agent = active_llm_agent\\n+                _current_agent_for_toolbar[0] = active_llm_agent\\n                 logger.info(f\\\"\ud83d\udd04 Agent switched, now using: {getattr(active_llm_agent, 'agent_name', 'unknown')}\\\")\\n                 # Conversation history is managed per agent\\n \\ndiff --git a/src/qx/core/llm.py b/src/qx/core/llm.py\\nindex c9833a7..85e0c5c 100644\\n--- a/src/qx/core/llm.py\\n+++ b/src/qx/core/llm.py\\n@@ -7,6 +7,7 @@ from pathlib import Path\\n from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, Type, cast\\n \\n from litellm import acompletion, RateLimitError\\n+import litellm\\n from openai.types.chat import (\\n     ChatCompletionMessageParam,\\n     ChatCompletionSystemMessageParam,\\n@@ -167,8 +168,38 @@ class QXLLMAgent:\\n                     themed_console.print(f\\\"[error]Rate limit error after {max_retries} retries. Please try again later.[/error]\\\")\\n                     raise\\n             except Exception as e:\\n-                # Let other exceptions bubble up (they'll be handled by litellm's built-in retry)\\n-                raise\\n+                # Check if this is a rate limit error that wasn't caught properly\\n+                error_str = str(e)\\n+                error_type = type(e).__name__\\n+                \\n+                # Log the actual exception type for debugging\\n+                logger.debug(f\\\"Caught exception type: {error_type}, message: {error_str}\\\")\\n+                \\n+                # Check for various rate limit indicators\\n+                is_rate_limit = any([\\n+                    \\\"429\\\" in error_str,\\n+                    \\\"RESOURCE_EXHAUSTED\\\" in error_str,\\n+                    \\\"rate limit\\\" in error_str.lower(),\\n+                    \\\"quota\\\" in error_str.lower() and \\\"exceeded\\\" in error_str.lower(),\\n+                    # Check if it's a litellm wrapped exception\\n+                    hasattr(litellm, error_type) and \\\"RateLimit\\\" in error_type\\n+                ])\\n+                \\n+                if is_rate_limit and attempt < max_retries:\\n+                    # This is likely a rate limit error\\n+                    delay = base_delay * (attempt + 1)  # 2s, 4s, 6s\\n+                    \\n+                    logger.warning(f\\\"Rate limit error detected (type: {error_type}): {e}\\\")\\n+                    logger.info(f\\\"Retrying in {delay} seconds... (Attempt {attempt + 1}/{max_retries})\\\")\\n+                    \\n+                    # Show user-friendly message\\n+                    themed_console.print(f\\\"[yellow]Rate limit reached. Retrying in {delay} seconds... (Attempt {attempt + 1}/{max_retries})[/yellow]\\\")\\n+                    \\n+                    # Wait before retrying\\n+                    await asyncio.sleep(delay)\\n+                else:\\n+                    # Let other exceptions bubble up (they'll be handled by litellm's built-in retry)\\n+                    raise\\n \\n \\n     async def _process_tool_calls_and_continue(\\ndiff --git a/src/qx/core/llm_components/streaming.py b/src/qx/core/llm_components/streaming.py\\nindex c10b07e..df52886 100644\\n--- a/src/qx/core/llm_components/streaming.py\\n+++ b/src/qx/core/llm_components/streaming.py\\n@@ -244,11 +244,79 @@ class StreamingHandler:\\n     ) -> Any:\\n         \\\"\\\"\\\"Handle streaming response from OpenRouter API.\\\"\\\"\\\"\\n         from qx.core.llm import QXRunResult  # Import here to avoid circular imports\\n+        from litellm import RateLimitError\\n+        import litellm\\n \\n         # Log entry into streaming handler\\n         logger.debug(\\n             f\\\"Entering handle_streaming_response (recursion_depth={recursion_depth})\\\"\\n         )\\n+        \\n+        # Retry logic for rate limit errors during streaming\\n+        max_retries = 3\\n+        base_delay = 2.0\\n+        \\n+        for retry_attempt in range(max_retries + 1):\\n+            try:\\n+                return await self._handle_streaming_with_retry(\\n+                    chat_params, messages, user_input, recursion_depth, retry_attempt\\n+                )\\n+            except RateLimitError as e:\\n+                if retry_attempt < max_retries:\\n+                    delay = base_delay * (retry_attempt + 1)  # 2s, 4s, 6s\\n+                    logger.warning(f\\\"Rate limit error during streaming: {e}\\\")\\n+                    logger.info(f\\\"Retrying in {delay} seconds... (Attempt {retry_attempt + 1}/{max_retries})\\\")\\n+                    \\n+                    # Show user-friendly message\\n+                    from qx.cli.theme import themed_console\\n+                    themed_console.print(f\\\"[yellow]Rate limit reached during streaming. Retrying in {delay} seconds... (Attempt {retry_attempt + 1}/{max_retries})[/yellow]\\\")\\n+                    \\n+                    await asyncio.sleep(delay)\\n+                else:\\n+                    logger.error(f\\\"Rate limit error after {max_retries} streaming retries: {e}\\\")\\n+                    from qx.cli.theme import themed_console\\n+                    themed_console.print(f\\\"[error]Rate limit error after {max_retries} retries. Please try again later.[/error]\\\")\\n+                    raise\\n+            except Exception as e:\\n+                # Check if this is a rate limit error that wasn't caught properly\\n+                error_str = str(e)\\n+                error_type = type(e).__name__\\n+                \\n+                logger.debug(f\\\"Caught streaming exception type: {error_type}, message: {error_str}\\\")\\n+                \\n+                # Check for various rate limit indicators\\n+                is_rate_limit = any([\\n+                    \\\"429\\\" in error_str,\\n+                    \\\"RESOURCE_EXHAUSTED\\\" in error_str,\\n+                    \\\"rate limit\\\" in error_str.lower(),\\n+                    \\\"quota\\\" in error_str.lower() and \\\"exceeded\\\" in error_str.lower(),\\n+                    hasattr(litellm, error_type) and \\\"RateLimit\\\" in error_type\\n+                ])\\n+                \\n+                if is_rate_limit and retry_attempt < max_retries:\\n+                    delay = base_delay * (retry_attempt + 1)  # 2s, 4s, 6s\\n+                    \\n+                    logger.warning(f\\\"Rate limit error detected during streaming (type: {error_type}): {e}\\\")\\n+                    logger.info(f\\\"Retrying in {delay} seconds... (Attempt {retry_attempt + 1}/{max_retries})\\\")\\n+                    \\n+                    from qx.cli.theme import themed_console\\n+                    themed_console.print(f\\\"[yellow]Rate limit reached during streaming. Retrying in {delay} seconds... (Attempt {retry_attempt + 1}/{max_retries})[/yellow]\\\")\\n+                    \\n+                    await asyncio.sleep(delay)\\n+                else:\\n+                    raise\\n+    \\n+    async def _handle_streaming_with_retry(\\n+        self,\\n+        chat_params: Dict[str, Any],\\n+        messages: List[ChatCompletionMessageParam],\\n+        user_input: str,\\n+        recursion_depth: int,\\n+        retry_attempt: int,\\n+    ) -> Any:\\n+        \\\"\\\"\\\"Handle the actual streaming logic (separated for retry wrapper).\\\"\\\"\\\"\\n+        from qx.core.llm import QXRunResult  # Import here to avoid circular imports\\n+        \\n         if recursion_depth > 0:\\n             logger.info(\\n                 f\\\"This is retry attempt {recursion_depth} for MALFORMED_FUNCTION_CALL\\\"\\ndiff --git a/src/qx/core/models.py b/src/qx/core/models.py\\nindex 864a775..23a49ce 100644\\n--- a/src/qx/core/models.py\\n+++ b/src/qx/core/models.py\\n@@ -1,19 +1,19 @@\\n MODELS = (\\n     {\\n         \\\"name\\\": \\\"gemini-2.5-pro\\\",\\n-        \\\"model\\\": \\\"openrouter/google/gemini-2.5-pro\\\",\\n-        \\\"description\\\": \\\"Production via OpenRouter\\\",\\n+        \\\"model\\\": \\\"vertex_ai/gemini-2.5-pro\\\",\\n+        \\\"description\\\": \\\"2.5 pro via Vertex AI\\\",\\n         \\\"accepts\\\": (\\\"thinking\\\"),\\n     },\\n     {\\n         \\\"name\\\": \\\"gemini-2.5-flash\\\",\\n-        \\\"model\\\": \\\"openrouter/google/gemini-2.5-flash\\\",\\n-        \\\"description\\\": \\\"Production via OpenRouter\\\",\\n+        \\\"model\\\": \\\"vertex_ai/gemini-2.5-flash\\\",\\n+        \\\"description\\\": \\\"2.5 flash via Vertex AI\\\",\\n         \\\"accepts\\\": (\\\"thinking\\\"),\\n     },\\n     {\\n         \\\"name\\\": \\\"gemini-2.0-flash\\\",\\n-        \\\"model\\\": \\\"openrouter/google/gemini-2.0-flash-001\\\",\\n-        \\\"description\\\": \\\"Prod Version 001 via OpenRouter\\\",\\n+        \\\"model\\\": \\\"vertex_ai/gemini-2.0-flash-001\\\",\\n+        \\\"description\\\": \\\"GA Gemini 2.0 flash via Vertex AI\\\",\\n     },\\n )\\ndiff --git a/test_agent_invocation_plugin.py b/test_agent_invocation_plugin.py\\ndeleted file mode 100644\\nindex db49121..0000000\\n--- a/test_agent_invocation_plugin.py\\n+++ /dev/null\\n@@ -1,63 +0,0 @@\\n-#!/usr/bin/env python3\\n-\\\"\\\"\\\"\\n-Test script for the agent invocation plugin.\\n-\\\"\\\"\\\"\\n-\\n-import asyncio\\n-import sys\\n-from pathlib import Path\\n-\\n-# Add src to path\\n-src_path = Path(__file__).parent / \\\"src\\\"\\n-sys.path.insert(0, str(src_path))\\n-\\n-from qx.plugins.invoke_agent_plugin import InvokeAgentPluginInput, invoke_agent_tool\\n-from rich.console import Console\\n-\\n-\\n-async def test_agent_invocation():\\n-    \\\"\\\"\\\"Test the agent invocation plugin.\\\"\\\"\\\"\\n-    console = Console()\\n-    \\n-    # Test 1: Try to invoke the default 'qx' agent\\n-    console.print(\\\"\\\\n[bold]Test 1: Invoking 'qx' agent[/bold]\\\")\\n-    args = InvokeAgentPluginInput(\\n-        agent_name=\\\"qx\\\",\\n-        prompt=\\\"What is 2 + 2?\\\",\\n-        timeout=30\\n-    )\\n-    \\n-    result = await invoke_agent_tool(console, args)\\n-    console.print(f\\\"Success: {result.success}\\\")\\n-    console.print(f\\\"Response: {result.response[:100]}...\\\" if len(result.response) > 100 else f\\\"Response: {result.response}\\\")\\n-    if result.error:\\n-        console.print(f\\\"Error: {result.error}\\\")\\n-    \\n-    # Test 2: Try to invoke a non-existent agent\\n-    console.print(\\\"\\\\n[bold]Test 2: Invoking non-existent agent[/bold]\\\")\\n-    args = InvokeAgentPluginInput(\\n-        agent_name=\\\"non_existent_agent\\\",\\n-        prompt=\\\"Hello\\\",\\n-        timeout=10\\n-    )\\n-    \\n-    result = await invoke_agent_tool(console, args)\\n-    console.print(f\\\"Success: {result.success}\\\")\\n-    console.print(f\\\"Error: {result.error}\\\")\\n-    \\n-    # Test 3: Test with context\\n-    console.print(\\\"\\\\n[bold]Test 3: Invoking with context[/bold]\\\")\\n-    args = InvokeAgentPluginInput(\\n-        agent_name=\\\"qx\\\",\\n-        prompt=\\\"Tell me about the project context\\\",\\n-        context={\\\"project_context\\\": \\\"This is a test project for agent invocation\\\"},\\n-        timeout=30\\n-    )\\n-    \\n-    result = await invoke_agent_tool(console, args)\\n-    console.print(f\\\"Success: {result.success}\\\")\\n-    console.print(f\\\"Response preview: {result.response[:200]}...\\\" if len(result.response) > 200 else f\\\"Response: {result.response}\\\")\\n-\\n-\\n-if __name__ == \\\"__main__\\\":\\n-    asyncio.run(test_agent_invocation())\\n\\\\ No newline at end of file\\ndiff --git a/test_vertex_retry.py b/test_vertex_retry.py\\nnew file mode 100644\\nindex 0000000..7563ad8\\n--- /dev/null\\n+++ b/test_vertex_retry.py\\n@@ -0,0 +1,94 @@\\n+#!/usr/bin/env python\\n+\\\"\\\"\\\"Test script to diagnose VertexAI retry mechanism issue with streaming.\\\"\\\"\\\"\\n+\\n+import asyncio\\n+import os\\n+import litellm\\n+from litellm import RateLimitError, acompletion\\n+\\n+# Enable debug logging\\n+litellm.set_verbose = True\\n+litellm._turn_on_debug()\\n+\\n+# Configure litellm settings\\n+litellm.num_retries = 3\\n+litellm.request_timeout = 120\\n+\\n+async def test_vertex_retry_streaming():\\n+    \\\"\\\"\\\"Test VertexAI with retry mechanism for streaming.\\\"\\\"\\\"\\n+    \\n+    # Test configuration\\n+    model = os.environ.get(\\\"QX_MODEL\\\", \\\"vertex_ai/gemini-1.5-flash\\\")\\n+    \\n+    print(f\\\"Testing model: {model}\\\")\\n+    print(f\\\"LiteLLM version: {litellm.__version__}\\\")\\n+    print(f\\\"Retry settings: num_retries={litellm.num_retries}\\\")\\n+    print()\\n+    \\n+    # Simple test message\\n+    messages = [\\n+        {\\\"role\\\": \\\"system\\\", \\\"content\\\": \\\"You are a helpful assistant.\\\"},\\n+        {\\\"role\\\": \\\"user\\\", \\\"content\\\": \\\"Say hello in one word.\\\"}\\n+    ]\\n+    \\n+    # Custom retry logic (similar to QX implementation)\\n+    max_retries = 3\\n+    base_delay = 2.0\\n+    \\n+    for attempt in range(max_retries + 1):\\n+        try:\\n+            print(f\\\"Attempt {attempt + 1} (streaming)...\\\")\\n+            response = await acompletion(\\n+                model=model,\\n+                messages=messages,\\n+                temperature=0.7,\\n+                max_tokens=10,\\n+                stream=True  # Enable streaming\\n+            )\\n+            \\n+            # Process stream\\n+            full_response = \\\"\\\"\\n+            async for chunk in response:\\n+                if chunk.choices and chunk.choices[0].delta.content:\\n+                    content = chunk.choices[0].delta.content\\n+                    full_response += content\\n+                    print(content, end=\\\"\\\", flush=True)\\n+            \\n+            print(f\\\"\\\\nSuccess! Full response: {full_response}\\\")\\n+            return full_response\\n+            \\n+        except RateLimitError as e:\\n+            if attempt < max_retries:\\n+                delay = base_delay * (attempt + 1)\\n+                print(f\\\"\\\\nRateLimitError caught: {e}\\\")\\n+                print(f\\\"Retrying in {delay} seconds...\\\")\\n+                await asyncio.sleep(delay)\\n+            else:\\n+                print(f\\\"\\\\nAll retries exhausted. Final error: {e}\\\")\\n+                raise\\n+                \\n+        except Exception as e:\\n+            print(f\\\"\\\\nUnexpected error type: {type(e).__name__}\\\")\\n+            print(f\\\"Error details: {e}\\\")\\n+            \\n+            # Check if it's actually a 429 error\\n+            if hasattr(e, 'response') and hasattr(e.response, 'status_code'):\\n+                print(f\\\"Status code: {e.response.status_code}\\\")\\n+            \\n+            # Check error string for 429\\n+            if \\\"429\\\" in str(e) or \\\"RESOURCE_EXHAUSTED\\\" in str(e):\\n+                print(\\\"This looks like a rate limit error but wasn't caught as RateLimitError!\\\")\\n+                \\n+                # Manual retry for 429 errors not caught as RateLimitError\\n+                if attempt < max_retries:\\n+                    delay = base_delay * (attempt + 1)\\n+                    print(f\\\"Manually retrying in {delay} seconds...\\\")\\n+                    await asyncio.sleep(delay)\\n+                    continue\\n+            \\n+            raise\\n+\\n+if __name__ == \\\"__main__\\\":\\n+    # Run the test\\n+    print(\\\"Testing streaming with retry mechanism...\\\")\\n+    asyncio.run(test_vertex_retry_streaming())\\n\\\\ No newline at end of file\",\"stderr\":null,\"return_code\":0,\"error\":null}"
+      },
+      {
+        "content": "I have analyzed the extensive changes and will now commit them with a detailed message that covers all the modifications. The commit includes a new \"Thinking Budget\" feature, improved rate-limiting logic, a switch to Vertex AI for Gemini models, documentation updates, and new test files.",
+        "refusal": null,
+        "role": "assistant",
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": [
+          {
+            "id": "call_fb1b9300-768a-4a29-9e39-19d04ca8f60e",
+            "function": {
+              "arguments": "{\"command\": \"git commit -m \\\"feat: Add Thinking Budget feature and improve rate limiting\\n\\nThis commit introduces several new features and improvements:\\n\\n- feat(cli): Add 'Thinking Budget' feature with F6 hotkey.\\n  - Allows cycling through LOW, MEDIUM, and HIGH thinking levels for supported models (e.g., Gemini 2.5) to control reasoning effort.\\n  - The current thinking level is displayed in the footer toolbar.\\n  - F1 and F2 hotkeys are now also displayed in the toolbar.\\n\\n- fix(llm): Implement robust retry logic for rate limit errors.\\n  - Adds more comprehensive checks for HTTP 429, 'RESOURCE_EXHAUSTED', and other rate limit indicators that are not always caught as 'litellm.RateLimitError'.\\n  - Improves retry logic for both standard and streaming completions.\\n\\n- refactor(models): Switch Gemini models from OpenRouter to Vertex AI.\\n  - Updates 'gemini-2.5-pro', 'gemini-2.5-flash', and 'gemini-2.0-flash' to use the 'vertex_ai/' provider.\\n\\n- docs: Update 'README.md' and 'HOTKEYS.md' with new F1, F2 and F6 hotkey information.\\n\\n- test: Add 'test_vertex_retry.py' to diagnose streaming retry issues.\\n- chore: Remove obsolete 'test_agent_invocation_plugin.py'.\\\"\"}",
+              "name": "execute_shell_tool"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_fb1b9300-768a-4a29-9e39-19d04ca8f60e",
+        "content": "{\"command\":\"git commit -m \\\"feat: Add Thinking Budget feature and improve rate limiting\\n\\nThis commit introduces several new features and improvements:\\n\\n- feat(cli): Add 'Thinking Budget' feature with F6 hotkey.\\n  - Allows cycling through LOW, MEDIUM, and HIGH thinking levels for supported models (e.g., Gemini 2.5) to control reasoning effort.\\n  - The current thinking level is displayed in the footer toolbar.\\n  - F1 and F2 hotkeys are now also displayed in the toolbar.\\n\\n- fix(llm): Implement robust retry logic for rate limit errors.\\n  - Adds more comprehensive checks for HTTP 429, 'RESOURCE_EXHAUSTED', and other rate limit indicators that are not always caught as 'litellm.RateLimitError'.\\n  - Improves retry logic for both standard and streaming completions.\\n\\n- refactor(models): Switch Gemini models from OpenRouter to Vertex AI.\\n  - Updates 'gemini-2.5-pro', 'gemini-2.5-flash', and 'gemini-2.0-flash' to use the 'vertex_ai/' provider.\\n\\n- docs: Update 'README.md' and 'HOTKEYS.md' with new F1, F2 and F6 hotkey information.\\n\\n- test: Add 'test_vertex_retry.py' to diagnose streaming retry issues.\\n- chore: Remove obsolete 'test_agent_invocation_plugin.py'.\\\"\",\"stdout\":\"[main 4021196] feat: Add Thinking Budget feature and improve rate limiting\\n 9 files changed, 291 insertions(+), 76 deletions(-)\\n delete mode 100644 test_agent_invocation_plugin.py\\n create mode 100644 test_vertex_retry.py\",\"stderr\":null,\"return_code\":0,\"error\":null}"
+      },
+      {
+        "content": "The commit was successful. All changes have been committed. I will now check the status of the repository to ensure everything is clean.",
+        "refusal": null,
+        "role": "assistant",
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": [
+          {
+            "id": "call_e60dcb70-8e3e-4844-95e2-875a548c44a5",
+            "function": {
+              "arguments": "{\"command\": \"git status\"}",
+              "name": "execute_shell_tool"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_e60dcb70-8e3e-4844-95e2-875a548c44a5",
+        "content": "{\"command\":\"git status\",\"stdout\":\"On branch main\\nYour branch is ahead of 'origin/main' by 2 commits.\\n  (use \\\"git push\\\" to publish your local commits)\\n\\nnothing to commit, working tree clean\",\"stderr\":null,\"return_code\":0,\"error\":null}"
+      },
+      {
+        "content": "All changes have been committed, and the working directory is now clean. Your local branch is ahead of `origin/main` by 2 commits. To publish these changes, you can run `git push`.",
+        "refusal": null,
+        "role": "assistant",
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": null
       }
     ]
   }
