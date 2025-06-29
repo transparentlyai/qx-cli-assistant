@@ -1001,7 +1001,7 @@ async def _handle_inline_command(
             style="info",
         )
         themed_console.print(
-            "  • Built-in directives: @worklog, @review, @plan, @commit",
+            "  • Built-in directives: @worklog, @review, @plan, @commit, @lint",
             style="info",
         )
         themed_console.print(
