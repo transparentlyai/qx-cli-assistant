@@ -4,7 +4,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-from openai.types.chat import ChatCompletionMessageParam, ChatCompletionSystemMessageParam, ChatCompletionUserMessageParam
+from openai.types.chat import (
+    ChatCompletionMessageParam,
+    ChatCompletionSystemMessageParam,
+    ChatCompletionUserMessageParam,
+)
 from rich.text import Text
 
 import qx.core.user_prompts
@@ -12,10 +16,14 @@ from qx.cli.theme import themed_console
 from qx.core.agent_manager import get_agent_manager
 from qx.core.config_manager import ConfigManager
 from qx.core.constants import QX_VERSION
-from qx.core.models import MODELS
 from qx.core.llm import QXLLMAgent, initialize_llm_agent, query_llm
-from qx.core.session_manager import reset_session, save_session_async, get_or_create_session_filename
+from qx.core.models import MODELS
 from qx.core.paths import QX_SESSIONS_DIR
+from qx.core.session_manager import (
+    get_or_create_session_filename,
+    reset_session,
+    save_session_async,
+)
 
 logger = logging.getLogger("qx")
 
@@ -101,7 +109,7 @@ def _handle_tools_command(agent: QXLLMAgent):
 async def _handle_save_session_command(
     session_name: str,
     config_manager: ConfigManager,
-    current_message_history: Optional[List[ChatCompletionMessageParam]] = None
+    current_message_history: Optional[List[ChatCompletionMessageParam]] = None,
 ):
     """
     Handle /save-session command to save the current session with a custom name.
@@ -109,56 +117,65 @@ async def _handle_save_session_command(
     if not session_name:
         themed_console.print("Usage: /save-session <session-name>", style="error")
         return
-    
+
     # Sanitize the session name
     session_name = session_name.strip()
     # Replace spaces with underscores and remove invalid filename characters
-    safe_session_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in session_name)
-    
+    safe_session_name = "".join(
+        c if c.isalnum() or c in "-_" else "_" for c in session_name
+    )
+
     # Check if .Q directory exists
     if not QX_SESSIONS_DIR.parent.is_dir():
-        themed_console.print("'.Q' directory not found. Cannot save session.", style="error")
+        themed_console.print(
+            "'.Q' directory not found. Cannot save session.", style="error"
+        )
         return
-    
+
     # Create sessions directory if it doesn't exist
     QX_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-    
+
     # Get current agent manager
     agent_manager = get_agent_manager()
     current_agent_name = await agent_manager.get_current_agent_name()
-    
+
     # Get all agent histories
     all_agent_histories = agent_manager.get_all_agent_histories()
-    
+
     # Make sure current agent's history is up to date
     if current_agent_name and current_message_history:
         all_agent_histories[current_agent_name] = current_message_history
-    
+
     if not all_agent_histories:
         themed_console.print("No conversation history to save.", style="warning")
         return
-    
+
     # Create filename with timestamp and custom name
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    session_filename = QX_SESSIONS_DIR / f"qx_session_{timestamp}_{safe_session_name}.json"
-    
+    session_filename = (
+        QX_SESSIONS_DIR / f"qx_session_{timestamp}_{safe_session_name}.json"
+    )
+
     try:
         # Prepare session data
         import json
+
         session_data = {
             "format_version": "2.0",
             "current_agent": current_agent_name,
             "session_name": session_name,
             "saved_at": datetime.now().isoformat(),
-            "agents": {}
+            "agents": {},
         }
-        
+
         for agent_name, history in all_agent_histories.items():
             # Exclude system messages and serialize
             agent_history = [
-                msg for msg in history if (
-                    (hasattr(msg, "role") and msg.role != "system") or
-                    (isinstance(msg, dict) and msg.get("role") != "system")
+                msg
+                for msg in history
+                if (
+                    (hasattr(msg, "role") and msg.role != "system")
+                    or (isinstance(msg, dict) and msg.get("role") != "system")
                 )
             ]
             serializable_history = []
@@ -172,24 +189,27 @@ async def _handle_save_session_command(
                 else:
                     serializable_history.append(msg)
             session_data["agents"][agent_name] = serializable_history
-        
+
         # Write the session file
         session_filename.write_text(
             json.dumps(session_data, indent=2), encoding="utf-8"
         )
-        
+
         themed_console.print(
             f"✓ Session saved as '{session_name}' to:\n  {session_filename}",
-            style="success"
+            style="success",
         )
-        
+
     except Exception as e:
         logger.error(f"Failed to save session: {e}", exc_info=True)
         themed_console.print(f"Failed to save session: {e}", style="error")
 
 
-async def _handle_agents_command(command_args: str, config_manager: ConfigManager,
-                                current_message_history: Optional[List[ChatCompletionMessageParam]] = None) -> Optional[List[ChatCompletionMessageParam]]:
+async def _handle_agents_command(
+    command_args: str,
+    config_manager: ConfigManager,
+    current_message_history: Optional[List[ChatCompletionMessageParam]] = None,
+) -> Optional[List[ChatCompletionMessageParam]]:
     """
     Handle agent management commands.
     Returns updated message history if it was modified, None otherwise.
@@ -316,15 +336,19 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
             if agent_info and agent_info.get("type") == "system":
                 themed_console.print(
                     f"Cannot switch to system agent '{agent_name}'. System agents are not available to users.",
-                    style="error"
+                    style="error",
                 )
                 return
-            
+
             # Save current agent's message history before switching
             current_agent_name = await agent_manager.get_current_agent_name()
             if current_agent_name and current_message_history:
-                agent_manager.save_agent_message_history(current_agent_name, current_message_history)
-                logger.debug(f"Saved {len(current_message_history)} messages for agent '{current_agent_name}'")
+                agent_manager.save_agent_message_history(
+                    current_agent_name, current_message_history
+                )
+                logger.debug(
+                    f"Saved {len(current_message_history)} messages for agent '{current_agent_name}'"
+                )
 
             # Attempt to switch the LLM agent
             success = await agent_manager.switch_llm_agent(
@@ -340,36 +364,50 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
                         f"You are now talking to {agent_display_name}",
                         style="text.muted",
                     )
-                    
+
                     # Get this agent's existing message history (if any)
                     existing_history = agent_manager.get_current_message_history()
                     if existing_history:
-                        logger.info(f"Agent '{agent_name}' resumed with {len(existing_history)} previous messages")
-                    
+                        logger.info(
+                            f"Agent '{agent_name}' resumed with {len(existing_history)} previous messages"
+                        )
+
                     # Process initial_query if defined in agent config
-                    if hasattr(current_agent, 'initial_query') and current_agent.initial_query:
-                        logger.debug(f"Processing initial_query for agent '{agent_name}': {current_agent.initial_query}")
-                        
+                    if (
+                        hasattr(current_agent, "initial_query")
+                        and current_agent.initial_query
+                    ):
+                        logger.debug(
+                            f"Processing initial_query for agent '{agent_name}': {current_agent.initial_query}"
+                        )
+
                         # Get the active LLM agent instance
                         active_llm_agent = agent_manager.get_active_llm_agent()
                         if active_llm_agent:
                             try:
                                 # Import the system prompt loading function
-                                from qx.core.llm_components.prompts import load_and_format_system_prompt
-                                
+                                from qx.core.llm_components.prompts import (
+                                    load_and_format_system_prompt,
+                                )
+
                                 # Get this agent's existing conversation history
-                                existing_history = agent_manager.get_current_message_history()
-                                system_prompt = load_and_format_system_prompt(current_agent)
-                                
+                                existing_history = (
+                                    agent_manager.get_current_message_history()
+                                )
+                                system_prompt = load_and_format_system_prompt(
+                                    current_agent
+                                )
+
                                 # Create message history for this agent
                                 if existing_history and len(existing_history) > 0:
                                     # This agent has existing history - append the initial query
                                     initial_message_history = list(existing_history)
-                                    
+
                                     # Add initial query at the end
                                     initial_message_history.append(
                                         ChatCompletionUserMessageParam(
-                                            role="user", content=current_agent.initial_query
+                                            role="user",
+                                            content=current_agent.initial_query,
                                         )
                                     )
                                 else:
@@ -379,10 +417,11 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
                                             role="system", content=system_prompt
                                         ),
                                         ChatCompletionUserMessageParam(
-                                            role="user", content=current_agent.initial_query
+                                            role="user",
+                                            content=current_agent.initial_query,
                                         ),
                                     ]
-                                
+
                                 # Send the initial query to the LLM (this will display the response)
                                 result = await query_llm(
                                     active_llm_agent,
@@ -392,19 +431,25 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
                                     add_user_message_to_history=False,  # Already added above
                                     config_manager=config_manager,
                                 )
-                                
+
                                 # Update agent manager with the new message history that includes the agent switch interaction
-                                if result and hasattr(result, 'message_history'):
-                                    agent_manager.set_current_message_history(result.message_history)
+                                if result and hasattr(result, "message_history"):
+                                    agent_manager.set_current_message_history(
+                                        result.message_history
+                                    )
                                 elif existing_history:
                                     # If no new history returned, at least preserve the conversation context
-                                    agent_manager.set_current_message_history(initial_message_history)
-                                
+                                    agent_manager.set_current_message_history(
+                                        initial_message_history
+                                    )
+
                             except Exception as e:
-                                logger.error(f"Error processing initial_query for agent '{agent_name}': {e}")
+                                logger.error(
+                                    f"Error processing initial_query for agent '{agent_name}': {e}"
+                                )
                                 themed_console.print(
                                     f"Warning: Failed to process initial query for agent '{agent_name}': {e}",
-                                    style="warning"
+                                    style="warning",
                                 )
             else:
                 themed_console.print(
@@ -486,17 +531,17 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
             results = await agent_manager.reload_all_agents(cwd=os.getcwd())
             success_count = sum(1 for success in results.values() if success)
             failed_agents = [name for name, success in results.items() if not success]
-            
+
             if failed_agents:
                 themed_console.print(
                     f"Reloaded {success_count}/{len(results)} agents successfully. "
                     f"Failed agents: {', '.join(failed_agents)}",
-                    style="warning"
+                    style="warning",
                 )
             else:
                 themed_console.print(
                     f"Successfully reloaded all {success_count} agents from disk",
-                    style="info"
+                    style="info",
                 )
 
     elif subcommand == "refresh":
@@ -528,109 +573,122 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
             return
 
         agent_name = parts[1]
-        
+
         # Check if agent exists and is not a system agent
         agent_info = agent_manager.get_agent_info(agent_name, cwd=os.getcwd())
         if not agent_info:
             themed_console.print(f"Agent '{agent_name}' not found", style="error")
             return
-            
+
         if agent_info.get("type") == "system":
             themed_console.print(
                 f"Cannot load system agent '{agent_name}'. System agents are not available to users.",
-                style="error"
+                style="error",
             )
             return
-            
+
         # Check if it's a built-in agent
         if agent_manager._agent_loader.is_builtin_agent(agent_name, cwd=os.getcwd()):
             themed_console.print(
                 f"Agent '{agent_name}' is a built-in agent and is already available.",
-                style="warning"
+                style="warning",
             )
             return
-        
+
         # Get the current agent's message history
         current_agent_name = await agent_manager.get_current_agent_name()
         if not current_agent_name:
-            themed_console.print("No active agent to load project agent for", style="error")
+            themed_console.print(
+                "No active agent to load project agent for", style="error"
+            )
             return
-            
+
         current_history = agent_manager.get_current_message_history()
         if current_history is None:
             current_history = []
-        
+
         # Create the system message
         agent_description = agent_info.get("description", "A project-specific agent")
         system_message = {
             "role": "system",
-            "content": f"The '{agent_name}' agent is now available: {agent_description}"
+            "content": f"The '{agent_name}' agent is now available: {agent_description}",
         }
-        
+
         # Check if already loaded
-        if any(msg.get("content") == system_message["content"] for msg in current_history if isinstance(msg, dict)):
-            themed_console.print(f"Agent '{agent_name}' is already loaded", style="warning")
+        if any(
+            msg.get("content") == system_message["content"]
+            for msg in current_history
+            if isinstance(msg, dict)
+        ):
+            themed_console.print(
+                f"Agent '{agent_name}' is already loaded", style="warning"
+            )
             return
-        
+
         # Inject the system message
         current_history.append(system_message)
         agent_manager.set_current_message_history(current_history)
-        
+
         themed_console.print(
             f"Loaded project agent '{agent_name}' - now available to the current agent",
-            style="success"
+            style="success",
         )
-        
+
         # Return the updated message history
         return current_history
-        
+
     elif subcommand == "unload":
         if len(parts) < 2:
             themed_console.print("Usage: /agents unload <agent_name>", style="error")
             return
 
         agent_name = parts[1]
-        
+
         # Check if it's a built-in agent
         if agent_manager._agent_loader.is_builtin_agent(agent_name, cwd=os.getcwd()):
             themed_console.print(
-                f"Cannot unload built-in agent '{agent_name}'.",
-                style="error"
+                f"Cannot unload built-in agent '{agent_name}'.", style="error"
             )
             return
-        
+
         # Get the current agent's message history
         current_agent_name = await agent_manager.get_current_agent_name()
         if not current_agent_name:
-            themed_console.print("No active agent to unload project agent from", style="error")
+            themed_console.print(
+                "No active agent to unload project agent from", style="error"
+            )
             return
-            
+
         current_history = agent_manager.get_current_message_history()
         if not current_history:
             themed_console.print(f"Agent '{agent_name}' is not loaded", style="warning")
             return
-        
+
         # Remove the system message for this agent
         original_length = len(current_history)
         current_history = [
-            msg for msg in current_history 
-            if not (isinstance(msg, dict) and 
-                    msg.get("role") == "system" and 
-                    f"The '{agent_name}' agent is now available:" in msg.get("content", ""))
+            msg
+            for msg in current_history
+            if not (
+                isinstance(msg, dict)
+                and msg.get("role") == "system"
+                and f"The '{agent_name}' agent is now available:"
+                in msg.get("content", "")
+            )
         ]
-        
+
         if len(current_history) == original_length:
             themed_console.print(f"Agent '{agent_name}' is not loaded", style="warning")
             return
-        
+
         # Update the message history
         agent_manager.set_current_message_history(current_history)
-        
+
         themed_console.print(
             f"Unloaded project agent '{agent_name}' - no longer available to the current agent",
-            style="success"
+            style="success",
         )
-        
+
         # Return the updated message history
         return current_history
 
@@ -640,7 +698,7 @@ async def _handle_agents_command(command_args: str, config_manager: ConfigManage
             "Available subcommands: list, switch, info, reload, refresh, load, unload",
             style="text.muted",
         )
-    
+
     # Return None to indicate no changes to message history
     return None
 
@@ -659,8 +717,10 @@ def _handle_clear_command(llm_agent: QXLLMAgent):
 
 
 async def _handle_inline_command(
-    command_input: str, llm_agent: QXLLMAgent, config_manager: ConfigManager,
-    current_message_history: Optional[List[ChatCompletionMessageParam]] = None
+    command_input: str,
+    llm_agent: QXLLMAgent,
+    config_manager: ConfigManager,
+    current_message_history: Optional[List[ChatCompletionMessageParam]] = None,
 ):
     """Handle slash commands in inline mode."""
     parts = command_input.strip().split(maxsplit=1)
@@ -672,7 +732,9 @@ async def _handle_inline_command(
     elif command_name == "/tools":
         _handle_tools_command(llm_agent)
     elif command_name == "/agents":
-        updated_history = await _handle_agents_command(command_args, config_manager, current_message_history)
+        updated_history = await _handle_agents_command(
+            command_args, config_manager, current_message_history
+        )
         if updated_history is not None:
             return updated_history
     elif command_name == "/reset":
@@ -691,10 +753,12 @@ async def _handle_inline_command(
         else:
             themed_console.print("Usage: /print <text to print>", style="error")
     elif command_name == "/save-session":
-        await _handle_save_session_command(command_args, config_manager, current_message_history)
+        await _handle_save_session_command(
+            command_args, config_manager, current_message_history
+        )
     elif command_name == "/help":
         themed_console.print("QX - Multi-Agent AI Assistant", style="app.header")
-        
+
         # Core Commands
         themed_console.print("\nCore Commands:", style="app.header")
         themed_console.print(
@@ -710,42 +774,70 @@ async def _handle_inline_command(
             style="primary",
         )
         themed_console.print(
-            "  /reset           - Reset session and clear message history", 
-            style="primary"
+            "  /reset           - Reset session and clear message history",
+            style="primary",
         )
         themed_console.print(
             "  /approve-all     - Activate 'approve all' mode for tool confirmations",
             style="primary",
         )
         themed_console.print(
-            "  /print <text>    - Print text to the console", 
-            style="primary"
+            "  /print <text>    - Print text to the console", style="primary"
         )
         themed_console.print(
             "  /save-session <name> - Save current session with a custom name",
-            style="primary"
+            style="primary",
         )
-        
-        
+
         # Help
         themed_console.print("\nHelp:", style="app.header")
-        themed_console.print("  /help                    - Show this help message", style="primary")
-        
+        themed_console.print(
+            "  /help                    - Show this help message", style="primary"
+        )
+
         # Agent Management Details
         themed_console.print("\nAgent Management Commands:", style="app.header")
-        themed_console.print("  /agents list             - List all available agents", style="primary")
-        themed_console.print("  /agents switch <name>    - Switch to a different agent", style="primary")
-        themed_console.print("  /agents info             - Show current agent details", style="primary")
-        themed_console.print("  /agents load <name>      - Make project agent available to AI", style="primary")
-        themed_console.print("  /agents unload <name>    - Remove project agent from AI knowledge", style="primary")
-        themed_console.print("  /agents reload           - Reload ALL agents from disk", style="primary")
-        themed_console.print("  /agents reload <name>    - Reload specific agent from disk", style="primary")
-        themed_console.print("  /agents refresh          - Refresh agent discovery", style="primary")
-        
+        themed_console.print(
+            "  /agents list             - List all available agents", style="primary"
+        )
+        themed_console.print(
+            "  /agents switch <name>    - Switch to a different agent", style="primary"
+        )
+        themed_console.print(
+            "  /agents info             - Show current agent details", style="primary"
+        )
+        themed_console.print(
+            "  /agents load <name>      - Make project agent available to AI",
+            style="primary",
+        )
+        themed_console.print(
+            "  /agents unload <name>    - Remove project agent from AI knowledge",
+            style="primary",
+        )
+        themed_console.print(
+            "  /agents reload           - Reload ALL agents from disk", style="primary"
+        )
+        themed_console.print(
+            "  /agents reload <name>    - Reload specific agent from disk",
+            style="primary",
+        )
+        themed_console.print(
+            "  /agents refresh          - Refresh agent discovery", style="primary"
+        )
+
         themed_console.print("\n  Agent Configuration Features:", style="dim white")
-        themed_console.print("    • initial_query: Automatic greeting when switching agents", style="dim cyan")
-        themed_console.print("    • Cache invalidation: /agents reload picks up YAML changes", style="dim cyan")
-        themed_console.print("    • Project-specific: Place agents in .Q/agents/ directory", style="dim cyan")
+        themed_console.print(
+            "    • initial_query: Automatic greeting when switching agents",
+            style="dim cyan",
+        )
+        themed_console.print(
+            "    • Cache invalidation: /agents reload picks up YAML changes",
+            style="dim cyan",
+        )
+        themed_console.print(
+            "    • Project-specific: Place agents in .Q/agents/ directory",
+            style="dim cyan",
+        )
 
         themed_console.print("\nKey Bindings:", style="app.header")
         themed_console.print(
@@ -762,7 +854,8 @@ async def _handle_inline_command(
             style="primary",
         )
         themed_console.print(
-            "  F2          - Toggle between MULTI and SINGLE agent modes", style="primary"
+            "  F2          - Toggle between MULTI and SINGLE agent modes",
+            style="primary",
         )
         themed_console.print("  F3          - Toggle 'Details' mode", style="primary")
         themed_console.print(
@@ -786,13 +879,19 @@ async def _handle_inline_command(
             "    - Agents can delegate tasks to other specialized agents", style="info"
         )
         themed_console.print("    - Enable complex multi-agent workflows", style="info")
-        themed_console.print("    - Blue 'MULTI' indicator in footer toolbar", style="info")
+        themed_console.print(
+            "    - Blue 'MULTI' indicator in footer toolbar", style="info"
+        )
         themed_console.print("  • SINGLE Mode:", style="warning")
         themed_console.print(
             "    - Only the current agent operates, no delegation", style="info"
         )
-        themed_console.print("    - Simpler, focused single-agent operation", style="info")
-        themed_console.print("    - Blue 'SINGLE' indicator in footer toolbar", style="info")
+        themed_console.print(
+            "    - Simpler, focused single-agent operation", style="info"
+        )
+        themed_console.print(
+            "    - Blue 'SINGLE' indicator in footer toolbar", style="info"
+        )
         themed_console.print("    - Toggle with F2", style="info")
 
         themed_console.print("\nInteraction Modes:", style="app.header")
@@ -841,7 +940,8 @@ async def _handle_inline_command(
             "  • Approve All: Shows automatic approval status (ON/OFF)", style="info"
         )
         themed_console.print(
-            "  • Thinking: Shows thinking budget (LOW/MEDIUM/HIGH/DISABLED)", style="info"
+            "  • Thinking: Shows thinking budget (LOW/MEDIUM/HIGH/DISABLED)",
+            style="info",
         )
 
         themed_console.print("\nEditor Configuration:", style="app.header")
@@ -901,7 +1001,7 @@ async def _handle_inline_command(
             style="info",
         )
         themed_console.print(
-            "  • Built-in directives: @worklogger, @reviewer, @planner",
+            "  • Built-in directives: @worklog, @review, @plan, @commit",
             style="info",
         )
         themed_console.print(
@@ -920,7 +1020,6 @@ async def _handle_inline_command(
             "  • Full documentation: docs/DIRECTIVES.md",
             style="info",
         )
-
 
     else:
         themed_console.print(f"Unknown command: {command_name}", style="error")
