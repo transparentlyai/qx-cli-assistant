@@ -147,3 +147,4 @@ cython_debug/
 # Temporary files
 tmp/
 .claude-trace/
+uv.lock
