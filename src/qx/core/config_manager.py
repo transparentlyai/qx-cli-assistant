@@ -368,8 +368,13 @@ class ConfigManager:
 
     def _ensure_directories_exist(self):
         """Ensures necessary directories exist."""
+        # Only create the user config directory (~/.qx)
+        # Do NOT create project-specific .Q directory
         QX_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        QX_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+        
+        # Only create .Q/sessions if .Q already exists
+        if QX_SESSIONS_DIR.parent.exists():
+            QX_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 if __name__ == "__main__":
