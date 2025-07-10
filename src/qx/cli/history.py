@@ -57,6 +57,8 @@ class QXHistory(History):  # Inherit from History
             not self._loaded_strings or self._loaded_strings[-1] != command
         ):
             self._loaded_strings.append(command)
+            # Save immediately to disk
+            self._save_single_entry(command)
 
     def store_string(self, command: str):
         """Store a string in the history (alternative prompt_toolkit interface)."""
@@ -74,18 +76,18 @@ class QXHistory(History):  # Inherit from History
             for line in command_lines:
                 f.write(f"+{line}\n")
 
-    def flush_history(self):
-        """Save all current in-memory history entries to the file."""
+    def _save_single_entry(self, command: str):
+        """Save a single command to history file immediately."""
         try:
             self.history_file_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.history_file_path, "w", encoding="utf-8") as f:
-                pass
-
             with open(self.history_file_path, "a", encoding="utf-8") as f:
-                for command in self._loaded_strings:
-                    self._write_entry_to_file(f, command)
+                self._write_entry_to_file(f, command)
         except Exception as e:
-            logger.error(f"Error flushing history to {self.history_file_path}: {e}")
+            logger.error(f"Error saving command to history: {e}")
+
+    def flush_history(self):
+        """No longer needed - history is saved immediately. Kept for compatibility."""
+        pass
 
     def load_history_strings(self):
         """Load and return history strings (prompt_toolkit abstract method)."""
