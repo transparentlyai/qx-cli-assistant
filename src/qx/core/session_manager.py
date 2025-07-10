@@ -310,7 +310,7 @@ def load_all_agent_histories_from_session(
             
             return all_histories
         else:
-            # Old format doesn't support multiple agents
+            # Not v2.0 format
             return None
 
     except Exception as e:
