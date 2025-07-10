@@ -131,7 +131,7 @@ QX_FALLBACK_MODELS=gpt-4o,claude-3.5-sonnet uv run qx
 
 This hierarchical system allows for great flexibility - you can set organization defaults, personal preferences, project-specific settings, and runtime overrides that all work together seamlessly.
 
-For a complete configuration example with all reliability features, see [`qx.conf.example`](qx.conf.example).
+For a complete configuration example with all reliability features, see [`qx.conf.example`](examples/qx.conf.example).
 
 ## 💡 Usage
 
@@ -454,7 +454,7 @@ uv run qx --version
 ## 📚 Documentation
 
 ### Configuration & Setup
-- **[`qx.conf.example`](qx.conf.example)**: Complete configuration reference
+- **[`qx.conf.example`](examples/qx.conf.example)**: Complete configuration reference
 - **[Model Providers Guide](docs/MODEL_PROVIDERS.md)**: Comprehensive guide to using different AI models and providers
 - **[`RELIABILITY.md`](docs/RELIABILITY.md)**: Reliability and resilience guide
 - **[`HOTKEYS.md`](docs/HOTKEYS.md)**: Global hotkey system documentation
