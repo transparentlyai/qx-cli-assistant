@@ -1,15 +1,37 @@
 # src/qx/core/paths.py
 import os
+import logging
 from pathlib import Path
 
+logger = logging.getLogger("qx")
+
 # Determine USER_HOME_DIR dynamically at runtime
-USER_HOME_DIR = Path.home().resolve()
+try:
+    USER_HOME_DIR = Path.home().resolve()
+    logger.debug(f"USER_HOME_DIR resolved to: {USER_HOME_DIR}")
+except Exception as e:
+    # Fallback to current directory if home() fails
+    USER_HOME_DIR = Path.cwd()
+    logger.warning(f"Failed to resolve home directory: {e}")
+    logger.warning(f"Using current directory as fallback: {USER_HOME_DIR}")
 
 # Qx Configuration and Data Directory
-QX_CONFIG_DIR = USER_HOME_DIR / ".config" / "qx"
+# Allow override via environment variable
+default_config_dir = str(USER_HOME_DIR / ".config" / "qx")
+QX_CONFIG_DIR = Path(os.getenv("QX_CONFIG_DIR", default_config_dir))
+if os.getenv("QX_CONFIG_DIR"):
+    logger.info(f"Using custom QX_CONFIG_DIR from environment: {QX_CONFIG_DIR}")
+else:
+    logger.debug(f"Using default QX_CONFIG_DIR: {QX_CONFIG_DIR}")
 
 # History file path
-QX_HISTORY_FILE = QX_CONFIG_DIR / "history"
+# Allow override via environment variable for restricted environments
+default_history_file = str(QX_CONFIG_DIR / "history")
+QX_HISTORY_FILE = Path(os.getenv("QX_HISTORY_FILE", default_history_file))
+if os.getenv("QX_HISTORY_FILE"):
+    logger.info(f"Using custom QX_HISTORY_FILE from environment: {QX_HISTORY_FILE}")
+else:
+    logger.debug(f"Using default QX_HISTORY_FILE: {QX_HISTORY_FILE}")
 
 # Session files directory
 QX_SESSIONS_DIR = Path(".Q") / "sessions"
