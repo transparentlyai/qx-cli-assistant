@@ -17,13 +17,41 @@ def get_session_preview(session_file: Path) -> str:
     try:
         with open(session_file, "r") as f:
             session_data = json.load(f)
-            if session_data:
+            
+            # Handle v2.0 format
+            if isinstance(session_data, dict) and session_data.get("format_version") == "2.0":
+                agents = session_data.get("agents", {})
+                if not agents:
+                    return "(empty session)"
+                
+                # Try to get messages from current agent or first available agent
+                current_agent = session_data.get("current_agent")
+                if current_agent and current_agent in agents:
+                    messages = agents[current_agent]
+                elif "qx" in agents:
+                    messages = agents["qx"]
+                else:
+                    # Use first available agent
+                    messages = list(agents.values())[0] if agents else []
+                
+                # Find last user message for preview
+                for msg in reversed(messages):
+                    if msg.get("role") == "user" and msg.get("content"):
+                        first_line = msg["content"].split("\n")[0]
+                        if len(first_line) > 80:
+                            return first_line[:77] + "..."
+                        return first_line
+                return "(no user messages)"
+            
+            # Handle old format (backwards compatibility)
+            elif isinstance(session_data, list) and session_data:
                 last_message = session_data[-1]
                 if "content" in last_message and last_message["content"]:
                     first_line = last_message["content"].split("\n")[0]
                     if len(first_line) > 80:
                         return first_line[:77] + "..."
                     return first_line
+                    
     except (json.JSONDecodeError, IndexError, KeyError):
         return "(empty session)"
     return "(no message preview)"
