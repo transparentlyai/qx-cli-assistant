@@ -236,9 +236,12 @@ class AgentInvocationService:
             )
 
             # Extract response and messages
-            if hasattr(result, "content") and hasattr(result, "messages"):
-                response_content = result.content
-                response_messages = result.messages
+            if hasattr(result, "output") and hasattr(result, "all_messages"):
+                response_content = result.output
+                response_messages = result.all_messages()
+            elif hasattr(result, "output") and hasattr(result, "_all_messages"):
+                response_content = result.output
+                response_messages = result._all_messages
             else:
                 # Fallback for string responses
                 response_content = str(result)
