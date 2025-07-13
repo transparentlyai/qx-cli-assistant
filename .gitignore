@@ -148,3 +148,4 @@ cython_debug/
 tmp/
 .claude-trace/
 uv.lock
+.Q/
