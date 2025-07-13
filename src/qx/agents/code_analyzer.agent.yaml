@@ -60,7 +60,6 @@ tools: [
 ]
 
 model:
-  name: openrouter/anthropic/claude-3.5-sonnet
+  name: vertex_ai/gemini-2.5-pro
   parameters:
-    temperature: 0.3
-    max_tokens: 4096
+    temperature: 0.73

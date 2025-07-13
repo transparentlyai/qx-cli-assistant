@@ -17,39 +17,35 @@ def _managed_plugin_print(
     content: str, use_bordered_markdown: bool = False, **kwargs
 ) -> None:
     """
-    Print helper for plugins that uses console manager when available.
-    Falls back to themed_console if manager is unavailable.
+    Print helper for plugins that uses console manager.
     """
-    try:
-        from qx.cli.console import themed_console
-        from qx.cli.quote_bar_component import BorderedMarkdown, get_agent_color
-        from qx.core.approval_handler import get_global_agent_context
+    from qx.cli.console import themed_console
+    from qx.cli.quote_bar_component import BorderedMarkdown, get_agent_color
+    from qx.core.approval_handler import get_global_agent_context
+    from qx.core.console_manager import get_console_manager
 
-        if use_bordered_markdown:
-            agent_context = get_global_agent_context()
-            if agent_context:
-                agent_name = agent_context.get("name")
-                agent_color = agent_context.get("color")
+    manager = get_console_manager()
+    
+    if use_bordered_markdown:
+        agent_context = get_global_agent_context()
+        if agent_context:
+            agent_name = agent_context.get("name")
+            agent_color = agent_context.get("color")
 
-                if agent_name:
-                    from rich.text import Text
+            if agent_name:
+                from rich.text import Text
 
-                    color = get_agent_color(agent_name, agent_color)
-                    rich_text = Text.from_markup(content)
-                    bordered_md = BorderedMarkdown(
-                        rich_text,
-                        border_style=f"dim {color}",
-                        background_color="#080808",
-                    )
-                    themed_console.print(bordered_md, **kwargs)
-                    return
+                color = get_agent_color(agent_name, agent_color)
+                rich_text = Text.from_markup(content)
+                bordered_md = BorderedMarkdown(
+                    rich_text,
+                    border_style=f"dim {color}",
+                    background_color="#080808",
+                )
+                manager.print(bordered_md, console=themed_console, **kwargs)
+                return
 
-        themed_console.print(content, **kwargs)
-    except Exception:
-        # Fallback to basic console
-        from rich.console import Console
-
-        Console().print(content, **kwargs)
+    manager.print(content, console=themed_console, **kwargs)
 
 
 class InvokeAgentPluginInput(BaseModel):
@@ -82,23 +78,33 @@ async def invoke_agent_tool(
     args: InvokeAgentPluginInput,
 ) -> InvokeAgentPluginOutput:
     """
-    Invoke another agent with a specific prompt.
+    Delegate a task to another agent to work in parallel or leverage specialized expertise.
 
-    This tool allows agents with delegation permissions to invoke other agents
-    for specialized tasks. The invoked agent starts with a fresh context and
-    returns its response.
+    Use this tool to invoke other agents for faster task completion through parallel
+    execution or when you need specialized capabilities. Each invoked agent works
+    independently and returns their complete response.
 
-    Security:
-    - Only agents with 'can_delegate: true' in their config can use this tool
-    - Invocation depth is tracked to prevent infinite loops
-    - Each invocation is independent (no shared message history)
+    When to use:
+    - Split complex tasks into parallel subtasks for faster completion
+    - Need specialized expertise (e.g., security analysis, database optimization)
+    - Want to explore multiple approaches simultaneously
+    - Have independent tasks that can be processed concurrently
+    - Need a fresh perspective without sharing your conversation history
 
-    Example:
-        To analyze code security, an agent might invoke a security specialist:
-        args = InvokeAgentPluginInput(
-            agent_name="security_analyzer",
-            prompt="Review this function for SQL injection vulnerabilities: ..."
-        )
+    Arguments:
+    - agent_name: Name of the agent to invoke (e.g., "researcher", "security_expert", "code_analyzer")
+    - prompt: Clear, detailed description of what you need the agent to do
+    - context: Optional key-value pairs to provide additional context
+    - timeout: Optional timeout in seconds (uses agent's default if not specified)
+
+    Pro tip: You can invoke multiple agents in a single response to work on different
+    parts of a problem simultaneously, significantly speeding up complex tasks.
+
+    Example use cases:
+    - Parallel research: Invoke multiple agents to research different aspects of a topic
+    - Code review: One agent for security, another for performance, another for best practices
+    - Multi-file analysis: Different agents analyzing different parts of a codebase
+    - Documentation: One agent writing tests while another writes documentation
     """
     try:
         # Check if multi-agent mode is enabled
