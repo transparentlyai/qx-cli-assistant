@@ -20,25 +20,26 @@ _disable_console_manager = False
 def _managed_print(console: RichConsole, content: Any, **kwargs) -> None:
     """
     Print helper that optionally uses console manager for thread-safe output.
-    
+
     This is disabled when called from within the ConsoleManager to prevent
     circular dependencies.
     """
     global _disable_console_manager
-    
+
     if _disable_console_manager:
         # Direct print when called from ConsoleManager
         console.print(content, **kwargs)
         return
-    
+
     try:
         # Try to use console manager for thread-safe printing
         from qx.core.console_manager import get_console_manager
+
         manager = get_console_manager()
         if manager and manager._running:
-            style = kwargs.get('style')
-            markup = kwargs.get('markup', True)
-            end = kwargs.get('end', '\n')
+            style = kwargs.get("style")
+            markup = kwargs.get("markup", True)
+            end = kwargs.get("end", "\n")
             manager.print(content, style=style, markup=markup, end=end, console=console)
         else:
             console.print(content, **kwargs)
@@ -46,13 +47,12 @@ def _managed_print(console: RichConsole, content: Any, **kwargs) -> None:
         # Fallback to direct print if manager unavailable
         console.print(content, **kwargs)
 
+
 CHOICE_YES = ("y", "Yes", "yes")
 CHOICE_NO = ("n", "No", "no")
 CHOICE_APPROVE_ALL = ("a", "All", "all")
 
 ApprovalDecisionStatus = Literal["approved", "denied", "cancelled", "session_approved"]
-
-
 
 
 def _suspend_global_hotkeys():
@@ -144,17 +144,17 @@ async def _ask_basic_confirmation(
         from prompt_toolkit import PromptSession
         from prompt_toolkit.key_binding import KeyBindings
         from prompt_toolkit.validation import Validator, ValidationError
-        
+
         # Create key bindings for the approval prompt
         bindings = KeyBindings()
-        
+
         # Add Ctrl+C handler
-        @bindings.add('c-c')
+        @bindings.add("c-c")
         def _(event):
             # Set the buffer to 'n' and accept it
-            event.app.current_buffer.text = 'n'
+            event.app.current_buffer.text = "n"
             event.app.current_buffer.validate_and_handle()
-        
+
         # Create a validator for valid choices
         class ChoiceValidator(Validator):
             def validate(self, document):
@@ -163,44 +163,38 @@ async def _ask_basic_confirmation(
                     raise ValidationError(
                         message=f"Please choose from: {choices_display_str}"
                     )
-        
+
         # Create a new prompt session for this approval
         session = PromptSession(
             key_bindings=bindings,
             validator=ChoiceValidator(),
             validate_while_typing=False,
             enable_history_search=False,
-            mouse_support=False
+            mouse_support=False,
         )
-        
+
         try:
             # Get input using prompt_toolkit
-            user_input = await session.prompt_async(
-                full_prompt,
-                default=""
-            )
-            
+            user_input = await session.prompt_async(full_prompt, default="")
+
             if user_input:
                 user_input_lower = user_input.strip().lower()
                 if user_input_lower in choice_mapping:
                     return choice_mapping[user_input_lower]
-            
+
             # Empty input - return 'n' as default
             return "n"
-                
+
         except (KeyboardInterrupt, EOFError):
             # Handle Ctrl+C as cancel/deny
             console.print("\n[dim red]Operation cancelled by user (Ctrl+C)[/dim red]")
             return "n"  # Return "no" as the choice
-            
+
     except Exception as e:
         logger.error(f"Error in prompt_toolkit confirmation: {e}", exc_info=True)
         # Fall back to basic input if prompt_toolkit fails
         try:
-            user_input = await asyncio.to_thread(
-                input,
-                full_prompt
-            )
+            user_input = await asyncio.to_thread(input, full_prompt)
             if user_input:
                 user_input_lower = user_input.strip().lower()
                 if user_input_lower in choice_mapping:
@@ -208,13 +202,11 @@ async def _ask_basic_confirmation(
         except (KeyboardInterrupt, EOFError):
             console.print("\n[dim red]Operation cancelled by user (Ctrl+C)[/dim red]")
             return "n"
-                
+
     finally:
         # Always resume global hotkeys
         if hotkeys_suspended:
             _resume_global_hotkeys()
-
-
 
 
 async def _request_confirmation_terminal(
@@ -225,7 +217,9 @@ async def _request_confirmation_terminal(
     default_choice_key: str = "n",
 ) -> Tuple[ApprovalDecisionStatus, Optional[str]]:
     if await is_approve_all_active():
-        _managed_print(console, "[info]AUTO-APPROVED due to active 'Approve All' session.[/info]")
+        _managed_print(
+            console, "[info]AUTO-APPROVED due to active 'Approve All' session.[/info]"
+        )
         return ("session_approved", current_value_for_modification)
 
     import sys
@@ -259,7 +253,9 @@ async def _request_confirmation_terminal(
             global _approve_all_active
             async with _approve_all_lock:
                 _approve_all_active = True
-            _managed_print(console, "[info]'Approve All' activated for this session.[/info]")
+            _managed_print(
+                console, "[info]'Approve All' activated for this session.[/info]"
+            )
             return ("session_approved", current_value_for_modification)
         else:
             logger.warning(f"Unexpected choice '{user_choice_key}'. Denying.")
@@ -343,17 +339,17 @@ async def get_user_choice_from_options_async(
         from prompt_toolkit import PromptSession
         from prompt_toolkit.key_binding import KeyBindings
         from prompt_toolkit.validation import Validator, ValidationError
-        
+
         # Create key bindings for the approval prompt
         bindings = KeyBindings()
-        
+
         # Add Ctrl+C handler
-        @bindings.add('c-c')
+        @bindings.add("c-c")
         def _(event):
             # Set the buffer to 'n' and accept it
-            event.app.current_buffer.text = 'n'
+            event.app.current_buffer.text = "n"
             event.app.current_buffer.validate_and_handle()
-        
+
         # Create a validator for valid choices
         class ChoiceValidator(Validator):
             def validate(self, document):
@@ -362,23 +358,22 @@ async def get_user_choice_from_options_async(
                     raise ValidationError(
                         message=f"Please choose from: {', '.join(valid_choices)}"
                     )
-        
+
         # Create a new prompt session for this approval
         session = PromptSession(
             key_bindings=bindings,
             validator=ChoiceValidator(),
             validate_while_typing=False,
             enable_history_search=False,
-            mouse_support=False
+            mouse_support=False,
         )
-        
+
         try:
             # Get input using prompt_toolkit
             user_input = await session.prompt_async(
-                prompt_text_with_options,
-                default=processed_default_choice or ""
+                prompt_text_with_options, default=processed_default_choice or ""
             )
-            
+
             if user_input:
                 return user_input.strip().lower()
             else:
@@ -386,22 +381,19 @@ async def get_user_choice_from_options_async(
                 if "n" in processed_valid_choices:
                     return "n"
                 return None
-                
+
         except (KeyboardInterrupt, EOFError):
             # Handle Ctrl+C as cancel/deny
             console.print("\n[dim red]Operation cancelled by user (Ctrl+C)[/dim red]")
             if "n" in processed_valid_choices:
                 return "n"
             return None
-            
+
     except Exception as e:
         logger.error(f"Error in prompt_toolkit approval: {e}", exc_info=True)
         # Fall back to basic input if prompt_toolkit fails
         try:
-            user_input = await asyncio.to_thread(
-                input,
-                prompt_text_with_options
-            )
+            user_input = await asyncio.to_thread(input, prompt_text_with_options)
             if user_input:
                 user_input_lower = user_input.strip().lower()
                 if user_input_lower in processed_valid_choices:
@@ -411,7 +403,7 @@ async def get_user_choice_from_options_async(
             if "n" in processed_valid_choices:
                 return "n"
             return None
-                
+
     finally:
         # Always resume global hotkeys
         if hotkeys_suspended:

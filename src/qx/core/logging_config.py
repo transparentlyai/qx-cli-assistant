@@ -22,7 +22,7 @@ def configure_logging():
 
     # Get log level from QX_LOG_LEVEL (always a level name)
     log_level_name = os.getenv("QX_LOG_LEVEL", "ERROR").upper()
-    
+
     # Get log file path from QX_LOG_FILE (if set)
     log_file_path = os.getenv("QX_LOG_FILE")
 
@@ -95,7 +95,7 @@ def configure_logging():
             logging.Formatter("%(levelname)s - %(name)s: %(message)s")
         )
         root_logger.addHandler(console_handler)
-        
+
         # Ensure qx logger uses root logger's handler
         logger.propagate = True
 

@@ -234,11 +234,13 @@ class ToolProcessor:
                 if role == "tool":
                     tool_count += 1
             logger.debug(f"Sending {tool_count} tool responses to LLM")
-            logger.debug(f"Continuing after tools with recursion depth: {recursion_depth}")
+            logger.debug(
+                f"Continuing after tools with recursion depth: {recursion_depth}"
+            )
 
             # Check if we're approaching recursion limit before continuing
             from qx.core.constants import MAX_TOOL_RECURSION_DEPTH
-            
+
             # Force final response at 80% of max depth
             force_final_threshold = int(MAX_TOOL_RECURSION_DEPTH * 0.8)
             if recursion_depth >= force_final_threshold:
@@ -256,10 +258,10 @@ class ToolProcessor:
                 messages.append(final_system_msg)
 
             result = await self._run(
-                "__CONTINUE_AFTER_TOOLS__", 
-                message_history=messages, 
+                "__CONTINUE_AFTER_TOOLS__",
+                message_history=messages,
                 add_user_message_to_history=False,
-                _recursion_depth=recursion_depth + 1
+                _recursion_depth=recursion_depth + 1,
             )
             logger.debug("Tool response continuation completed successfully")
             return result

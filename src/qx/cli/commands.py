@@ -2,7 +2,7 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, cast
 
 from openai.types.chat import (
     ChatCompletionMessageParam,
@@ -20,9 +20,7 @@ from qx.core.llm import QXLLMAgent, initialize_llm_agent, query_llm
 from qx.core.models import MODELS
 from qx.core.paths import QX_SESSIONS_DIR
 from qx.core.session_manager import (
-    get_or_create_session_filename,
     reset_session,
-    save_session_async,
 )
 
 logger = logging.getLogger("qx")
@@ -140,7 +138,7 @@ async def _handle_save_session_command(
     current_agent_name = await agent_manager.get_current_agent_name()
 
     # Get all agent histories
-    all_agent_histories = agent_manager.get_all_agent_histories()
+    all_agent_histories = agent_manager._agent_message_histories
 
     # Make sure current agent's history is up to date
     if current_agent_name and current_message_history:
@@ -182,10 +180,10 @@ async def _handle_save_session_command(
             for msg in agent_history:
                 if hasattr(msg, "model_dump") and callable(getattr(msg, "model_dump")):
                     serializable_history.append(msg.model_dump())
+                elif isinstance(msg, dict):
+                    serializable_history.append(msg)
                 elif hasattr(msg, "__dict__"):
                     serializable_history.append(msg.__dict__)
-                elif hasattr(msg, "items"):
-                    serializable_history.append(dict(msg))
                 else:
                     serializable_history.append(msg)
             session_data["agents"][agent_name] = serializable_history
@@ -635,7 +633,7 @@ async def _handle_agents_command(
         )
 
         # Return the updated message history
-        return current_history
+        return cast(List[ChatCompletionMessageParam], current_history)
 
     elif subcommand == "unload":
         if len(parts) < 2:
@@ -690,7 +688,7 @@ async def _handle_agents_command(
         )
 
         # Return the updated message history
-        return current_history
+        return cast(List[ChatCompletionMessageParam], current_history)
 
     else:
         themed_console.print(f"Unknown agents subcommand: {subcommand}", style="error")
@@ -1048,9 +1046,7 @@ async def handle_command(
         # No console to clear in inline mode
         reset_session()
         # Re-initialize agent after reset, as system prompt might change
-        from qx.core.constants import DEFAULT_MODEL
-
-        model_name_from_env = os.environ.get("QX_MODEL_NAME", DEFAULT_MODEL)
+        model_name_from_env = os.environ.get("QX_MODEL_NAME", "openrouter/auto")
         new_agent = initialize_llm_agent(
             model_name_str=model_name_from_env,
             console=None,

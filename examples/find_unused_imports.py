@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 import os
-import re
-from pathlib import Path
 
 # Get all Python files to check
 files_to_check = [
@@ -53,74 +51,78 @@ files_to_check = [
     "src/qx/plugins/execute_shell_plugin.py",
     "src/qx/plugins/read_file_plugin.py",
     "src/qx/plugins/web_fetch_plugin.py",
-    "src/qx/plugins/write_file_plugin.py"
+    "src/qx/plugins/write_file_plugin.py",
 ]
+
 
 # Convert file paths to module names
 def file_to_module(filepath):
     # Remove .py extension and convert path to module format
-    module = filepath.replace('.py', '').replace('/', '.')
+    module = filepath.replace(".py", "").replace("/", ".")
     return module
+
 
 # Get all possible import patterns for a module
 def get_import_patterns(filepath):
     module = file_to_module(filepath)
-    basename = os.path.basename(filepath).replace('.py', '')
-    
+    basename = os.path.basename(filepath).replace(".py", "")
+
     patterns = []
     # Full module import patterns
     patterns.append(f"import {module}")
     patterns.append(f"from {module} import")
-    
+
     # Relative imports from parent modules
-    parts = module.split('.')
+    parts = module.split(".")
     for i in range(1, len(parts)):
-        parent = '.'.join(parts[:i])
-        child = '.'.join(parts[i:])
+        parent = ".".join(parts[:i])
+        child = ".".join(parts[i:])
         patterns.append(f"from {parent} import {child}")
-        
+
     # Just the basename imports
     patterns.append(f"import {basename}")
     patterns.append(f"from {basename} import")
-    
+
     # Relative imports with dots
     patterns.append(f"from .{basename} import")
     patterns.append(f"from ..{basename} import")
     patterns.append(f"import .{basename}")
     patterns.append(f"import ..{basename}")
-    
+
     # Dynamic imports
     patterns.append(f'"{module}"')
     patterns.append(f"'{module}'")
     patterns.append(f'"{basename}"')
     patterns.append(f"'{basename}'")
-    
+
     return patterns
+
 
 # Check if a module is imported anywhere
 def is_imported(filepath, all_files):
     patterns = get_import_patterns(filepath)
-    
+
     for file in all_files:
         try:
-            with open(file, 'r', encoding='utf-8') as f:
+            with open(file, "r", encoding="utf-8") as f:
                 content = f.read()
                 for pattern in patterns:
                     if pattern in content:
                         return True, file, pattern
         except:
             pass
-    
+
     return False, None, None
+
 
 # Get all Python files in the project
 all_python_files = []
-for root, dirs, files in os.walk('.'):
+for root, dirs, files in os.walk("."):
     # Skip hidden directories and __pycache__
-    dirs[:] = [d for d in dirs if not d.startswith('.') and d != '__pycache__']
-    
+    dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
+
     for file in files:
-        if file.endswith('.py'):
+        if file.endswith(".py"):
             all_python_files.append(os.path.join(root, file))
 
 # Check each file

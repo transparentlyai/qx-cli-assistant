@@ -9,37 +9,36 @@ from rich.text import Text
 from rich.theme import Theme
 
 
-
 # Simple function to convert markdown text to left-aligned format
 def process_markdown_for_left_alignment(markdown_text: str) -> str:
     """Convert markdown headings to simple left-aligned bold text."""
-    
-    lines = markdown_text.split('\n')
+
+    lines = markdown_text.split("\n")
     processed_lines = []
-    
+
     for line in lines:
         # Convert markdown headings to simple bold text with blank line spacing
-        if line.startswith('# '):
+        if line.startswith("# "):
             # H1 -> **text** with extra spacing
             text = line[2:].strip()
             processed_lines.append(f"**{text}**")
             processed_lines.append("")  # Add blank line after H1
-        elif line.startswith('## '):
+        elif line.startswith("## "):
             # H2 -> **text**
             text = line[3:].strip()
             processed_lines.append(f"**{text}**")
-        elif line.startswith('### '):
+        elif line.startswith("### "):
             # H3 -> **text**
             text = line[4:].strip()
             processed_lines.append(f"**{text}**")
-        elif line.startswith('#### '):
+        elif line.startswith("#### "):
             # H4 -> **text**
             text = line[5:].strip()
             processed_lines.append(f"**{text}**")
         else:
             processed_lines.append(line)
-    
-    return '\n'.join(processed_lines)
+
+    return "\n".join(processed_lines)
 
 
 # Use regular Markdown but with processed text
@@ -54,7 +53,12 @@ class BorderedMarkdown:
     """A class to render Markdown with a left border."""
 
     def __init__(
-        self, markdown, border_char="▊", border_style="none", background_color=None, markdown_theme=None
+        self,
+        markdown,
+        border_char="▊",
+        border_style="none",
+        background_color=None,
+        markdown_theme=None,
     ):
         self.markdown = markdown
         self.border_char = border_char
@@ -70,7 +74,7 @@ class BorderedMarkdown:
             markdown_obj = LeftAlignedMarkdown(self.markdown)
         else:
             markdown_obj = self.markdown
-        
+
         # Use the provided markdown theme if available
         if self.markdown_theme:
             # Create a temporary console with the markdown theme for rendering
@@ -78,7 +82,7 @@ class BorderedMarkdown:
             lines = themed_console.render_lines(markdown_obj, options)
         else:
             lines = console.render_lines(markdown_obj, options)
-            
+
         border_segment = Segment(
             self.border_char + " ", self.border_style + self.background_style
         )
@@ -203,7 +207,7 @@ def render_agent_markdown(
         markdown_text = "\n".join(str(item) for item in markdown_text)
     elif not isinstance(markdown_text, str):
         markdown_text = str(markdown_text)
-    
+
     color = get_agent_color(agent_name, agent_color)
 
     # Use provided console or create new one
@@ -328,10 +332,10 @@ This is some **bold** and *italic* text.
         "#ff5f00",
         additional_content=code_content,
     )
-    
+
     print("\n--- Testing new markdown themes ---")
     from qx.cli.theme import default_markdown_theme, dimmed_grey_markdown_theme
-    
+
     test_md = """
 # Main Heading
 This is **bold text** and *italic text*.
@@ -351,12 +355,12 @@ def hello_world():
 > This is a quote block
 > with multiple lines
 """
-    
+
     print("\n--- Default markdown theme ---")
     render_markdown_with_left_border(
         test_md, "blue", markdown_theme=default_markdown_theme
     )
-    
+
     print("\n--- Dimmed grey markdown theme ---")
     render_markdown_with_left_border(
         test_md, "grey50", markdown_theme=dimmed_grey_markdown_theme

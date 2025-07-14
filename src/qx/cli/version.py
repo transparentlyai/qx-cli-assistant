@@ -3,7 +3,6 @@ import asyncio
 
 from qx import __version__
 from qx.cli.theme import themed_console
-from qx.core.config_manager import ConfigManager
 from qx.core.llm_utils import initialize_agent_with_mcp
 from qx.cli.commands import _handle_model_command
 from qx.core.logging_config import configure_logging
@@ -17,6 +16,8 @@ def display_version_info():
     Displays Qx version, LLM model, and its parameters, then exits.
     """
     configure_logging()
+    from qx.core.config_manager import ConfigManager
+
     config_manager = ConfigManager(None, parent_task_group=None)
     config_manager.load_configurations()
 
@@ -32,7 +33,10 @@ def display_version_info():
 
         temp_mcp_manager = TempMCPManager()
         agent = asyncio.run(initialize_agent_with_mcp(temp_mcp_manager))
-        _handle_model_command(agent)
+        from qx.core.config_manager import ConfigManager
+
+        config_manager = ConfigManager()
+        _handle_model_command(agent, config_manager)
     except SystemExit:
         themed_console.print(
             "Note: Could not display LLM model information as QX_MODEL_NAME is not configured.",

@@ -25,7 +25,7 @@ def _managed_plugin_print(
     from qx.core.console_manager import get_console_manager
 
     manager = get_console_manager()
-    
+
     if use_bordered_markdown:
         agent_context = get_global_agent_context()
         if agent_context:
@@ -109,13 +109,13 @@ async def invoke_agent_tool(
     try:
         # Check if multi-agent mode is enabled
         from qx.core.agent_mode_manager import get_agent_mode_manager
-        
+
         agent_mode_manager = get_agent_mode_manager()
         if agent_mode_manager.is_single:
             error_msg = "Agent invocation is disabled in SINGLE agent mode. Press F2 to switch to MULTI agent mode."
             logger.warning(error_msg)
             _managed_plugin_print(f"[yellow]{error_msg}[/yellow]")
-            
+
             return InvokeAgentPluginOutput(
                 success=False,
                 response="",

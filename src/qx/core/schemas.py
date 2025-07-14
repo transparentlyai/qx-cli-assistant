@@ -236,7 +236,9 @@ class AgentConfig(BaseModel):
     name: str = Field(..., description="Agent name")
     enabled: bool = Field(..., description="Whether the agent is enabled")
     description: str = Field(..., description="Agent description")
-    type: Optional[str] = Field(default="user", description="Agent type: 'user' (default) or 'system'")
+    type: Optional[str] = Field(
+        default="user", description="Agent type: 'user' (default) or 'system'"
+    )
     version: Optional[str] = Field(
         default_factory=lambda: os.environ.get(
             "QX_AGENT_VERSION", AGENT_VERSION_DEFAULT
@@ -292,12 +294,19 @@ class AgentConfig(BaseModel):
     created_at: Optional[str] = Field(default=None)
     updated_at: Optional[str] = Field(default=None)
     tags: List[str] = Field(default_factory=list)
-    
+
     # UI configuration
-    color: Optional[str] = Field(default=None, description="Agent display color (hex format)")
-    
+    color: Optional[str] = Field(
+        default=None, description="Agent display color (hex format)"
+    )
+
     # Team coordination
-    can_delegate: Optional[bool] = Field(default=False, description="Reserved for future use")
-    
+    can_delegate: Optional[bool] = Field(
+        default=False, description="Reserved for future use"
+    )
+
     # Initial interaction
-    initial_query: Optional[str] = Field(default=None, description="Initial question sent to the model when switching to this agent (not shown to console)")
+    initial_query: Optional[str] = Field(
+        default=None,
+        description="Initial question sent to the model when switching to this agent (not shown to console)",
+    )

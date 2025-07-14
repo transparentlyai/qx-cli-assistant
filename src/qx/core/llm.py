@@ -2,7 +2,6 @@ import asyncio  # noqa: F401
 import json
 import logging
 import os
-import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple, Type, cast
 
@@ -64,7 +63,9 @@ class QXLLMAgent:
         self.enable_streaming = enable_streaming
         self.agent_name = agent_name
         self.agent_color = agent_color
-        self.can_delegate = agent_config.get('can_delegate', False) if agent_config else False
+        self.can_delegate = (
+            agent_config.get("can_delegate", False) if agent_config else False
+        )
 
         self._tool_functions: Dict[str, Callable] = {}
         self._openai_tools_schema: List[ChatCompletionToolParam] = []
@@ -126,26 +127,28 @@ class QXLLMAgent:
 
         logger.info(f"QXLLMAgent initialized with model: {self.model_name}")
         logger.info(f"Registered {len(self._tool_functions)} tool functions.")
-        
+
         # Log agent context for debugging
         if self.agent_name:
-            logger.debug(f"Agent Context: name={self.agent_name}, color={self.agent_color}, tools={len(self._tool_functions)}")
+            logger.debug(
+                f"Agent Context: name={self.agent_name}, color={self.agent_color}, tools={len(self._tool_functions)}"
+            )
 
     async def _make_litellm_call(self, chat_params: Dict[str, Any]) -> Any:
         """Make LiteLLM API call with custom retry logic for rate limit errors."""
         # Remove None values to clean up parameters
         clean_params = {k: v for k, v in chat_params.items() if v is not None}
-        
+
         # Log if debug enabled
         if os.environ.get("QX_LOG_LEVEL", "").upper() == "DEBUG":
             logger.debug(f"Making LiteLLM call with model: {clean_params.get('model')}")
             logger.debug(f"Retries: {clean_params.get('num_retries', 0)}")
             logger.debug(f"Timeout: {clean_params.get('timeout', 'default')}")
-        
+
         # Custom retry logic for rate limit errors
         max_retries = 3
         base_delay = 2.0  # Starting with 2 seconds as requested
-        
+
         for attempt in range(max_retries + 1):
             try:
                 return await acompletion(**clean_params)
@@ -153,54 +156,70 @@ class QXLLMAgent:
                 if attempt < max_retries:
                     # Calculate delay with exponential backoff
                     delay = base_delay * (attempt + 1)  # 2s, 4s, 6s
-                    
+
                     logger.warning(f"Rate limit error encountered: {e}")
-                    logger.info(f"Retrying in {delay} seconds... (Attempt {attempt + 1}/{max_retries})")
-                    
+                    logger.info(
+                        f"Retrying in {delay} seconds... (Attempt {attempt + 1}/{max_retries})"
+                    )
+
                     # Show user-friendly message
-                    themed_console.print(f"[yellow]Rate limit reached. Retrying in {delay} seconds... (Attempt {attempt + 1}/{max_retries})[/yellow]")
-                    
+                    themed_console.print(
+                        f"[yellow]Rate limit reached. Retrying in {delay} seconds... (Attempt {attempt + 1}/{max_retries})[/yellow]"
+                    )
+
                     # Wait before retrying
                     await asyncio.sleep(delay)
                 else:
                     # All retries exhausted
                     logger.error(f"Rate limit error after {max_retries} retries: {e}")
-                    themed_console.print(f"[error]Rate limit error after {max_retries} retries. Please try again later.[/error]")
+                    themed_console.print(
+                        f"[error]Rate limit error after {max_retries} retries. Please try again later.[/error]"
+                    )
                     raise
             except Exception as e:
                 # Check if this is a rate limit error that wasn't caught properly
                 error_str = str(e)
                 error_type = type(e).__name__
-                
+
                 # Log the actual exception type for debugging
-                logger.debug(f"Caught exception type: {error_type}, message: {error_str}")
-                
+                logger.debug(
+                    f"Caught exception type: {error_type}, message: {error_str}"
+                )
+
                 # Check for various rate limit indicators
-                is_rate_limit = any([
-                    "429" in error_str,
-                    "RESOURCE_EXHAUSTED" in error_str,
-                    "rate limit" in error_str.lower(),
-                    "quota" in error_str.lower() and "exceeded" in error_str.lower(),
-                    # Check if it's a litellm wrapped exception
-                    hasattr(litellm, error_type) and "RateLimit" in error_type
-                ])
-                
+                is_rate_limit = any(
+                    [
+                        "429" in error_str,
+                        "RESOURCE_EXHAUSTED" in error_str,
+                        "rate limit" in error_str.lower(),
+                        "quota" in error_str.lower()
+                        and "exceeded" in error_str.lower(),
+                        # Check if it's a litellm wrapped exception
+                        hasattr(litellm, error_type) and "RateLimit" in error_type,
+                    ]
+                )
+
                 if is_rate_limit and attempt < max_retries:
                     # This is likely a rate limit error
                     delay = base_delay * (attempt + 1)  # 2s, 4s, 6s
-                    
-                    logger.warning(f"Rate limit error detected (type: {error_type}): {e}")
-                    logger.info(f"Retrying in {delay} seconds... (Attempt {attempt + 1}/{max_retries})")
-                    
+
+                    logger.warning(
+                        f"Rate limit error detected (type: {error_type}): {e}"
+                    )
+                    logger.info(
+                        f"Retrying in {delay} seconds... (Attempt {attempt + 1}/{max_retries})"
+                    )
+
                     # Show user-friendly message
-                    themed_console.print(f"[yellow]Rate limit reached. Retrying in {delay} seconds... (Attempt {attempt + 1}/{max_retries})[/yellow]")
-                    
+                    themed_console.print(
+                        f"[yellow]Rate limit reached. Retrying in {delay} seconds... (Attempt {attempt + 1}/{max_retries})[/yellow]"
+                    )
+
                     # Wait before retrying
                     await asyncio.sleep(delay)
                 else:
                     # Let other exceptions bubble up (they'll be handled by litellm's built-in retry)
                     raise
-
 
     async def _process_tool_calls_and_continue(
         self, response_message, messages, user_input, recursion_depth
@@ -209,7 +228,6 @@ class QXLLMAgent:
         return await self._tool_processor.process_tool_calls_and_continue(
             response_message, messages, user_input, recursion_depth
         )
-
 
     def _serialize_messages_efficiently(
         self, messages: List[ChatCompletionMessageParam]
@@ -220,7 +238,7 @@ class QXLLMAgent:
         """
         serialized = []
         for msg in messages:
-            if hasattr(msg, 'model_dump'):
+            if hasattr(msg, "model_dump"):
                 serialized.append(msg.model_dump())
             elif isinstance(msg, dict):
                 serialized.append(msg)
@@ -243,9 +261,9 @@ class QXLLMAgent:
         # Log recursion depth to help with debugging
         if _recursion_depth > 0:
             logger.debug(f"LLM run() called with recursion depth: {_recursion_depth}")
-        
+
         from qx.core.constants import MAX_TOOL_RECURSION_DEPTH
-        
+
         # Warn when approaching recursion limit (70% of max)
         warning_threshold = int(MAX_TOOL_RECURSION_DEPTH * 0.7)
         if _recursion_depth >= warning_threshold:
@@ -379,7 +397,6 @@ class QXLLMAgent:
         # Add retry configuration
         chat_params["num_retries"] = int(os.environ.get("QX_NUM_RETRIES", "3"))
 
-
         try:
             if self.enable_streaming:
                 # Add streaming parameter
@@ -440,7 +457,9 @@ class QXLLMAgent:
     async def cleanup(self):
         """Clean up resources."""
         # Simplified cleanup since unified workflow handles message persistence
-        logger.debug(f"🧹 Cleaning up QXLLMAgent: {getattr(self, 'agent_name', 'unknown')}")
+        logger.debug(
+            f"🧹 Cleaning up QXLLMAgent: {getattr(self, 'agent_name', 'unknown')}"
+        )
 
 
 class QXRunResult:
@@ -485,15 +504,20 @@ def initialize_llm_agent(
         try:
             # Override model parameters from agent config
             model_name_str = getattr(agent_config.model, "name", model_name_str)
-            temperature = getattr(agent_config.model.parameters, "temperature", 
-                float(os.environ.get("QX_MODEL_TEMPERATURE", "0.7")))
+            temperature = getattr(
+                agent_config.model.parameters,
+                "temperature",
+                float(os.environ.get("QX_MODEL_TEMPERATURE", "0.7")),
+            )
             max_output_tokens = getattr(
-                agent_config.model.parameters, "max_tokens", 
-                int(os.environ.get("QX_MODEL_MAX_TOKENS", "4096"))
+                agent_config.model.parameters,
+                "max_tokens",
+                int(os.environ.get("QX_MODEL_MAX_TOKENS", "4096")),
             )
             reasoning_effort = getattr(
-                agent_config.model.parameters, "reasoning_budget", 
-                os.environ.get("QX_MODEL_REASONING_EFFORT")
+                agent_config.model.parameters,
+                "reasoning_budget",
+                os.environ.get("QX_MODEL_REASONING_EFFORT"),
             )
             logger.info(f"Using agent-based model configuration: {model_name_str}")
         except AttributeError as e:
@@ -539,18 +563,28 @@ def initialize_llm_agent(
         logger.info(f"Added {len(mcp_tools)} tools from active MCP servers.")
 
     # Generate discovered tools context now that all tools are loaded
-    from qx.core.llm_components.prompts import generate_discovered_tools_context, generate_discovered_models_context, generate_discovered_agents_context
+    from qx.core.llm_components.prompts import (
+        generate_discovered_tools_context,
+        generate_discovered_models_context,
+        generate_discovered_agents_context,
+    )
+
     discovered_tools_context = generate_discovered_tools_context(registered_tools)
-    
+
     # Generate discovered models context
     discovered_models_context = generate_discovered_models_context()
-    
+
     # Generate discovered agents context
     discovered_agents_context = generate_discovered_agents_context()
-    
+
     # Load system prompt (agent-based or legacy) with agent context, discovered tools, discovered models, and discovered agents
     system_prompt_content = load_and_format_system_prompt(
-        agent_config, agent_mode, current_agent_name, discovered_tools_context, discovered_models_context, discovered_agents_context
+        agent_config,
+        agent_mode,
+        current_agent_name,
+        discovered_tools_context,
+        discovered_models_context,
+        discovered_agents_context,
     )
 
     try:
@@ -661,8 +695,10 @@ async def query_llm(
     Queries the LLM agent.
     """
     try:
-        logger.info(f"🎯 query_llm called with config_manager: {config_manager is not None}")
-        
+        logger.info(
+            f"🎯 query_llm called with config_manager: {config_manager is not None}"
+        )
+
         # Default: use main agent
         result = await agent.run(
             user_input,
@@ -670,7 +706,7 @@ async def query_llm(
             add_user_message_to_history=add_user_message_to_history,
         )
         return result
-        
+
     except Exception as e:
         logger.error(f"Error during LLM query: {e}", exc_info=True)
         console.print(f"[error]Error:[/] LLM query: {e}")

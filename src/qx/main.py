@@ -10,7 +10,6 @@ from typing import List, Optional
 import anyio
 from openai.types.chat import (
     ChatCompletionMessageParam,
-    ChatCompletionSystemMessageParam,
 )
 
 from qx import __version__
@@ -19,13 +18,12 @@ from qx.cli.session_selector import select_session
 from qx.cli.version import display_version_info
 from qx.core.config_manager import ConfigManager
 from qx.core.constants import DEFAULT_SYNTAX_HIGHLIGHT_THEME
-from qx.core.llm import QXLLMAgent, load_and_format_system_prompt
+from qx.core.llm import QXLLMAgent
 from qx.core.llm_utils import initialize_agent_with_mcp
 from qx.core.agent_manager import get_agent_manager
 from qx.core.logging_config import configure_logging, remove_temp_stream_handler
 from qx.core.session_manager import (
     clean_old_sessions,
-    load_session_from_path,
     save_session,
 )
 from qx.core.state_manager import details_manager
@@ -57,7 +55,6 @@ async def _async_main(
 
             # Configure logging after config is loaded so QX_LOG_LEVEL is available
             configure_logging()
-
 
             syntax_theme_from_env = os.getenv("QX_SYNTAX_HIGHLIGHT_THEME")
             code_theme_to_use = (
@@ -146,37 +143,54 @@ async def _async_main(
                 )
                 if message_history:
                     # Save with agent context
-                    current_agent_name = await agent_manager.get_current_agent_name() or "qx"
-                    agent_manager.save_agent_message_history(current_agent_name, message_history)
-                    save_session(current_agent_name, agent_manager._agent_message_histories)
+                    current_agent_name = (
+                        await agent_manager.get_current_agent_name() or "qx"
+                    )
+                    agent_manager.save_agent_message_history(
+                        current_agent_name, message_history
+                    )
+                    save_session(
+                        current_agent_name, agent_manager._agent_message_histories
+                    )
                     clean_old_sessions(keep_sessions)
-                
+
                 # Clean up resources before returning
                 try:
                     # Clean up HTTP client
                     from qx.core.http_client_manager import http_client_manager
+
                     await http_client_manager.cleanup()
-                    
+
                     # Clean up litellm aiohttp session
                     import litellm
-                    if hasattr(litellm, 'base_llm_aiohttp_handler') and litellm.base_llm_aiohttp_handler:
+
+                    if (
+                        hasattr(litellm, "base_llm_aiohttp_handler")
+                        and litellm.base_llm_aiohttp_handler
+                    ):
                         handler = litellm.base_llm_aiohttp_handler
-                        if hasattr(handler, 'client_session') and handler.client_session:
+                        if (
+                            hasattr(handler, "client_session")
+                            and handler.client_session
+                        ):
                             await handler.client_session.close()
-                            
+
                     # Clean up MCP servers
                     await config_manager.mcp_manager.disconnect_all()
-                    
+
                     # Clean up LLM agent
                     if llm_agent:
                         await llm_agent.cleanup()
-                        
+
                     # Clean up agent manager
                     if agent_manager:
                         await agent_manager.cleanup()
                 except Exception as e:
-                    logger.error(f"Error during cleanup in exit-after-response mode: {e}", exc_info=True)
-                    
+                    logger.error(
+                        f"Error during cleanup in exit-after-response mode: {e}",
+                        exc_info=True,
+                    )
+
                 return  # Return instead of sys.exit() to avoid issues with async context
 
             current_message_history: Optional[List[ChatCompletionMessageParam]] = None
@@ -191,29 +205,38 @@ async def _async_main(
                     themed_console.print(
                         f"[info]Attempting to recover session from: {recover_session_path}[/]"
                     )
-                    
+
                     # Load all agent histories
-                    from qx.core.session_manager import load_all_agent_histories_from_session
-                    all_histories = load_all_agent_histories_from_session(Path(recover_session_path))
-                    
+                    from qx.core.session_manager import (
+                        load_all_agent_histories_from_session,
+                    )
+
+                    all_histories = load_all_agent_histories_from_session(
+                        Path(recover_session_path)
+                    )
+
                     if all_histories:
                         # Restore all agent histories
                         for agent_name, history in all_histories.items():
-                            agent_manager.save_agent_message_history(agent_name, history)
-                        
+                            agent_manager.save_agent_message_history(
+                                agent_name, history
+                            )
+
                         # Load current agent's history
-                        current_agent_name = await agent_manager.get_current_agent_name() or "qx"
+                        current_agent_name = (
+                            await agent_manager.get_current_agent_name() or "qx"
+                        )
                         if current_agent_name in all_histories:
                             current_message_history = all_histories[current_agent_name]
                         else:
                             # Fallback to first available agent
                             current_agent_name = list(all_histories.keys())[0]
                             current_message_history = all_histories[current_agent_name]
-                        
+
                         themed_console.print(
                             f"[success]Session recovered successfully! Restored {len(all_histories)} agent(s).[/]"
                         )
-                        
+
                         # Automatically ask for a summary
                         if llm_agent and current_message_history:
                             current_message_history = await _handle_llm_interaction(
@@ -292,21 +315,33 @@ async def _async_main(
                     # Clean up HTTP client resources
                     try:
                         from qx.core.http_client_manager import http_client_manager
+
                         logger.debug("Cleaning up HTTP client before exit.")
                         await http_client_manager.cleanup()
                     except Exception as e:
-                        logger.error(f"Error during HTTP client cleanup: {e}", exc_info=True)
+                        logger.error(
+                            f"Error during HTTP client cleanup: {e}", exc_info=True
+                        )
 
                     # Clean up litellm aiohttp session
                     try:
                         import litellm
-                        if hasattr(litellm, 'base_llm_aiohttp_handler') and litellm.base_llm_aiohttp_handler:
+
+                        if (
+                            hasattr(litellm, "base_llm_aiohttp_handler")
+                            and litellm.base_llm_aiohttp_handler
+                        ):
                             handler = litellm.base_llm_aiohttp_handler
-                            if hasattr(handler, 'client_session') and handler.client_session:
+                            if (
+                                hasattr(handler, "client_session")
+                                and handler.client_session
+                            ):
                                 logger.debug("Closing litellm aiohttp session.")
                                 await handler.client_session.close()
                     except Exception as e:
-                        logger.error(f"Error during litellm aiohttp cleanup: {e}", exc_info=True)
+                        logger.error(
+                            f"Error during litellm aiohttp cleanup: {e}", exc_info=True
+                        )
 
                     # Clean up LLM agent resources
                     try:

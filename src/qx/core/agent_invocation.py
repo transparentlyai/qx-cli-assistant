@@ -8,15 +8,13 @@ import asyncio
 import logging
 import os
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, cast
 from datetime import datetime
-from pathlib import Path
 
 from qx.core.agent_loader import get_agent_loader
 from qx.core.agent_manager import get_agent_manager
 from qx.core.mcp_manager import MCPManager
 from qx.core.llm_utils import initialize_agent_with_mcp
-from qx.core.llm import QXLLMAgent
 from qx.core.schemas import AgentConfig
 from openai.types.chat import ChatCompletionMessageParam
 
@@ -319,7 +317,7 @@ class AgentInvocationService:
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Sort results by original index and handle exceptions
-        responses = [None] * len(prompts)
+        responses: List[Optional[AgentResponse]] = [None] * len(prompts)
         for result in results:
             if isinstance(result, Exception):
                 # Create error response for exceptions
@@ -342,7 +340,7 @@ class AgentInvocationService:
                     error="Failed during batch processing",
                 )
 
-        return responses
+        return cast(List[AgentResponse], responses)
 
     def _get_default_context(self) -> Dict[str, str]:
         """Get default context for template substitution"""

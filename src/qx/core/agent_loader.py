@@ -39,7 +39,9 @@ class AgentLoader:
     def __init__(self):
         self._agents_cache: Dict[str, AgentConfig] = {}
         self._discovered_agents: Optional[List[str]] = None
-        self._last_discovery_cwd: Optional[str] = None  # Track CWD for cache invalidation
+        self._last_discovery_cwd: Optional[str] = (
+            None  # Track CWD for cache invalidation
+        )
 
     def get_agent_search_paths(self, cwd: Optional[str] = None) -> List[Path]:
         """
@@ -73,7 +75,7 @@ class AgentLoader:
         # Get the directory where this module is located
         app_root = Path(__file__).parent.parent  # Go up from core/ to qx/
         builtin_agents_path = app_root / "agents"
-        
+
         if builtin_agents_path.exists():
             paths.append(builtin_agents_path)
 
@@ -83,19 +85,19 @@ class AgentLoader:
         """
         Discover all available agent names from all search paths.
         Returns list of agent names (without .agent.yaml suffix).
-        
+
         Args:
             cwd: Current working directory for project-specific agent discovery
         """
         # Use current working directory if not provided
         if cwd is None:
             cwd = os.getcwd()
-            
+
         # Invalidate cache if working directory changed (for project-specific agents)
         if self._last_discovery_cwd != cwd:
             self._discovered_agents = None
             self._last_discovery_cwd = cwd
-            
+
         # Return cached results if available
         if self._discovered_agents is not None:
             return self._discovered_agents
@@ -184,11 +186,23 @@ class AgentLoader:
         """
         try:
             # Check mandatory fields first
-            mandatory_fields = ["name", "enabled", "description", "role", "instructions"]
-            missing_fields = [field for field in mandatory_fields if field not in agent_data or agent_data[field] is None]
-            
+            mandatory_fields = [
+                "name",
+                "enabled",
+                "description",
+                "role",
+                "instructions",
+            ]
+            missing_fields = [
+                field
+                for field in mandatory_fields
+                if field not in agent_data or agent_data[field] is None
+            ]
+
             if missing_fields:
-                raise ValueError(f"Missing mandatory fields: {', '.join(missing_fields)}")
+                raise ValueError(
+                    f"Missing mandatory fields: {', '.join(missing_fields)}"
+                )
 
             # Ensure model configuration exists with environment variable
             if "model" not in agent_data:
@@ -198,9 +212,7 @@ class AgentLoader:
                         "No model specified in agent configuration and QX_MODEL_NAME environment variable is not set. "
                         "Please set QX_MODEL_NAME to your preferred model (e.g., openrouter/anthropic/claude-3.5-sonnet)"
                     )
-                agent_data["model"] = {
-                    "name": model_name
-                }
+                agent_data["model"] = {"name": model_name}
             elif (
                 isinstance(agent_data.get("model"), dict)
                 and "name" not in agent_data["model"]
@@ -264,7 +276,7 @@ class AgentLoader:
             # Update metadata - preserve YAML name if specified, otherwise use filename
             if not agent_config.name or agent_config.name.strip() == "":
                 agent_config.name = agent_name
-            
+
             if not agent_config.execution.console.source_identifier:
                 agent_config.execution.console.source_identifier = agent_name.upper()
 
@@ -312,7 +324,7 @@ class AgentLoader:
         self._agents_cache.clear()
         self._discovered_agents = None
         self._last_discovery_cwd = None
-        
+
     def refresh_discovery(self, cwd: Optional[str] = None) -> List[str]:
         """Force refresh of agent discovery, useful when project context changes."""
         self._discovered_agents = None
@@ -355,12 +367,12 @@ class AgentLoader:
         """
         all_agents = self.discover_agents(cwd)
         user_agents = []
-        
+
         for agent_name in all_agents:
             agent_info = self.get_agent_info(agent_name, cwd)
             if agent_info and agent_info.get("type", "user") != "system":
                 user_agents.append(agent_name)
-                
+
         return user_agents
 
     def discover_system_agents(self, cwd: Optional[str] = None) -> List[str]:
@@ -370,55 +382,57 @@ class AgentLoader:
         """
         all_agents = self.discover_agents(cwd)
         system_agents = []
-        
+
         for agent_name in all_agents:
             agent_info = self.get_agent_info(agent_name, cwd)
             if agent_info and agent_info.get("type") == "system":
                 system_agents.append(agent_name)
-                
+
         return system_agents
 
-    def discover_enabled_agents(self, cwd: Optional[str] = None, agent_type: Optional[str] = None) -> List[str]:
+    def discover_enabled_agents(
+        self, cwd: Optional[str] = None, agent_type: Optional[str] = None
+    ) -> List[str]:
         """
         Discover only enabled agents, optionally filtered by type.
-        
+
         Args:
             cwd: Current working directory for path resolution
             agent_type: Filter by agent type ('user', 'system', or None for all)
-        
+
         Returns:
             List of enabled agent names
         """
         all_agents = self.discover_agents(cwd)
         enabled_agents = []
-        
+
         for agent_name in all_agents:
             agent_info = self.get_agent_info(agent_name, cwd)
             if agent_info and agent_info.get("enabled", True):
                 if agent_type is None or agent_info.get("type", "user") == agent_type:
                     enabled_agents.append(agent_name)
-                    
+
         return enabled_agents
 
     def is_builtin_agent(self, agent_name: str, cwd: Optional[str] = None) -> bool:
         """
         Check if an agent is a built-in agent (from the app's agents directory).
-        
+
         Args:
             agent_name: Name of the agent to check
             cwd: Current working directory for path resolution
-            
+
         Returns:
             True if the agent is built-in, False otherwise
         """
         agent_path = self.find_agent_file(agent_name, cwd)
         if not agent_path:
             return False
-            
+
         # Get the built-in agents path
         app_root = Path(__file__).parent.parent  # Go up from core/ to qx/
         builtin_agents_path = app_root / "agents"
-        
+
         # Check if the agent path is within the built-in agents directory
         try:
             agent_path.relative_to(builtin_agents_path)
@@ -426,25 +440,25 @@ class AgentLoader:
         except ValueError:
             # Not a subdirectory of builtin_agents_path
             return False
-    
+
     def discover_builtin_agents(self) -> List[str]:
         """
         Discover only built-in agents from the app's agents directory.
-        
+
         Returns:
             List of built-in agent names
         """
         builtin_agents = []
-        
+
         # Get the built-in agents path
         app_root = Path(__file__).parent.parent  # Go up from core/ to qx/
         builtin_agents_path = app_root / "agents"
-        
+
         if builtin_agents_path.exists():
             for agent_file in builtin_agents_path.glob("*.agent.yaml"):
                 agent_name = agent_file.stem.replace(".agent", "")
                 builtin_agents.append(agent_name)
-                
+
         return builtin_agents
 
 

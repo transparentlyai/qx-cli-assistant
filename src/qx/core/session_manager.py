@@ -53,11 +53,11 @@ def _get_message_role(msg) -> Optional[str]:
 
 def _add_system_message_if_missing(
     message_history: List[ChatCompletionMessageParam],
-    agent_config: Optional[Any] = None
+    agent_config: Optional[Any] = None,
 ) -> List[ChatCompletionMessageParam]:
     """
     Adds the system message as the first message if it's not already present.
-    
+
     Args:
         message_history: List of messages
         agent_config: Optional agent configuration for loading system prompt
@@ -93,13 +93,12 @@ async def get_or_create_session_filename():
     return _current_session_file
 
 
-async def save_session_async(current_agent_name: str,
-                           all_agent_histories: dict):
+async def save_session_async(current_agent_name: str, all_agent_histories: dict):
     """
     Saves all agent message histories to the current session file.
     Creates a new session file only if one doesn't exist for this conversation.
     Thread-safe async version.
-    
+
     Args:
         current_agent_name: Name of the current agent
         all_agent_histories: Dict of all agent histories {agent_name: history}
@@ -121,14 +120,12 @@ async def save_session_async(current_agent_name: str,
     session_data = {
         "format_version": "2.0",
         "current_agent": current_agent_name,
-        "agents": {}
+        "agents": {},
     }
-    
+
     for agent_name, history in all_agent_histories.items():
         # Exclude system messages and serialize
-        agent_history = [
-            msg for msg in history if _get_message_role(msg) != "system"
-        ]
+        agent_history = [msg for msg in history if _get_message_role(msg) != "system"]
         serializable_history = []
         for msg in agent_history:
             if hasattr(msg, "model_dump") and callable(getattr(msg, "model_dump")):
@@ -166,18 +163,21 @@ async def reset_session_async():
 
 
 # Sync wrappers for backward compatibility
-def save_session_sync(current_agent_name: str,
-                     all_agent_histories: dict):
+def save_session_sync(current_agent_name: str, all_agent_histories: dict):
     """Sync wrapper for save_session."""
-    
+
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
             # We're in an async context, create a task
-            asyncio.create_task(save_session_async(current_agent_name, all_agent_histories))
+            asyncio.create_task(
+                save_session_async(current_agent_name, all_agent_histories)
+            )
         else:
             # Sync context - run async version
-            loop.run_until_complete(save_session_async(current_agent_name, all_agent_histories))
+            loop.run_until_complete(
+                save_session_async(current_agent_name, all_agent_histories)
+            )
     except RuntimeError:
         # No event loop - shouldn't happen in normal qx usage
         logger.error("No event loop available for session saving")
@@ -280,12 +280,10 @@ def load_latest_session() -> Optional[List[ChatCompletionMessageParam]]:
     return loaded_history
 
 
-def load_all_agent_histories_from_session(
-    session_path: Path
-) -> Optional[dict]:
+def load_all_agent_histories_from_session(session_path: Path) -> Optional[dict]:
     """
     Loads all agent histories from a session file (new format only).
-    
+
     Returns:
         Dict mapping agent names to their message histories, or None if not new format
     """
@@ -298,37 +296,41 @@ def load_all_agent_histories_from_session(
             session_data = json.load(f)
 
         # Check if this is the new format
-        if isinstance(session_data, dict) and session_data.get("format_version") == "2.0":
+        if (
+            isinstance(session_data, dict)
+            and session_data.get("format_version") == "2.0"
+        ):
             agents = session_data.get("agents", {})
-            
+
             # Add each agent's history without system message (will be added dynamically)
             all_histories = {}
             for agent_name, history in agents.items():
                 message_history = cast(List[ChatCompletionMessageParam], history)
                 message_history = _add_system_message_if_missing(message_history)
                 all_histories[agent_name] = message_history
-            
+
             return all_histories
         else:
             # Not v2.0 format
             return None
 
     except Exception as e:
-        logger.error(f"Error loading all agent histories from {session_path}: {e}", exc_info=True)
+        logger.error(
+            f"Error loading all agent histories from {session_path}: {e}", exc_info=True
+        )
         return None
 
 
 def load_session_from_path(
-    session_path: Path,
-    agent_name: Optional[str] = None
+    session_path: Path, agent_name: Optional[str] = None
 ) -> Optional[List[ChatCompletionMessageParam]]:
     """
     Loads a specific agent's history from a session file.
-    
+
     Args:
         session_path: Path to session file
         agent_name: Specific agent to load history for
-        
+
     Returns:
         Message history for the specified agent or current/default agent
     """
@@ -341,7 +343,10 @@ def load_session_from_path(
             session_data = json.load(f)
 
         # Validate format
-        if not isinstance(session_data, dict) or session_data.get("format_version") != "2.0":
+        if (
+            not isinstance(session_data, dict)
+            or session_data.get("format_version") != "2.0"
+        ):
             logger.error(f"Invalid or old session format in {session_path}")
             return None
 
@@ -349,7 +354,7 @@ def load_session_from_path(
         if not agents:
             logger.warning("No agent histories found in session file")
             return None
-        
+
         # Determine which agent to load
         if agent_name and agent_name in agents:
             raw_messages = agents[agent_name]
@@ -363,13 +368,13 @@ def load_session_from_path(
             # Use first available agent
             agent_name = list(agents.keys())[0]
             raw_messages = agents[agent_name]
-        
+
         message_history = cast(List[ChatCompletionMessageParam], raw_messages)
         message_history = _add_system_message_if_missing(message_history)
-        
+
         logger.info(f"Loaded session for agent '{agent_name}' from {session_path}")
         set_current_session_file(session_path)
-        
+
         return message_history
 
     except json.JSONDecodeError as e:

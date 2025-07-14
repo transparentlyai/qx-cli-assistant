@@ -54,7 +54,7 @@ class AgentManager:
         self._task_tracker = TaskTracker()
         self._lock = asyncio.Lock()
         self._console_manager = None  # Lazy initialization
-        
+
         # Per-agent message history storage
         self._agent_message_histories: Dict[str, List[Any]] = {}
         self._current_agent_name: Optional[str] = None
@@ -124,7 +124,9 @@ class AgentManager:
                         except Exception as e:
                             logger.error(f"Error in agent loaded callback: {e}")
 
-                    logger.debug(f"Loaded agent '{agent_name}' from {result.source_path}")
+                    logger.debug(
+                        f"Loaded agent '{agent_name}' from {result.source_path}"
+                    )
                 else:
                     self._console_print(
                         f"Failed to load agent '{agent_name}': {result.error}",
@@ -184,7 +186,7 @@ class AgentManager:
                     created_at=datetime.now(),
                     context=context,
                 )
-                
+
                 # Update current agent name for message history tracking
                 self._current_agent_name = agent_name
 
@@ -195,7 +197,9 @@ class AgentManager:
                     except Exception as e:
                         logger.error(f"Error in agent switched callback: {e}")
 
-                logger.debug(f"Switched to agent '{agent_name}' (was '{old_agent_name}')")
+                logger.debug(
+                    f"Switched to agent '{agent_name}' (was '{old_agent_name}')"
+                )
 
             return result
 
@@ -238,7 +242,7 @@ class AgentManager:
             created_at=datetime.now(),
             context={},
         )
-        
+
         # Update current agent name for message history tracking
         self._current_agent_name = agent_name
 
@@ -249,23 +253,25 @@ class AgentManager:
     def get_active_llm_agent(self):
         """Get the active LLM agent instance."""
         return getattr(self, "_active_llm_agent", None)
-    
+
     # Message history tracking methods
     def get_current_message_history(self) -> Optional[List[Any]]:
         """Get the message history for the current agent."""
         if self._current_agent_name:
             return self._agent_message_histories.get(self._current_agent_name, [])
         return None
-    
+
     def set_current_message_history(self, message_history: List[Any]) -> None:
         """Set the message history for the current agent."""
         if self._current_agent_name:
             self._agent_message_histories[self._current_agent_name] = message_history
-    
-    def save_agent_message_history(self, agent_name: str, message_history: List[Any]) -> None:
+
+    def save_agent_message_history(
+        self, agent_name: str, message_history: List[Any]
+    ) -> None:
         """Save message history for a specific agent."""
         self._agent_message_histories[agent_name] = message_history
-    
+
     def get_agent_message_history(self, agent_name: str) -> List[Any]:
         """Get message history for a specific agent."""
         return self._agent_message_histories.get(agent_name, [])
@@ -298,7 +304,7 @@ class AgentManager:
             if new_llm_agent:
                 # Update the agent session
                 self._set_current_agent_session(agent_name, result.agent)
-                
+
                 # Current agent name is updated in _set_current_agent_session
 
                 # Replace the active LLM agent
@@ -425,10 +431,10 @@ class AgentManager:
     async def reload_all_agents(self, cwd: Optional[str] = None) -> Dict[str, bool]:
         """
         Reload all agent configurations from disk by clearing the entire cache.
-        
+
         Args:
             cwd: Current working directory for path resolution
-            
+
         Returns:
             Dictionary mapping agent names to success status
         """
@@ -436,10 +442,10 @@ class AgentManager:
             try:
                 # Clear all cached agents
                 self._agent_loader.clear_cache()
-                
+
                 # Also refresh agent discovery to pick up new/removed agents
                 discovered_agents = self._agent_loader.refresh_discovery(cwd=cwd)
-                
+
                 # Test load all discovered agents to verify they're valid
                 results = {}
                 for agent_name in discovered_agents:
@@ -447,32 +453,36 @@ class AgentManager:
                         result = self._agent_loader.load_agent(agent_name, cwd=cwd)
                         results[agent_name] = result.success
                         if not result.success:
-                            logger.warning(f"Agent '{agent_name}' failed to reload: {result.error}")
+                            logger.warning(
+                                f"Agent '{agent_name}' failed to reload: {result.error}"
+                            )
                     except Exception as e:
-                        logger.error(f"Error testing reload of agent '{agent_name}': {e}")
+                        logger.error(
+                            f"Error testing reload of agent '{agent_name}': {e}"
+                        )
                         results[agent_name] = False
-                
+
                 self._console_print(
-                    f"Reloaded {len(results)} agents from disk", 
-                    style="green"
+                    f"Reloaded {len(results)} agents from disk", style="green"
                 )
-                
+
                 # If current agent was reloaded, update the session
-                if (self._current_agent_session and 
-                    self._current_agent_session.agent_name in results and
-                    results[self._current_agent_session.agent_name]):
-                    
+                if (
+                    self._current_agent_session
+                    and self._current_agent_session.agent_name in results
+                    and results[self._current_agent_session.agent_name]
+                ):
                     # Reload current agent config
                     current_result = self._agent_loader.load_agent(
-                        self._current_agent_session.agent_name, 
+                        self._current_agent_session.agent_name,
                         context=self._current_agent_session.context,
-                        cwd=cwd
+                        cwd=cwd,
                     )
                     if current_result.success:
                         self._current_agent_session.agent_config = current_result.agent
-                
+
                 return results
-                
+
             except Exception as e:
                 error_msg = f"Failed to reload all agents: {e}"
                 logger.error(error_msg, exc_info=True)
@@ -718,15 +728,20 @@ class AgentManager:
             cwd = os.getcwd()
         return self._agent_loader.refresh_discovery(cwd=cwd)
 
-    def get_agent_config(self, agent_name: str, context: Optional[Dict[str, str]] = None, cwd: Optional[str] = None) -> Optional[AgentConfig]:
+    def get_agent_config(
+        self,
+        agent_name: str,
+        context: Optional[Dict[str, str]] = None,
+        cwd: Optional[str] = None,
+    ) -> Optional[AgentConfig]:
         """
         Get agent configuration by name without affecting current session.
-        
+
         Args:
             agent_name: Name of the agent to get configuration for
             context: Template context for placeholder replacement
             cwd: Current working directory for path resolution
-            
+
         Returns:
             AgentConfig if found, None otherwise
         """
@@ -736,7 +751,7 @@ class AgentManager:
         except Exception as e:
             logger.error(f"Failed to get agent config for '{agent_name}': {e}")
             return None
-        
+
     async def cleanup(self):
         """Clean up all agent resources."""
         try:

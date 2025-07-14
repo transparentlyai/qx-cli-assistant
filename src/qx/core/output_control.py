@@ -16,12 +16,12 @@ logger = logging.getLogger(__name__)
 class OutputControlManager:
     """
     Manages output verbosity settings for plugins.
-    
+
     This service allows plugins to check whether they should display verbose output
     like stdout from shell commands, debug information, etc. It integrates with
     the thinking mechanism but remains standalone so plugins don't have tight coupling.
     """
-    
+
     _instance = None
     _lock = asyncio.Lock()
 
@@ -35,7 +35,7 @@ class OutputControlManager:
     async def should_show_stdout(self) -> bool:
         """
         Determine if stdout should be displayed for tool executions.
-        
+
         Returns:
             bool: True if stdout should be shown, False otherwise
         """
@@ -43,28 +43,31 @@ class OutputControlManager:
             # If an override is set, use it
             if self._show_stdout_override is not None:
                 return self._show_stdout_override
-            
+
             # Check for specific stdout environment variable first
             stdout_setting = os.getenv("QX_SHOW_STDOUT")
             if stdout_setting is not None:
                 return stdout_setting.lower() == "true"
-            
+
             # Fall back to details mechanism
             try:
                 from qx.core.user_prompts import is_details_active
+
                 return await is_details_active()
             except ImportError:
                 # If details module isn't available, default to showing stdout
-                logger.warning("Details module not available, defaulting to show stdout")
+                logger.warning(
+                    "Details module not available, defaulting to show stdout"
+                )
                 return True
 
     async def should_show_stderr(self) -> bool:
         """
         Determine if stderr should be displayed for tool executions.
-        
+
         stderr is generally always shown for debugging purposes, but this
         provides a way to control it if needed.
-        
+
         Returns:
             bool: True if stderr should be shown, False otherwise
         """
@@ -72,19 +75,19 @@ class OutputControlManager:
             # If an override is set, use it
             if self._show_stderr_override is not None:
                 return self._show_stderr_override
-            
+
             # Check for specific stderr environment variable
             stderr_setting = os.getenv("QX_SHOW_STDERR")
             if stderr_setting is not None:
                 return stderr_setting.lower() == "true"
-            
+
             # Default to always showing stderr for debugging
             return True
 
     async def set_stdout_visibility(self, visible: bool):
         """
         Override stdout visibility setting.
-        
+
         Args:
             visible: Whether stdout should be visible
         """
@@ -95,7 +98,7 @@ class OutputControlManager:
     async def set_stderr_visibility(self, visible: bool):
         """
         Override stderr visibility setting.
-        
+
         Args:
             visible: Whether stderr should be visible
         """
@@ -123,10 +126,10 @@ output_control_manager = OutputControlManager()
 async def should_show_stdout() -> bool:
     """
     Convenience function for plugins to check if stdout should be displayed.
-    
-    This function can be imported directly by plugins without needing to 
+
+    This function can be imported directly by plugins without needing to
     import the manager class.
-    
+
     Returns:
         bool: True if stdout should be shown, False otherwise
     """
@@ -136,7 +139,7 @@ async def should_show_stdout() -> bool:
 async def should_show_stderr() -> bool:
     """
     Convenience function for plugins to check if stderr should be displayed.
-    
+
     Returns:
         bool: True if stderr should be shown, False otherwise
     """
@@ -146,10 +149,10 @@ async def should_show_stderr() -> bool:
 def should_show_stdout_sync() -> bool:
     """
     Synchronous version of should_show_stdout for plugins that can't use async.
-    
+
     This is a fallback for plugins that need immediate output decisions.
     It checks environment variables and defaults to showing stdout.
-    
+
     Returns:
         bool: True if stdout should be shown, False otherwise
     """
@@ -157,7 +160,7 @@ def should_show_stdout_sync() -> bool:
     stdout_setting = os.getenv("QX_SHOW_STDOUT")
     if stdout_setting is not None:
         return stdout_setting.lower() == "true"
-    
+
     # Fall back to details setting
     details_setting = os.getenv("QX_SHOW_DETAILS", "true")
     return details_setting.lower() == "true"
@@ -166,7 +169,7 @@ def should_show_stdout_sync() -> bool:
 def should_show_stderr_sync() -> bool:
     """
     Synchronous version of should_show_stderr for plugins that can't use async.
-    
+
     Returns:
         bool: True if stderr should be shown, False otherwise
     """

@@ -28,13 +28,13 @@ async def initialize_agent_with_mcp(
     # Determine agent context
     agent_mode = "single"  # Default
     current_agent_name = ""
-    
+
     if agent_config:
         current_agent_name = getattr(agent_config, "name", "")
-        
+
         # All agents run in single mode
         agent_mode = "single"
-    
+
     # Determine model name from agent config or environment
     if agent_config is not None:
         try:
@@ -71,7 +71,7 @@ async def initialize_agent_with_mcp(
             themed_console.print(
                 "[critical]Critical Error:[/] QX_MODEL_NAME environment variable is not set.\n"
                 "[info]Please set QX_MODEL_NAME to your preferred model, for example:[/]\n"
-                "  export QX_MODEL_NAME=openrouter/anthropic/claude-3.5-sonnet\n" 
+                "  export QX_MODEL_NAME=openrouter/anthropic/claude-3.5-sonnet\n"
                 "  export QX_MODEL_NAME=openrouter/google/gemini-2.5-pro-preview-06-05\n"
                 "[info]See available models at: https://openrouter.ai/models[/]"
             )
@@ -83,9 +83,7 @@ async def initialize_agent_with_mcp(
     logger.debug(f"  Agent Config: {'Yes' if agent_config else 'No'}")
 
     # Check if streaming is enabled via environment variable
-    enable_streaming = (
-        os.environ.get("QX_ENABLE_STREAMING", "true").lower() == "true"
-    )
+    enable_streaming = os.environ.get("QX_ENABLE_STREAMING", "true").lower() == "true"
 
     agent: Optional[QXLLMAgent] = initialize_llm_agent(
         model_name_str=model_name,

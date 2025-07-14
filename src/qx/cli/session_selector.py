@@ -17,15 +17,18 @@ def get_session_preview(session_file: Path) -> str:
     try:
         with open(session_file, "r") as f:
             session_data = json.load(f)
-            
+
             # Only handle v2.0 format
-            if not isinstance(session_data, dict) or session_data.get("format_version") != "2.0":
+            if (
+                not isinstance(session_data, dict)
+                or session_data.get("format_version") != "2.0"
+            ):
                 return "(invalid session format)"
-                
+
             agents = session_data.get("agents", {})
             if not agents:
                 return "(empty session)"
-            
+
             # Try to get messages from current agent or first available agent
             current_agent = session_data.get("current_agent")
             if current_agent and current_agent in agents:
@@ -35,7 +38,7 @@ def get_session_preview(session_file: Path) -> str:
             else:
                 # Use first available agent
                 messages = list(agents.values())[0] if agents else []
-            
+
             # Find last user message for preview
             for msg in reversed(messages):
                 if msg.get("role") == "user" and msg.get("content"):
@@ -44,7 +47,7 @@ def get_session_preview(session_file: Path) -> str:
                         return first_line[:77] + "..."
                     return first_line
             return "(no user messages)"
-                    
+
     except (json.JSONDecodeError, IndexError, KeyError):
         return "(error reading session)"
     except Exception:

@@ -244,14 +244,15 @@ def _default_approve_all_handler():
         # Simple toggle without any external dependencies or Rich formatting
         user_prompts._approve_all_active = not user_prompts._approve_all_active
         status = "activated" if user_prompts._approve_all_active else "deactivated"
-        
+
         # Use managed stream print with newline to avoid spinner overlap
         try:
             from qx.core.llm_components.streaming import _managed_stream_print
+
             _managed_stream_print(
-                f"\n✓ [dim green]Approve All mode[/] {status}.", 
-                use_manager=True, 
-                style="warning"
+                f"\n✓ [dim green]Approve All mode[/] {status}.",
+                use_manager=True,
+                style="warning",
             )
         except Exception:
             # Fallback to plain print if managed print not available
@@ -275,6 +276,7 @@ def _default_toggle_details_handler():
             # Update toolbar state if available
             try:
                 from qx.cli.qprompt import _details_active_for_toolbar
+
                 _details_active_for_toolbar[0] = new_status
             except ImportError:
                 pass  # Module not imported yet
@@ -282,10 +284,11 @@ def _default_toggle_details_handler():
             status_text = "enabled" if new_status else "disabled"
             try:
                 from qx.core.llm_components.streaming import _managed_stream_print
+
                 _managed_stream_print(
-                    f"\n✓ [dim green]Details:[/] {status_text}.", 
-                    use_manager=True, 
-                    style="warning"
+                    f"\n✓ [dim green]Details:[/] {status_text}.",
+                    use_manager=True,
+                    style="warning",
                 )
             except Exception:
                 print(f"\n✓ Details: {status_text}")
@@ -311,6 +314,7 @@ def _default_toggle_stdout_handler():
             # Update toolbar state if available
             try:
                 from qx.cli.qprompt import _stdout_active_for_toolbar
+
                 _stdout_active_for_toolbar[0] = new_status
             except ImportError:
                 pass  # Module not imported yet
@@ -318,10 +322,11 @@ def _default_toggle_stdout_handler():
             status_text = "enabled" if new_status else "disabled"
             try:
                 from qx.core.llm_components.streaming import _managed_stream_print
+
                 _managed_stream_print(
-                    f"\n✓ [dim green]Show Stdout:[/] {status_text}.", 
-                    use_manager=True, 
-                    style="warning"
+                    f"\n✓ [dim green]Show Stdout:[/] {status_text}.",
+                    use_manager=True,
+                    style="warning",
                 )
             except Exception:
                 print(f"\n✓ Show Stdout: {status_text}")

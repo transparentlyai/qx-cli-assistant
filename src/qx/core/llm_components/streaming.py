@@ -243,7 +243,6 @@ class StreamingHandler:
         recursion_depth: int = 0,
     ) -> Any:
         """Handle streaming response from OpenRouter API."""
-        from qx.core.llm import QXRunResult  # Import here to avoid circular imports
         from litellm import RateLimitError
         import litellm
 
@@ -251,11 +250,11 @@ class StreamingHandler:
         logger.debug(
             f"Entering handle_streaming_response (recursion_depth={recursion_depth})"
         )
-        
+
         # Retry logic for rate limit errors during streaming
         max_retries = 3
         base_delay = 2.0
-        
+
         for retry_attempt in range(max_retries + 1):
             try:
                 return await self._handle_streaming_with_retry(
@@ -265,47 +264,69 @@ class StreamingHandler:
                 if retry_attempt < max_retries:
                     delay = base_delay * (retry_attempt + 1)  # 2s, 4s, 6s
                     logger.warning(f"Rate limit error during streaming: {e}")
-                    logger.info(f"Retrying in {delay} seconds... (Attempt {retry_attempt + 1}/{max_retries})")
-                    
+                    logger.info(
+                        f"Retrying in {delay} seconds... (Attempt {retry_attempt + 1}/{max_retries})"
+                    )
+
                     # Show user-friendly message
                     from qx.cli.theme import themed_console
-                    themed_console.print(f"[yellow]Rate limit reached during streaming. Retrying in {delay} seconds... (Attempt {retry_attempt + 1}/{max_retries})[/yellow]")
-                    
+
+                    themed_console.print(
+                        f"[yellow]Rate limit reached during streaming. Retrying in {delay} seconds... (Attempt {retry_attempt + 1}/{max_retries})[/yellow]"
+                    )
+
                     await asyncio.sleep(delay)
                 else:
-                    logger.error(f"Rate limit error after {max_retries} streaming retries: {e}")
+                    logger.error(
+                        f"Rate limit error after {max_retries} streaming retries: {e}"
+                    )
                     from qx.cli.theme import themed_console
-                    themed_console.print(f"[error]Rate limit error after {max_retries} retries. Please try again later.[/error]")
+
+                    themed_console.print(
+                        f"[error]Rate limit error after {max_retries} retries. Please try again later.[/error]"
+                    )
                     raise
             except Exception as e:
                 # Check if this is a rate limit error that wasn't caught properly
                 error_str = str(e)
                 error_type = type(e).__name__
-                
-                logger.debug(f"Caught streaming exception type: {error_type}, message: {error_str}")
-                
+
+                logger.debug(
+                    f"Caught streaming exception type: {error_type}, message: {error_str}"
+                )
+
                 # Check for various rate limit indicators
-                is_rate_limit = any([
-                    "429" in error_str,
-                    "RESOURCE_EXHAUSTED" in error_str,
-                    "rate limit" in error_str.lower(),
-                    "quota" in error_str.lower() and "exceeded" in error_str.lower(),
-                    hasattr(litellm, error_type) and "RateLimit" in error_type
-                ])
-                
+                is_rate_limit = any(
+                    [
+                        "429" in error_str,
+                        "RESOURCE_EXHAUSTED" in error_str,
+                        "rate limit" in error_str.lower(),
+                        "quota" in error_str.lower()
+                        and "exceeded" in error_str.lower(),
+                        hasattr(litellm, error_type) and "RateLimit" in error_type,
+                    ]
+                )
+
                 if is_rate_limit and retry_attempt < max_retries:
                     delay = base_delay * (retry_attempt + 1)  # 2s, 4s, 6s
-                    
-                    logger.warning(f"Rate limit error detected during streaming (type: {error_type}): {e}")
-                    logger.info(f"Retrying in {delay} seconds... (Attempt {retry_attempt + 1}/{max_retries})")
-                    
+
+                    logger.warning(
+                        f"Rate limit error detected during streaming (type: {error_type}): {e}"
+                    )
+                    logger.info(
+                        f"Retrying in {delay} seconds... (Attempt {retry_attempt + 1}/{max_retries})"
+                    )
+
                     from qx.cli.theme import themed_console
-                    themed_console.print(f"[yellow]Rate limit reached during streaming. Retrying in {delay} seconds... (Attempt {retry_attempt + 1}/{max_retries})[/yellow]")
-                    
+
+                    themed_console.print(
+                        f"[yellow]Rate limit reached during streaming. Retrying in {delay} seconds... (Attempt {retry_attempt + 1}/{max_retries})[/yellow]"
+                    )
+
                     await asyncio.sleep(delay)
                 else:
                     raise
-    
+
     async def _handle_streaming_with_retry(
         self,
         chat_params: Dict[str, Any],
@@ -316,7 +337,7 @@ class StreamingHandler:
     ) -> Any:
         """Handle the actual streaming logic (separated for retry wrapper)."""
         from qx.core.llm import QXRunResult  # Import here to avoid circular imports
-        
+
         if recursion_depth > 0:
             logger.info(
                 f"This is retry attempt {recursion_depth} for MALFORMED_FUNCTION_CALL"
