@@ -100,7 +100,7 @@ def get_bottom_toolbar():
     else:
         thinking_status = '<style fg="#6b7280">DISABLED</style>'
     
-    toolbar_html = f'<style fg="black" bg="white"> <style fg="black" bg="#6b7280">F1</style> {mode_status} | <style fg="black" bg="#6b7280">F2</style> {agent_mode_status} | <style fg="black" bg="#6b7280">F3</style> Details: {details_status} | <style fg="black" bg="#6b7280">F4</style> StdOE: {stdout_status} | <style fg="black" bg="#6b7280">F5</style> Approve All: {approve_all_status} | <style fg="black" bg="#6b7280">F6</style> Think: {thinking_status}</style>'
+    toolbar_html = f'<style fg="black" bg="white"> <style fg="black" bg="#6b7280">F1/Ctrl+P</style> {mode_status} | <style fg="black" bg="#6b7280">F2</style> {agent_mode_status} | <style fg="black" bg="#6b7280">F3</style> Details: {details_status} | <style fg="black" bg="#6b7280">F4</style> StdOE: {stdout_status} | <style fg="black" bg="#6b7280">F5</style> Approve All: {approve_all_status} | <style fg="black" bg="#6b7280">F6</style> Think: {thinking_status}</style>'
     return HTML(toolbar_html)
 
 
@@ -225,6 +225,7 @@ async def _run_inline_mode(
         register_global_hotkey("f3", "toggle_details")  # Same as prompt_toolkit
         register_global_hotkey("f4", "toggle_stdout")  # Re-enabled with fix
         register_global_hotkey("f12", "cancel")  # Additional emergency key
+        register_global_hotkey("ctrl+p", "toggle_planning_mode")  # Alternative to F1
         logger.debug("Global hotkey handlers registered (matching prompt_toolkit)")
     except Exception as e:
         logger.debug(f"Exception during global hotkey setup: {e}")
@@ -369,6 +370,24 @@ async def _run_inline_mode(
         event.app.invalidate()
 
     @bindings.add("f1")
+    def _(event):
+        _planning_mode_active[0] = not _planning_mode_active[0]
+        mode_text = "Planning" if _planning_mode_active[0] else "Implementing"
+
+        # Save the planning mode state to configuration
+        config_manager.set_config_value(
+            "QX_PLANNING_MODE", str(_planning_mode_active[0]).lower()
+        )
+
+        style = "warning"
+        run_in_terminal(
+            lambda: themed_console.print(
+                f"✓ [dim green]Mode:[/] {mode_text}.", style=style
+            )
+        )
+        event.app.invalidate()
+        
+    @bindings.add("c-p")
     def _(event):
         _planning_mode_active[0] = not _planning_mode_active[0]
         mode_text = "Planning" if _planning_mode_active[0] else "Implementing"
